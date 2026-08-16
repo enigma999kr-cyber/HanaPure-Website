@@ -17,9 +17,12 @@ export default function Button({
     "inline-flex items-center justify-center rounded-full px-8 py-4 text-sm font-medium transition";
 
   const variants: Record<ButtonVariant, string> = {
-    primary: "bg-black text-white hover:bg-gray-800",
-    secondary: "border border-gray-300 bg-white text-gray-900 hover:bg-gray-50",
-    accent: "bg-[#E9CFC6] text-gray-900 hover:bg-[#DDBEB4]",
+    primary:
+      "bg-hanapure-text text-hanapure-white hover:bg-black",
+    secondary:
+      "border border-hanapure-border bg-hanapure-white text-hanapure-text hover:bg-hanapure-warm-white",
+    accent:
+      "bg-hanapure-beige text-hanapure-text hover:bg-hanapure-beige-deep",
   };
 
   return (

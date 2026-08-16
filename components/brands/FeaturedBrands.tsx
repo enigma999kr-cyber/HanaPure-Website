@@ -6,39 +6,41 @@ const brands = [
     tagline: "Hydration Specialist",
     description:
       "Gentle skincare inspired by clean Korean ingredients and daily hydration.",
-    accent: "bg-gradient-to-br from-[#F4EADF] to-[#FFFDF9]",
+    accent:
+      "bg-gradient-to-br from-hanapure-beige-light to-hanapure-white",
   },
   {
     name: "Anua",
     tagline: "Calm Daily Care",
     description:
       "Minimal formulas focused on soothing, balancing, and supporting sensitive skin.",
-    accent: "bg-gradient-to-br from-[#E9CFC6] to-[#FFFDF9]",
+    accent:
+      "bg-gradient-to-br from-hanapure-beige to-hanapure-warm-white",
   },
   {
-    name: "Skin1004",
+    name: "SKIN1004",
     tagline: "Centella Expert",
     description:
       "Known for calming skincare centered around Madagascar Centella.",
-    accent: "bg-gradient-to-br from-[#F8F2EB] to-[#FFFDF9]",
+    accent: "bg-gradient-to-br from-hanapure-ivory to-hanapure-white",
   },
 ];
 
 export default function FeaturedBrands() {
   return (
-    <section className="bg-[#F8F2EB] py-28">
+    <section className="bg-hanapure-ivory py-28">
       <div className="mx-auto max-w-7xl px-6">
-        <p className="mb-4 text-center text-sm uppercase tracking-[0.3em] text-gray-500">
+        <p className="mb-4 text-center text-sm uppercase tracking-[0.3em] text-hanapure-muted">
           Featured Brands
         </p>
 
-        <h2 className="mx-auto mb-6 max-w-3xl text-center text-5xl font-light text-gray-900">
+        <h2 className="mx-auto mb-6 max-w-3xl text-center text-5xl font-light text-hanapure-text">
           Carefully selected Korean skincare,
           <br />
           trusted by our team.
         </h2>
 
-        <p className="mx-auto mb-16 max-w-2xl text-center text-lg leading-8 text-gray-600">
+        <p className="mx-auto mb-16 max-w-2xl text-center text-lg leading-8 text-hanapure-muted">
           Every brand inside HanaPure has been chosen because we genuinely
           believe in its quality, philosophy, and skincare benefits.
         </p>

@@ -20,18 +20,18 @@ const points = [
 
 export default function WhyHanaPure() {
   return (
-    <section className="bg-[#F4EADF] py-28">
+    <section className="bg-hanapure-beige-light py-28">
       <Container>
         <div className="mx-auto max-w-3xl text-center">
-          <p className="mb-4 text-sm uppercase tracking-[0.3em] text-gray-500">
+          <p className="mb-4 text-sm uppercase tracking-[0.3em] text-hanapure-muted">
             Why HanaPure
           </p>
 
-          <h2 className="mb-6 text-4xl font-light text-gray-900 md:text-5xl">
+          <h2 className="mb-6 text-4xl font-light text-hanapure-text md:text-5xl">
             A bridge between Korean skincare and European customers.
           </h2>
 
-          <p className="text-lg leading-8 text-gray-600">
+          <p className="text-lg leading-8 text-hanapure-muted">
             HanaPure combines Korean skincare knowledge with a customer-first
             perspective — helping you discover products that are authentic,
             effective, and carefully selected.
@@ -42,13 +42,15 @@ export default function WhyHanaPure() {
           {points.map((point) => (
             <div
               key={point.title}
-              className="rounded-3xl bg-[#FFFDF9] p-8 shadow-sm"
+              className="rounded-3xl bg-hanapure-white p-8 shadow-sm"
             >
-              <h3 className="mb-4 text-xl font-medium text-gray-900">
+              <h3 className="mb-4 text-xl font-medium text-hanapure-text">
                 {point.title}
               </h3>
 
-              <p className="leading-7 text-gray-600">{point.description}</p>
+              <p className="leading-7 text-hanapure-muted">
+                {point.description}
+              </p>
             </div>
           ))}
         </div>

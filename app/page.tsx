@@ -5,7 +5,7 @@ import FeaturedBrands from "@/components/brands/FeaturedBrands";
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-white">
+    <main className="min-h-screen bg-hanapure-white">
       <Header />
 
       <Hero />
