@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local migration and upload artifacts
+/.tmp.driveupload/
+/HanaPure-Website-handoff.zip
