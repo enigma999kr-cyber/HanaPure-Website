@@ -1,19 +1,21 @@
 # HanaPure Website master plan
 
-This is a high-level roadmap, not a claim of implementation or a launch schedule. The website is paused while HanaPure ERP has higher priority. Reassess priorities with Kimin and LP when website work resumes. Tracked code and Git history determine implementation status; see `HanaPure_Website_Project_Handoff.md` for the current-state audit.
+This is a high-level roadmap, not a claim of implementation or a launch schedule. The website is paused while HanaPure ERP has higher priority. Reassess priorities with Kimin and LP when website work resumes. Tracked code and Git history determine implementation status; see `HanaPure_Website_Project_Handoff.md` for current context and `COMPLETION_CHECKLIST.md` for detailed implementation and launch status.
 
 ## Completed foundation
 
 - Next.js 16 App Router, React 19, TypeScript, Tailwind CSS 4, and ESLint project foundation.
 - One homepage route with Header, Hero, Featured Brands, and Why HanaPure components, plus shared Button and Container components.
 - Responsive hero improvements (`1df629e`) and HanaPure white/warm-white/beige/dark color tokens applied to the current homepage (`2ec3132`). Pink removal from the tracked palette is complete.
+- A separate `/brands` route with the exact 16 approved/candidate brand names in `data/brands.ts`, alphabetical grouping, an A–Z first-letter filter, brand-name search, and a no-results state (`b201fca`). The desktop Header's Brands link reaches this route.
+- Lint and production build passed for the Brands implementation; the directory's display and filter/search states were checked in the local browser.
 
 These are visual and structural foundations; the current controls and links do not yet constitute functional shopping flows.
 
 ## Next website work, when resumed
 
 - Confirm with LP whether the three-card Featured Brands homepage section remains a curated preview.
-- Build a separate, text-focused Brands directory from the exact 16-brand list in the handoff, with alphabetical groups/navigation and brand-name search. Use the established white/beige palette and review customer-first positioning copy with LP before treating it as approved.
+- Review the existing Brands directory with LP and draft customer-first brand positioning copy for her approval. Brand detail pages remain a decision, not an implemented feature or committed requirement.
 - Replace placeholder navigation and calls to action as corresponding destinations become real. Review mobile menu behavior, accessibility, metadata, starter assets, and typography as part of scoped work.
 - Establish maintainable product/brand content ownership before adding larger catalogue features. Do not treat candidate brands or product interests as confirmed inventory.
 
