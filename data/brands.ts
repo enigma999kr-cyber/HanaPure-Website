@@ -1,0 +1,18 @@
+export const brandNames = [
+  "beplain",
+  "Round Lab",
+  "Anua",
+  "medicube",
+  "Purito Seoul",
+  "VT Cosmetics",
+  "Abib",
+  "AXIS-Y",
+  "Centellian24",
+  "numbuzin",
+  "SKIN1004",
+  "COSRX",
+  "Dr. Althea",
+  "Dr.G",
+  "CELIMAX",
+  "IUNIK",
+] as const;

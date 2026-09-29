@@ -1,4 +1,5 @@
 import Container from "@/components/ui/Container";
+import Link from "next/link";
 
 export default function Header() {
   return (
@@ -16,9 +17,9 @@ export default function Header() {
               Shop
             </a>
 
-            <a href="#" className="transition hover:text-hanapure-text">
+            <Link href="/brands" className="transition hover:text-hanapure-text">
               Brands
-            </a>
+            </Link>
 
             <a href="#" className="transition hover:text-hanapure-text">
               Skin Concerns
