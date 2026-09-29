@@ -2,7 +2,7 @@
 
 이 문서는 실제 제품 완성도와 출시 준비 상태를 기록한다. `MASTER_PLAN.md`은 향후 방향을 다루고, 이 체크리스트는 현재 구현과 고객 흐름의 준비 상태를 다룬다. 실제 tracked code와 Git history가 구현 상태의 최우선 source of truth다. 주요 milestone 이후 또는 Progress Audit 때 갱신한다.
 
-기준: 2026-09-29, `main`의 `b201fca` (`feat: add searchable brand directory`). 작성 시작 전 작업 트리는 깨끗했다. `HANDOFF`와 `MASTER_PLAN`에는 이 커밋 이전의 Brands 상태가 남아 있으므로 아래 Brands 항목은 현재 코드와 직전 구현 검증 결과를 따른다. 직전 구현 작업에서 lint, production build, TypeScript 빌드 단계, `/brands`의 목록·검색·글자 필터·검색 결과 없음 상태를 확인했다. 이번 문서 작업에서는 기능 테스트를 다시 실행하지 않았다.
+기준: 2026-09-29, `main` HEAD `ac8a95f`와 아직 커밋되지 않은 `components/layout/Header.tsx`의 Mobile Navigation Completion 변경. Brands Directory는 `b201fca`에서 구현됐다. 모바일 메뉴 QA에서 열기/닫기, Home·Brands 이동, 링크 선택 후 닫힘, Escape·키보드 조작, breakpoint 전환 및 데스크톱 회귀를 확인했다. Kimin도 Chrome 모바일 반응형 모드에서 직접 확인했다고 보고했다. 해당 변경에 대해 lint, 별도 TypeScript 검사, production build, `git diff --check`가 통과했다. 이번 체크리스트 수정 중에는 기능 검사를 다시 실행하지 않았다.
 
 상태: `[x]` 동작 확인된 완료 · `[~]` 부분 구현 또는 일부 범위만 확인 · `[ ]` 미구현/미검증 · `[TBD]` 범위나 방식의 결정이 필요함. 페이지나 컴포넌트가 존재한다는 이유만으로 고객 흐름 전체를 완료 처리하지 않는다.
 
@@ -26,16 +26,16 @@
 
 ## 3. Global Layout / Navigation
 
-- [~] Header: 홈페이지와 Brands 페이지에 표시되지만 다수의 컨트롤이 작동하지 않는다.
-- [~] Desktop navigation: Brands만 `/brands`로 이동한다. 나머지 주요 메뉴는 `#` 링크다.
-- [~] Mobile navigation: 햄버거 버튼은 있으나 메뉴가 열리지 않는다.
+- [~] Header: 홈페이지와 Brands 페이지에 표시되고 모바일 Home·Brands 이동이 동작하지만, 다른 주요 컨트롤은 아직 작동하지 않는다.
+- [~] Desktop navigation: HanaPure 로고는 `/`, Brands는 `/brands`로 이동한다. 나머지 주요 메뉴는 `#` 링크다.
+- [x] Mobile navigation: 메뉴 열기/닫기, Home(`/`)·Brands(`/brands`) 이동, 이동 후 닫힘, Escape 닫힘과 breakpoint 전환을 확인했다. 미구현 목적지는 노출하지 않는다.
 - [ ] Shop navigation: 레이블만 있고 하위 메뉴와 목적지가 없다.
-- [~] Brands navigation: 데스크톱 헤더 링크가 `/brands`로 동작한다. 모바일 메뉴에서는 접근할 수 없다.
+- [x] Brands navigation: 데스크톱 헤더와 모바일 메뉴에서 `/brands`로 이동한다.
 - [ ] Search entry: 헤더 Search 버튼은 비활성 상태다.
 - [ ] Language switcher: EN 버튼은 비활성 상태다.
 - [ ] Cart entry: Cart 버튼은 비활성 상태다.
 - [ ] Footer: 컴포넌트와 출력이 없다.
-- [~] Functional links and routes: `/`와 `/brands`만 구현됐다. Hero CTA 및 브랜드 카드 링크도 목적지가 없다.
+- [~] Functional links and routes: `/`와 `/brands`만 구현됐고 헤더에서 두 경로로 이동할 수 있다. Hero CTA 및 브랜드 카드 링크는 아직 목적지가 없다.
 
 ## 4. Homepage
 
@@ -150,13 +150,13 @@
 
 ## 13. Mobile / Accessibility / UX
 
-- [~] Responsive layouts: 일부 반응형 클래스가 있다. 전 경로의 모바일 QA는 미완료.
-- [~] Mobile navigation: 메뉴 버튼만 있고 기능은 없다.
-- [~] Touch targets: Brands 글자 필터는 최소 높이 클래스를 사용한다. 전체 사이트 검토는 없다.
-- [~] Keyboard navigation: Brands 검색·글자 필터의 기본 입력 동작은 확인했다. 사이트 전체 키보드 점검은 없다.
+- [~] Responsive layouts: 모바일 메뉴를 320·375·768·1023·1024·1280px에서 확인했다. 전 경로의 모바일 QA는 미완료.
+- [x] Mobile navigation: 메뉴 열기/닫기와 유효 경로 이동, 링크 선택·Escape 후 닫힘, desktop 전환 후 상태 초기화를 확인했다.
+- [~] Touch targets: 모바일 메뉴 버튼 44px, 링크 48px 높이를 확인했다. Brands 글자 필터에도 최소 높이 클래스가 있으나 전체 사이트 검토는 없다.
+- [~] Keyboard navigation: 모바일 메뉴의 Tab·Shift+Tab·Enter·Space·Escape와 Brands 검색·글자 필터의 기본 입력 동작을 확인했다. 사이트 전체 점검은 없다.
 - [~] Semantic structure: 제목, `main`, 목록, 검색 레이블이 일부 적용됐다. 전체 구조 검토는 없다.
-- [~] Accessible labels: Brands 검색과 모바일 메뉴 버튼 등에 있다. 모든 컨트롤의 접근성 점검은 없다.
-- [~] Focus states: Brands 검색과 글자 버튼에는 명시적 스타일이 있다. 전역 일관성은 미검증.
+- [~] Accessible labels: 모바일 메뉴 버튼의 상태별 이름, `aria-expanded`, `aria-controls`를 확인했다. 모든 컨트롤의 접근성 점검은 없다.
+- [~] Focus states: 모바일 메뉴 Escape 후 버튼으로 초점이 돌아가며 메뉴 링크에 focus-visible 스타일이 있다. 전역 일관성은 미검증.
 - [TBD] Image alt text: 실제 브랜드/상품 이미지 도입 시 기준과 검증 필요.
 - [ ] Loading states: 고객 흐름용 상태가 없다.
 - [~] Empty states: Brands 검색 결과 없음 상태만 있다.
@@ -164,9 +164,9 @@
 
 ## 14. Performance / Technical Quality
 
-- [x] Production build: 직전 Brands 구현에서 `npm run build` 통과, `/`·`/brands` 정적 경로 생성 확인.
-- [x] Lint: 직전 Brands 구현에서 `npm run lint` 통과.
-- [x] TypeScript health: 같은 production build의 TypeScript 단계 통과. 별도 전체 품질 보증을 뜻하지 않는다.
+- [x] Production build: Mobile Navigation Completion 변경으로 `npm run build` 통과, `/`·`/brands` 정적 경로 생성 확인.
+- [x] Lint: 해당 변경으로 `npm run lint` 통과.
+- [x] TypeScript health: 해당 변경으로 별도 `tsc --noEmit` 검사와 production build의 TypeScript 단계 통과. 전체 품질 보증을 뜻하지 않는다.
 - [TBD] Image optimization: 실제 상품 이미지 소스와 정책 미결정.
 - [ ] Performance review: 실제 기기/네트워크 성능 점검 근거 없음.
 - [ ] Bundle/dependency review: 별도 검토 근거 없음.
@@ -198,7 +198,7 @@
 
 - [ ] All critical customer flows work: 상품 선택부터 결제·주문 확인까지 연결된 흐름이 없다.
 - [ ] Desktop QA: Brands의 제한적 브라우저 확인은 있었으나 데스크톱 전체 화면과 고객 흐름 QA는 수행하지 않았다.
-- [ ] Mobile QA: Hero 개선 커밋과 반응형 코드는 있으나 실제 모바일 고객 흐름 QA는 수행하지 않았다.
+- [~] Mobile QA: 모바일 탐색을 여러 화면 폭과 키보드로 검증했고 Kimin이 Chrome 모바일 반응형 모드에서 확인했다. 전체 모바일 고객 흐름 QA는 미완료.
 - [ ] Multilingual QA: 번역·locale 기능이 없다.
 - [ ] Checkout QA: checkout 기능이 없다.
 - [ ] Legal/compliance content: 이용약관·개인정보·배송·반품 콘텐츠가 없다.
@@ -215,11 +215,12 @@
 - Next.js/React/TypeScript/Tailwind 기반과 직전 lint/build/TypeScript 검증.
 - 완료된 HanaPure 색상 체계와 홈페이지의 Why HanaPure 표시.
 - `/brands` 경로, 정확한 16개 이름, 정렬된 그룹, A–Z 필터, 이름 검색.
+- 모바일 메뉴의 Home·Brands 이동, 열기/닫기, 키보드·Escape 및 breakpoint 동작.
 
 ### Partially completed
 
 - Git 작업 규칙과 핵심 문서는 있으나 원격 보호 설정은 미확인이고 일부 문서의 Brands 상태는 오래되었다.
-- 헤더·데스크톱 이동·홈페이지 Hero/Featured Brands·반응형 UI: 표시 요소는 있으나 다수의 이동과 CTA가 작동하지 않는다.
+- 헤더 전체·데스크톱의 미구현 메뉴·홈페이지 Hero/Featured Brands·전역 반응형 UI: 모바일 Home·Brands 이동은 완료됐지만 다수의 이동과 CTA는 여전히 작동하지 않는다.
 - 서체·레이아웃·접근성·SEO: 일부 요소만 적용되거나 제한적으로 확인됐다.
 - 영어 콘텐츠와 Brands의 검색 결과 없음 상태는 있으나 사이트 전체 범위는 아니다.
 
@@ -235,14 +236,14 @@
 
 1. 실제 판매 상품, 가격, 재고, 이미지와 상품 상세가 없다.
 2. 장바구니부터 결제·주문 확인까지의 고객 거래 흐름이 없다.
-3. 모바일 메뉴와 핵심 내비게이션/CTA가 기능하지 않아 고객이 사이트를 완주할 수 없다.
+3. 모바일 Home·Brands 탐색은 동작하지만 핵심 상품 탐색 경로와 CTA가 미구현이어서 고객이 사이트를 완주할 수 없다.
 4. 배송·반품·결제 안내, 이용약관·개인정보 등 고객 운영 및 법적 콘텐츠가 없다.
 5. 헝가리 출시를 위한 언어·결제/세금·배송 운영 검증과 전체 QA/배포 준비가 없다.
 
 ### Recommended next 5 implementation priorities
 
 1. Kimin·LP와 출시 범위, 실제 상품 데이터 소유권, 브랜드 후보의 판매 가능 여부를 확정한다.
-2. 모바일 메뉴와 핵심 경로·CTA를 실제 목적지에 연결하고, 상품 탐색 경로를 정리한다.
+2. 완료된 모바일 Home·Brands 메뉴는 유지하고, 실제 목적지가 준비되면 핵심 경로·CTA를 연결하며 상품 탐색 경로를 정리한다.
 3. 상품 모델·목록·상세와 가격·재고·이미지를 구현한다.
 4. 장바구니·checkout·배송·결제·주문 확인 흐름을 구축하고 운영 규칙을 검증한다.
 5. 헝가리어 및 필수 고객/법적 콘텐츠를 준비한 뒤 접근성·모바일·구매·배포 QA를 완료한다.
