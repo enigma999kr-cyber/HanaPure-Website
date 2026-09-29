@@ -1,169 +1,53 @@
-# HanaPure Website Project Handoff
+# HanaPure Website project handoff
 
 ## Purpose
-This file is the authoritative handoff note for continuing the HanaPure website project in a new ChatGPT conversation using GPT-5.6 Sol.
 
-## Project Identity
-- Project: HanaPure Website
-- Local project path: `C:\Users\Enigma\hanapure-shop`
-- GitHub repository: `https://github.com/enigma999kr-cyber/HanaPure-Website.git`
-- Main branch: `main`
-- First saved foundation commit: `Initial HanaPure website foundation`
-- Stack: Next.js App Router, TypeScript, Tailwind CSS
-- Development environment used successfully: Node.js v24.18.0, npm 11.16.0, Git 2.55.0
+This handoff is for continuing the HanaPure website project in a future ChatGPT/Codex session. It records current implementation separately from business direction and planned work.
 
-## Collaboration / Roles
-- Kimin: CEO / business & product direction. Korean entrepreneur with long experience importing and handling Korean products in Europe.
-- Lilla Park (LP): Creative Director / UX / customer perspective. Hungarian/European, long-term Amazon employee, strong knowledge, experience, and attachment to Korean skincare.
-- ChatGPT: technical architecture, development guidance, UX system design, SEO, scalability, future ERP integration, and objective review.
+## Status and source of truth
 
-## Core Working Style
-1. Proceed one technical step at a time.
-2. Give exact file paths.
-3. When a file needs modification, provide the COMPLETE replacement file, not partial snippets.
-4. Kimin prefers to delete the old file contents and paste the complete replacement code.
-5. After each step, Kimin normally sends a screenshot for review before proceeding.
-6. Mobile responsiveness must be considered from the beginning, not added at the end.
-7. LP reviews important visual/UX decisions; incorporate her feedback early.
-8. Do not rush launch. Quality, maintainability, customer trust, and clear architecture take priority.
-9. Keep the website and HanaPure ERP as separate repositories/projects, with future integration in mind.
-10. Use Git regularly: `git add .` -> commit -> `git push`.
+The website is intentionally paused while HanaPure ERP has higher development priority. Resume from the existing foundation rather than rebuilding it. This document describes the tracked repository at commit `2ec3132` (`feat: establish HanaPure color system`, 2026-08-16); check the current code and Git history again when work resumes. Tracked code is authoritative for what is implemented. The business and brand direction below guides future work. See `MASTER_PLAN.md` for the roadmap and `../AGENTS.md` for permanent working rules.
 
-## Brand / Business Direction
-HanaPure is intended to be a premium, curated Korean skincare platform starting in Hungary, with future European expansion.
+Repository: `https://github.com/enigma999kr-cyber/HanaPure-Website.git` (`main`). The known local checkout is `C:\Users\Enigma\hanapure-shop`; verify the actual path and working tree at the start of a future session.
 
-### Mission
-`Helping people feel confident through carefully curated Korean skincare.`
+## Business, roles, and brand direction
 
-### Brand Story
-HanaPure combines two complementary perspectives:
-- Kimin understands Korea, Korean suppliers/products, import, distribution, and European business operations.
-- LP understands Hungarian/European customers and Korean skincare from a passionate, knowledgeable user perspective.
-- HanaPure acts as a bridge between Korean skincare innovation and European customers.
+HanaPure is a curated Korean skincare e-commerce business planned to launch first in Hungary, with possible later expansion in Europe. It aims to be premium, minimal, warm, trustworthy, and customer-first: a considered selection rather than an overwhelming catalogue.
 
-### Brand Principle
-`We don't overwhelm you with thousands of products. We carefully select the ones that truly deserve your trust.`
+- Kimin leads business, Korean sourcing, import, supply chain, operations, and ERP.
+- Lilla Park (LP) is co-founder and brings the creative and customer-experience perspective, long-term Amazon experience, and strong knowledge of and interest in Korean skincare. She reviews important UX, brand presentation, and customer-facing decisions.
+- ChatGPT/Codex supports technical architecture, implementation, maintainability, the UX system, and future ERP integration.
 
-### Proposed brand signature
-`Curated in Trust. Inspired by Korea. Created for Europe.`
+The existing mission line is “Helping people feel confident through carefully curated Korean skincare.” The earlier signature “Curated in Trust. Inspired by Korea. Created for Europe.” is a proposal, not a confirmed site element.
 
-## Visual / UX Direction Agreed with LP
-- Overall aesthetic: premium, minimal, warm, customer-first.
-- Apple: aesthetic reference — minimalism, premium feeling, clean information hierarchy.
-- Amazon: Help Centre / FAQ / customer-service layout inspiration.
-- Sephora: product imagery and product-search inspiration.
-- Olive Young Global: Korean skincare discovery, skin concern navigation, education.
-- Do NOT make the site feel overly blank or generic.
-- LP wants MORE beige character but also more white overall.
-- Latest LP color decision:
-  - White / warm white as main page background.
-  - Multiple beige tones for secondary areas, cards, overlays, pop-up tables.
-  - Black/dark text.
-  - REMOVE pink from the website palette.
-- Brand directory should be text-focused rather than image-heavy.
-- LP wants the site to feel a little more premium than the current version.
+The brand story joins Kimin's Korean sourcing and European operations experience with LP's understanding of Hungarian/European customers and Korean skincare. HanaPure aims to bridge Korean skincare and European customers. Its guiding principle is to carefully select products that deserve customer trust rather than present an overwhelming catalogue.
 
-## Languages
-Planned languages:
-- Hungarian
-- English
-- Korean
+## Implemented website architecture
 
-The site should be designed so multilingual support can be implemented cleanly later.
+- `package.json` pins Next.js `16.2.10`, React/React DOM `19.2.4`, with TypeScript, Tailwind CSS 4, and ESLint. The project uses the Next.js App Router.
+- `app/layout.tsx` provides the root layout and font setup; `app/page.tsx` is the only implemented page route (`/`). There are no tracked API routes, data layer, commerce backend, or other page routes.
+- The homepage renders `Header`, `Hero`, `FeaturedBrands`, and `WhyHanaPure`, in that order. Shared components are `components/ui/Button.tsx` and `components/ui/Container.tsx`.
+- `app/globals.css` defines the implemented HanaPure tokens: white, warm white, ivory, light/regular/deep beige, border, dark text, and muted text. Tailwind theme mappings expose them to components. Commit `2ec3132` applied this palette across the homepage and completed pink removal from the tracked palette.
+- Commit `1df629e` improved the mobile hero layout before the color-system commit. Responsive classes exist in the current components, but this does not establish full mobile UX.
 
-## Header / Navigation – Current Agreed Direction
-Main navigation:
-- Shop
-- Brands
-- Skin Concerns
-- Best Sellers
-- New Arrivals
-- Why HanaPure
+## Current homepage and UX decisions
 
-Right-side items currently shown:
-- Search
-- EN (placeholder for future language switcher)
-- Cart
+The hero uses “Trusted Korean Skincare” and “Feel confident in your skin.” Its body introduces HanaPure as starting in Hungary and growing across Europe, with authentic Korean skincare and trusted guidance. The visible buttons are “Shop Korean Skincare” and “Discover Your Routine”; its trust points are Authentic Korean Brands, Real Skincare Benefits, and Curated with Trust. `WhyHanaPure` presents “A bridge between Korean skincare and European customers.” with three cards: Perspective, Korean Expertise, and Carefully Curated. Preserve reviewed brand language unless Kimin and LP approve a change.
 
-Mobile:
-- Hamburger menu is already present in the Header structure.
+The current header displays Shop, Brands, Skin Concerns, Best Sellers, New Arrivals, and Why HanaPure; the right side displays Search, EN, and Cart. These labels reflect the current navigation direction. Its desktop links still point to `#`; the right-side controls and the mobile hamburger have no implemented behavior. LP's planned Shop grouping includes product type, skin type, skin concerns, sets, offers, and gift ideas; no dropdown exists yet.
 
-### Shop dropdown planned by LP
-- By Product Type
-- By Skin Type
-- By Skin Concerns
-- Sets
-- Offers
-- Gift Ideas
+`FeaturedBrands` is a temporary three-card homepage section for Round Lab, Anua, and SKIN1004. Each uses a beige-toned gradient panel, descriptive copy, and a `Discover Brand` link pointing to `#`. The full brand directory and its final relationship to this homepage preview have not been decided or built.
 
-## Current Homepage Components / State
+The approved visual direction is white/warm white as the main background, multiple beige tones for secondary areas, and black/dark text. Pink is excluded from the final palette. The existing CSS follows this palette. The planned Brands experience is text-focused, alphabetical, searchable by brand name, and presented in premium white/beige styling. Customer-first positioning copy requires LP review; avoid exaggerated or miracle skincare claims.
 
-### Existing project component structure
-- `components/ui/Container.tsx`
-- `components/ui/Button.tsx`
-- `components/layout/Header.tsx`
-- `components/home/Hero.tsx`
-- `components/home/WhyHanaPure.tsx`
-- `components/brands/BrandCard.tsx`
-- `components/brands/FeaturedBrands.tsx`
+LP wants a premium, minimal, warm presentation with more beige character while retaining generous white space; avoid a blank or generic feel. Earlier inspiration references were Apple for information hierarchy, Amazon for help and customer-service layout, Sephora for imagery and product search, and Olive Young Global for skincare discovery and education. These are references, not implemented features or instructions to copy another site.
 
-### Current homepage assembly
-`app/page.tsx` currently assembles:
-- Header
-- Hero
-- FeaturedBrands
-- WhyHanaPure
+Planned languages are English, Hungarian, and Korean. The current page is English, and `EN` is only a placeholder; localization is not implemented.
 
-### Hero – current direction
-Eyebrow:
-`Trusted Korean Skincare`
+## Approved/candidate brands
 
-Headline:
-`Feel confident in your skin.`
+Preserve these names exactly as supplied; inclusion in this list does not mean catalogue data or commercial availability has been implemented:
 
-Body:
-`Starting in Hungary, growing across Europe — HanaPure carefully selects authentic Korean skincare with real skin benefits and trusted guidance.`
-
-Buttons:
-- Shop Korean Skincare
-- Discover Your Routine
-
-Trust points:
-- Authentic Korean Brands
-- Real Skincare Benefits
-- Curated with Trust
-
-### Why HanaPure – current approved copy
-Card 1:
-- Title: `Perspective`
-- Copy: `Created with a deep understanding of what skincare customers truly need.`
-
-Card 2:
-- Title: `Korean Expertise`
-- Copy: `Built on years of experience importing and selecting trusted Korean skincare for European customers.`
-
-Card 3:
-- Title: `Carefully Curated`
-- Copy: `We believe quality is more valuable than quantity. Every product in HanaPure is carefully chosen because we genuinely trust it.`
-
-Section heading:
-`A bridge between Korean skincare and European customers.`
-
-Section body:
-`HanaPure combines Korean skincare knowledge with a customer-first perspective — helping you discover products that are authentic, effective, and carefully selected.`
-
-## Current Featured Brands Implementation
-The current homepage still has a temporary featured-card implementation showing only:
-- Round Lab
-- Anua
-- Skin1004
-
-Each card currently has a soft color/gradient area, text, and `Discover Brand →`.
-
-IMPORTANT: This is NOT the final brand UX. LP's latest feedback changes the next direction.
-
-## LP's Final Approved / Candidate Brand List
-Use these names exactly as written:
 - beplain
 - Round Lab
 - Anua
@@ -181,117 +65,28 @@ Use these names exactly as written:
 - CELIMAX
 - IUNIK
 
-## LP's Latest Brand Directory Requirements
-This is the next important UX direction:
-- Move from placeholder data to real brands.
-- Brands should be TEXT-FOCUSED.
-- Brands should be sorted alphabetically for easy finding.
-- Add an alphabet navigation / grouping similar to a luxury beauty brand directory.
-- Add a SEARCH FILTER that searches by brand name.
-- The reference image LP shared is for alphabetical sorting UX only; use LP's own brand list above.
-- Customer-first wording is preferred. ChatGPT should propose wording for each brand and LP will review it.
-- Examples of customer-first phrasing:
-  - Best for Dry Skin
-  - Calms Sensitive Skin
-  - Barrier Repair
-  - Brightening
-- Do not overstate benefits or use miracle claims.
+### Initial product interests
 
-## Known Product Interests from LP
-These were supplied as initial product/category interests:
-- beplain — cleansers
-- Round Lab — toner, sunscreen, lotion
-- Anua — serums, lotion
-- medicube — serums, lotion
-- Purito Seoul — serums, ceramide cream
-- VT Cosmetics — serums
-- Abib — eye patches, overnight masks
-- AXIS-Y — eye creams, lotions
-- Centellian24 — serums, lotions
-- numbuzin — serums, toner pads
-- SKIN1004 — serums, sunscreen
-- COSRX — snail line (serum), ceramide mist, cream
-- Dr. Althea — creams, mists
-- Dr.G — sunscreen, lotion
-- CELIMAX — masks, toner pads, retinal
-- IUNIK — serums, creams
+LP's initial product interests are planning input, not site data or confirmed inventory:
 
-## Planned Customer / Site Features
-From LP's planning:
-- Customer profile
-- Order tracking
-- Wishlist / lists
-- Browsing history
-- Help Centre by topic
-- Order & Returns
-- Payment / charges
-- Account / sign-in
-- Services & Offers
-- Terms & Conditions
-- Delivery information
-- Returns & Exchange
-- Recommendations & skincare support
-- New / trending ingredients
-- Skin-concern guidance
-- Skin goals
-- Product navigation by brand, product type, skin type, skin concern
-- Best Sellers
-- New Arrivals
-- Sets
-- Offers
-- Gift ideas by occasion / budget / category
-- Seasonal picks
-- Travel minis / travel sets
-- Newsletter / educational content
-- Instagram / Facebook / TikTok
-- Influencer hauls
+- beplain: cleansers; Round Lab: toner, sunscreen, lotion; Anua: serums, lotion; medicube: serums, lotion.
+- Purito Seoul: serums, ceramide cream; VT Cosmetics: serums; Abib: eye patches, overnight masks; AXIS-Y: eye creams, lotions.
+- Centellian24: serums, lotions; numbuzin: serums, toner pads; SKIN1004: serums, sunscreen; COSRX: snail serum line, ceramide mist, cream.
+- Dr. Althea: creams, mists; Dr.G: sunscreen, lotion; CELIMAX: masks, toner pads, retinal; IUNIK: serums, creams.
 
-Future ideas:
-- My Skin Profile
-- Routine Builder
-- AI Skin Advisor
-- B2B ordering
-- ERP integration
+## Unfinished areas and known inconsistencies
 
-## Important Business Context
-HanaPure is planned for Hungary first.
-Kimin and LP may later expand further in Europe.
-Kimin has long-term experience importing Korean goods into Europe.
-LP has long-term Amazon experience and strong Korean-skincare expertise.
-There is a potentially important online-commerce business meeting planned for August 2026; if successful, HanaPure may directly import and supply significant quantities to that buyer.
-Future help will also be needed with suppliers, MOQ, direct import, EU cosmetics compliance, Responsible Person, CPSR, CPNP, PIF, labeling, logistics, and B2B supply planning.
+- No `/brands` route, 16-brand data source, alphabetical directory, letter navigation, or brand-name search exists. The three homepage brand cards are placeholders for the broader Brands experience.
+- No product catalogue, Best Sellers, New Arrivals, skin-concern navigation, routines, checkout, payments, accounts, order tracking, support centre, or ERP connection exists.
+- Header links and brand links are placeholders. Hero CTA buttons, Search, EN, Cart, and the mobile menu are inert.
+- `app/layout.tsx` still exports `Create Next App` title and generated description. `README.md` is the uncustomized starter readme, `public/` contains default Next.js SVGs, and `app/favicon.ico` remains from the starter app.
+- Geist font variables are loaded in `app/layout.tsx`, but `body` in `app/globals.css` explicitly uses Arial/Helvetica. Decide the intended typography before making visual changes.
 
-## Development Pause / Priority Context
-The website project was intentionally paused while HanaPure ERP receives higher priority.
-When website development resumes, continue from this exact handoff rather than redesigning from scratch.
+Later planning includes product discovery by brand, type, skin type, and concern; Best Sellers and New Arrivals; sets, offers, gifts, seasonal and travel selections; skincare education and recommendations; accounts, wishlists, orders, and customer support. A skin profile, routine builder, AI advisor, B2B ordering, and ERP integration remain future possibilities. None are implemented in this website.
 
-## Recommended Next Technical Step
-Do NOT rebuild the completed foundation.
-Start by reconciling the current `FeaturedBrands` implementation with LP's latest decision:
-1. Define the final White / Beige / Black design tokens and remove remaining pink references.
-2. Decide whether the homepage Featured Brands section remains as a small curated preview.
-3. Build a separate text-focused Brand Directory / Brands page:
-   - real 16-brand list
-   - alphabetical sections
-   - A–Z navigation/filter
-   - brand-name search
-   - premium white/beige presentation
-4. Propose customer-first wording for each brand for LP review.
-5. After LP approval, proceed to Best Sellers / New Arrivals / product data.
+## Safe resumption
 
-## Git / Safety
-Repository:
-`https://github.com/enigma999kr-cyber/HanaPure-Website.git`
-
-Branch:
-`main`
-
-Before any new work:
-- Run `git status`
-- Run `git pull`
-- Confirm the working tree is clean
-- Make changes only after confirming the correct repository/project
-- Commit and push after each stable milestone
-
-## Instruction to the next ChatGPT session
-Act as the technical architect/CTO for HanaPure. Preserve the decisions above. Do not casually replace LP-approved UX or brand language. When proposing a change, explain why and keep LP/Kimin review in the loop. Give Kimin complete replacement files with exact paths, one step at a time, and wait for his screenshot/test confirmation before moving to the next technical step.
+1. Confirm repository path, branch, status, tracked files, and recent commits. Read `AGENTS.md`, this handoff, and `MASTER_PLAN.md`; reconcile all plans with current code and follow the current task's authorization.
+2. Keep the website and ERP in separate repositories. Review the installed Next.js documentation before application code changes.
+3. When website work is prioritized again, confirm with LP whether the three-card homepage section remains a curated preview. The likely next functional area is a separate Brands experience using the exact 16 names, alphabetical grouping/navigation, and brand-name search. Prepare customer-first copy for LP review.
+4. Work in small, reviewable steps with mobile behavior considered from the start. Verify each step and report what is implemented versus still planned. Follow `AGENTS.md` and the current task's authorization for Git operations; this handoff does not authorize pulling, committing, pushing, or changing branches.
