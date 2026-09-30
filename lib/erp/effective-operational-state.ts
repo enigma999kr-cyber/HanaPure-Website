@@ -11,7 +11,7 @@ import {
 } from "./emergency-override";
 import {
   readCurrentOverride,
-  type EmergencyOverrideStore,
+  type EmergencyOverrideReader,
 } from "./emergency-override-store";
 
 /** Internal server result, not a browser DTO or authorization to sell. */
@@ -25,7 +25,7 @@ export type EffectiveOperationalState = EffectiveAvailability & Readonly<{
 
 export type EffectiveOperationalDependencies = Readonly<{
   erpSource?: ErpOperationalSource;
-  overrideStore: EmergencyOverrideStore;
+  overrideStore: EmergencyOverrideReader;
 }>;
 
 export type EffectiveOperationalReadOptions = OperationalReadOptions & Readonly<{

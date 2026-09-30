@@ -11,15 +11,22 @@ export type OverrideWriteResult =
   | Readonly<{ ok: true; revision: string }>
   | Readonly<{ ok: false; code: "conflict" }>;
 
+/** Read boundary shared by legacy stores and atomic Unit 2D stores. */
+export interface EmergencyOverrideReader {
+  getCurrent(publicId: string): Promise<OverrideSnapshot>;
+}
+
 /**
  * Provider-neutral SERVER persistence contract. No production implementation.
  * Revisions are opaque and must not be reused (including after revocation).
  * Writes must atomically compare expectedRevision and preserve mutation audit
  * metadata/history as the chosen provider permits. A future admin caller must
  * supply authenticated server actor identity; these functions do not authorize it.
+ * This legacy Unit 2B write interface has no replay receipt/event transaction.
+ * Future Unit 2D providers must use AtomicEmergencyOverrideStore for mutations;
+ * do not expose these legacy writes as a bypass around that atomic contract.
  */
-export interface EmergencyOverrideStore {
-  getCurrent(publicId: string): Promise<OverrideSnapshot>;
+export interface EmergencyOverrideStore extends EmergencyOverrideReader {
   save(publicId: string, record: EmergencyOverride, expectedRevision: string | null): Promise<OverrideWriteResult>;
   /** Keep revocation metadata and prior record; do not delete audit provenance. */
   revoke(publicId: string, mutation: OverrideMutation, expectedRevision: string | null): Promise<OverrideWriteResult>;
@@ -33,7 +40,7 @@ const validRevision = (value: unknown): value is string | null =>
   value === null || (typeof value === "string" && value.trim().length > 0);
 
 export async function readCurrentOverride(
-  store: EmergencyOverrideStore,
+  store: EmergencyOverrideReader,
   publicId: string,
 ): Promise<OverrideReadResult> {
   if (!isPublicId(publicId)) return { ok: false, code: "invalid_override" };
