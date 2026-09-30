@@ -10,7 +10,17 @@ const nextRoot = dirname(require.resolve("next/package.json"));
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier !== "server-only") return nextResolve(specifier, context);
+    if (specifier !== "server-only") {
+      try {
+        return nextResolve(specifier, context);
+      } catch (error) {
+        // Match TypeScript bundler resolution for local extensionless TS imports.
+        if (error.code === "ERR_MODULE_NOT_FOUND" && specifier.startsWith("./")) {
+          return nextResolve(`${specifier}.ts`, context);
+        }
+        throw error;
+      }
+    }
     const marker = context.conditions.includes("react-server") ? "empty.js" : "index.js";
     return {
       url: pathToFileURL(join(nextRoot, "dist/compiled/server-only", marker)).href,

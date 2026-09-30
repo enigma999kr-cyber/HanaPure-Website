@@ -16,7 +16,36 @@ type OperationalField =
   | "sellable_stock"
   | "operational_ready";
 
+export type OperationalSourceErrorCode =
+  | "configuration_error"
+  | "authentication_error"
+  | "rate_limited"
+  | "timeout"
+  | "cancelled"
+  | "network_error"
+  | "upstream_unavailable"
+  | "temporarily_busy"
+  | "erp_read_unavailable"
+  | "malformed_response"
+  | "contract_mismatch"
+  | "product_not_found"
+  | "source_internal_error";
+
+/** Only safe codes cross the adapter; never attach upstream bodies or secrets. */
+export class OperationalSourceError extends Error {
+  readonly code: OperationalSourceErrorCode;
+
+  constructor(code: OperationalSourceErrorCode) {
+    super(code);
+    this.name = "OperationalSourceError";
+    this.code = code;
+  }
+}
+
+export type OperationalReadOptions = Readonly<{ signal?: AbortSignal }>;
+
 export type OperationalProductError =
+  | Readonly<{ code: OperationalSourceErrorCode }>
   | Readonly<{ code: "invalid_payload" }>
   | Readonly<{ code: "invalid_fields"; fields: readonly OperationalField[] }>
   | Readonly<{
@@ -37,10 +66,10 @@ export type OperationalProductResult =
  * accepted below. No production source or fabricated fallback is provided.
  */
 export interface ErpOperationalSource {
-  readProduct(publicId: string): Promise<unknown>;
+  readProduct(publicId: string, options?: OperationalReadOptions): Promise<unknown>;
 }
 
-function isPublicId(value: unknown): value is string {
+export function isPublicId(value: unknown): value is string {
   return (
     typeof value === "string" &&
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
@@ -89,6 +118,7 @@ export function normalizeOperationalProduct(payload: unknown): OperationalProduc
 export async function readOperationalProduct(
   publicId: string,
   source?: ErpOperationalSource,
+  options?: OperationalReadOptions,
 ): Promise<OperationalProductResult> {
   if (!isPublicId(publicId)) {
     return { ok: false, error: { code: "invalid_public_id" } };
@@ -99,8 +129,11 @@ export async function readOperationalProduct(
 
   let payload: unknown;
   try {
-    payload = await source.readProduct(publicId);
-  } catch {
+    payload = await source.readProduct(publicId, options);
+  } catch (error) {
+    if (error instanceof OperationalSourceError) {
+      return { ok: false, error: { code: error.code } };
+    }
     // Never expose credentials, endpoint details, raw exceptions, or fake business values.
     return { ok: false, error: { code: "source_unavailable" } };
   }
