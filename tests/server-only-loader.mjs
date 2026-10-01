@@ -15,7 +15,7 @@ registerHooks({
         return nextResolve(specifier, context);
       } catch (error) {
         // Match TypeScript bundler resolution for local extensionless TS imports.
-        if (error.code === "ERR_MODULE_NOT_FOUND" && specifier.startsWith("./")) {
+        if (error.code === "ERR_MODULE_NOT_FOUND" && (specifier.startsWith("./") || specifier.startsWith("../"))) {
           return nextResolve(`${specifier}.ts`, context);
         }
         throw error;
