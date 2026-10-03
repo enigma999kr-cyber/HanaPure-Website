@@ -2,6 +2,7 @@
   "name": "hanapure-shop",
   "version": "0.1.0",
   "private": true,
+  "engines": { "node": "24.x" },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -10,7 +11,8 @@
     "test:erp": "node --conditions=react-server --import ./tests/server-only-loader.mjs --test ./tests/erp-product-operational.test.mjs ./tests/https-operational-source.test.mjs ./tests/emergency-override.test.mjs ./tests/effective-operational-state.test.mjs ./tests/emergency-override-mutations.test.mjs",
     "test:erp:postgres": "node --conditions=react-server --import ./tests/server-only-loader.mjs --test ./tests/postgres-emergency-override-store.integration.test.mjs",
     "test:admin": "node --conditions=react-server --import ./tests/server-only-loader.mjs --test ./tests/admin-auth.test.mjs ./tests/admin-authorization.test.mjs ./tests/authorized-emergency-override.test.mjs ./tests/admin-server-boundary.test.mjs",
-    "test:admin:postgres": "node --conditions=react-server --import ./tests/server-only-loader.mjs --test ./tests/admin-authorization.integration.test.mjs"
+    "test:admin:postgres": "node --conditions=react-server --import ./tests/server-only-loader.mjs --test ./tests/admin-authorization.integration.test.mjs",
+    "test:staging": "node --conditions=react-server --import ./tests/server-only-loader.mjs --test ./tests/staging-dependencies.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.117.2",
