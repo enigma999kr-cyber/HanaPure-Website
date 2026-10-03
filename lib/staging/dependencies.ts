@@ -7,6 +7,7 @@ import { createPostgresAdminAuthorizationReader } from "../auth/admin-authorizat
 import { createAuthorizedEmergencyOverrideMutator } from "../auth/authorized-emergency-override";
 import { createSupabaseAdminIdentityVerifier } from "../supabase/server";
 import { assertStagingNodeRuntime, STAGING_LIMITS, validateStagingConfiguration } from "./config";
+import { createDatabaseReadinessProbe } from "./database-readiness";
 
 type ServerPool = Pick<Pool, "connect" | "end" | "on">;
 type TrustedDependencies = Readonly<{
@@ -94,6 +95,7 @@ export function createStagingDependencyScope(trusted: TrustedDependencies = {}) 
     const verifier = createSupabaseAdminIdentityVerifier({ ...config.publicAuth,
       fetch: trusted.authFetch, timeoutMs: STAGING_LIMITS.authFetchMs });
     const publicSeams = Object.freeze({ store, authorization, verifier,
+      probeDatabase: createDatabaseReadinessProbe(boundedPool),
       mutate: createAuthorizedEmergencyOverrideMutator({ store, authorization, verifier }) });
     return { publicSeams, async close() {
       for (const release of leases) release(true);

@@ -11,6 +11,7 @@ import { createPostgresAdminAuthorizationReader, checkCurrentAdminAuthorization 
 import { createAuthorizedEmergencyOverrideMutator } from "../lib/auth/authorized-emergency-override.ts";
 import { createPostgresEmergencyOverrideStore } from "../lib/erp/postgres-emergency-override-store.ts";
 import { now, subject, otherSubject, verifier, principal, intent } from "./helpers/admin-auth-fixtures.mjs";
+import { createDatabaseReadinessProbe } from "../lib/staging/database-readiness.ts";
 
 async function freePort() {
   const probe = createServer();
@@ -51,6 +52,37 @@ test("Unit 2F private authority / self-grant / Unit 2E seam on real PostgreSQL",
       (SELECT count(*)::text FROM hanapure_private.override_current) AS states,
       (SELECT count(*)::text FROM hanapure_private.override_audit) AS events,
       (SELECT count(*)::text FROM hanapure_private.override_receipts) AS receipts`)).rows[0];
+
+    await t.test("Gate B2 catalog verifier passes restricted runtime and does not read/write business state", async () => {
+      const before = await counts();
+      assert.equal(await createDatabaseReadinessProbe(runtime)(), "ready");
+      assert.equal(await createDatabaseReadinessProbe(ownerPool(owner))(), "permissions_mismatch");
+      assert.equal(await createDatabaseReadinessProbe(unprivileged)(), "permissions_mismatch");
+      assert.deepEqual(await counts(), before);
+    });
+
+    await t.test("Gate B2 rejects column grants and NOINHERIT membership capable of self-granting authority", async () => {
+      const probe = createDatabaseReadinessProbe(runtime);
+      await owner.query("GRANT UPDATE(status) ON hanapure_private.admin_principals TO unit2f_runtime");
+      try { assert.equal(await probe(), "permissions_mismatch"); }
+      finally { await owner.query("REVOKE UPDATE(status) ON hanapure_private.admin_principals FROM unit2f_runtime"); }
+      await owner.query("CREATE ROLE unit2f_authority_writer NOLOGIN");
+      await owner.query("GRANT INSERT ON hanapure_private.admin_principals TO unit2f_authority_writer");
+      await owner.query("GRANT unit2f_authority_writer TO unit2f_runtime WITH INHERIT FALSE, SET TRUE");
+      try { assert.equal(await probe(), "permissions_mismatch"); }
+      finally { await owner.query("REVOKE unit2f_authority_writer FROM unit2f_runtime"); }
+      assert.equal(await probe(), "ready");
+    });
+
+    await t.test("Gate B2 missing integrity trigger is schema mismatch and verifier does not repair", async () => {
+      const probe = createDatabaseReadinessProbe(runtime);
+      await owner.query("ALTER TABLE hanapure_private.override_audit DISABLE TRIGGER immutable_override_audit");
+      try {
+        assert.equal(await probe(), "schema_mismatch");
+        assert.equal((await owner.query("SELECT tgenabled FROM pg_trigger WHERE tgname='immutable_override_audit'")).rows[0].tgenabled, "D");
+      } finally { await owner.query("ALTER TABLE hanapure_private.override_audit ENABLE TRIGGER immutable_override_audit"); }
+      assert.equal(await probe(), "ready");
+    });
 
     await t.test("fresh lookup reflects owner grant and revoke without cached JWT permissions", async () => {
       assert.equal((await checkCurrentAdminAuthorization(verified, reader, now)).code, "forbidden");
@@ -131,3 +163,6 @@ test("Unit 2F private authority / self-grant / Unit 2E seam on real PostgreSQL",
     await rm(clusterDir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
   }
 });
+
+// The owner is supplied for a read-only negative verifier test; its connection is not owned by the probe.
+function ownerPool(client) { return { async connect() { return { query: client.query.bind(client), release() {} }; } }; }
