@@ -1,11 +1,11 @@
-import type { Metadata } from "next";
 import BrandDirectory from "@/components/brands/BrandDirectory";
 import Header from "@/components/layout/Header";
 
-export const metadata: Metadata = {
-  title: "Brands | HanaPure",
-  description: "Explore Korean skincare brands in the HanaPure directory.",
-};
+import { marketingMetadata } from "@/lib/storefront/seo";
+
+export function generateMetadata() {
+  return marketingMetadata("brands", "en", { legacy: true });
+}
 
 export default function BrandsPage() {
   return (

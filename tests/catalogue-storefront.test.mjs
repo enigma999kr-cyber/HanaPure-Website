@@ -122,7 +122,7 @@ test("route wiring uses the authoritative reader and promised slug; Header Shop 
   const detail = source("app/products/[slug]/page.tsx");
   assert.match(detail, /await params/);
   assert.match(detail, /ProductDetail\(\{ slug \}\)/);
-  assert.match(detail, /localCatalogue\.findPublishedBySlug\(slug\)/);
+  assert.match(detail, /productMetadata\(slug, "en", \{ legacy: true \}\)/);
   const header = source("components/layout/Header.tsx");
   assert.equal((header.match(/storefrontHref\("\/products", routeLocale\)/g) ?? []).length, 3);
   assert.match(header, /storefrontHref\("\/products", routeLocale\)[\s\S]*?onClick=\{\(\) => setIsMenuOpen\(false\)\}/);

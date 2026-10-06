@@ -1,18 +1,13 @@
 import type { Metadata } from "next";
 import Header from "@/components/layout/Header";
 import { ProductDetail } from "@/components/catalogue/ProductCatalogue";
-import { localCatalogue } from "@/lib/catalog/local-catalogue";
+import { productMetadata } from "@/lib/storefront/seo";
 
 type Props = { params: Promise<{ slug: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const product = localCatalogue.findPublishedBySlug(slug);
-  const content = product?.translations.en;
-  return {
-    title: content ? `${content.name} | HanaPure` : "Product | HanaPure",
-    ...(content ? { description: content.description } : {}),
-  };
+  return productMetadata(slug, "en", { legacy: true });
 }
 
 export default async function ProductPage({ params }: Props) {

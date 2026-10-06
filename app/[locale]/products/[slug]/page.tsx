@@ -1,17 +1,14 @@
 import type { Metadata } from "next";
 import Header from "@/components/layout/Header";
 import { ProductDetail } from "@/components/catalogue/ProductCatalogue";
-import { localCatalogue } from "@/lib/catalog/local-catalogue";
 import { requireStorefrontLocale } from "@/lib/storefront/require-locale";
-import { storefrontLabels } from "@/lib/storefront/localization";
+import { productMetadata } from "@/lib/storefront/seo";
 
 type Props = { params: Promise<{ locale: string; slug: string }> };
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { locale: value, slug } = await params;
   const locale = requireStorefrontLocale(value);
-  const content = localCatalogue.findPublishedBySlug(slug)?.translations[locale];
-  return { title: `${content?.name ?? storefrontLabels[locale].details} | HanaPure`,
-    description: content?.description ?? storefrontLabels[locale].missing };
+  return productMetadata(slug, locale);
 }
 export default async function LocalizedProduct({ params }: Props) {
   const { locale: value, slug } = await params;

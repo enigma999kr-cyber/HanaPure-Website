@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import Header from "@/components/layout/Header";
 import { ProductListing } from "@/components/catalogue/ProductCatalogue";
 import { catalogueQueryString, readCatalogueCriteria, type CatalogueSearchParams } from "@/lib/catalog/catalogue-discovery";
+import { listingMetadata } from "@/lib/storefront/seo";
 
-export const metadata: Metadata = {
-  title: "Products | HanaPure",
-  description: "Browse the HanaPure Korean skincare catalogue.",
-};
+export async function generateMetadata({ searchParams }: { searchParams: Promise<CatalogueSearchParams> }): Promise<Metadata> {
+  return listingMetadata("en", await searchParams, { legacy: true });
+}
 
 export default async function ProductsPage({ searchParams }: { searchParams: Promise<CatalogueSearchParams> }) {
   const criteria = readCatalogueCriteria(await searchParams);
