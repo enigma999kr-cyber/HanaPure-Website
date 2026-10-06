@@ -118,13 +118,13 @@ test("invalid publication data cannot enter storefront through the existing cata
 
 test("route wiring uses the authoritative reader and promised slug; Header Shop reaches the real listing", () => {
   const source = (path) => readFileSync(join(repo, path), "utf8");
-  assert.match(source("app/products/page.tsx"), /<ProductListing\s*\/>/);
+  assert.match(source("app/products/page.tsx"), /<ProductListing criteria=\{criteria\}\s*\/>/);
   const detail = source("app/products/[slug]/page.tsx");
   assert.match(detail, /await params/);
   assert.match(detail, /ProductDetail\(\{ slug \}\)/);
   assert.match(detail, /localCatalogue\.findPublishedBySlug\(slug\)/);
   const header = source("components/layout/Header.tsx");
-  assert.equal((header.match(/storefrontHref\("\/products", routeLocale\)/g) ?? []).length, 2);
+  assert.equal((header.match(/storefrontHref\("\/products", routeLocale\)/g) ?? []).length, 3);
   assert.match(header, /storefrontHref\("\/products", routeLocale\)[\s\S]*?onClick=\{\(\) => setIsMenuOpen\(false\)\}/);
 });
 
@@ -178,4 +178,47 @@ test("language links preserve the product destination, expose current locale, an
   assert.equal(links[1].props.lang, "hu");
   for (const link of links) link.props.onClick();
   assert.equal(closed, 3);
+});
+
+test("localized GET search/filter controls reflect state and render only combined matches with stable slug links", () => {
+  const first = product();
+  first.translations.hu = { ...content(), name: "Teszt lemosó" };
+  const other = { ...first, publicId: "22345678-abcd-1234-abcd-123456789abc", slug: "other-fixture", brand: "Anua" };
+  const criteria = { query: "lemosó", brand: "beplain" };
+  const nodes = elements(ProductListing({ catalogue: reader(first, other), locale: "hu", routeLocale: "hu", criteria }));
+  const form = nodes.find(node => node.type === "form");
+  assert.equal(form.props.method, "get");
+  assert.equal(form.props.action, "/hu/products");
+  assert.equal(form.props.role, "search");
+  assert.equal(nodes.find(node => node.type === "input").props.defaultValue, "lemosó");
+  assert.equal(nodes.find(node => node.type === "select").props.defaultValue, "beplain");
+  assert.ok(nodes.some(node => node.type === "button" && node.props.type === "submit"));
+  assert.equal(nodes.filter(node => node.type === "li").length, 1);
+  assert.ok(nodes.some(node => node.props?.href === "/hu/products/fictional-fixture"));
+  assert.ok(!nodes.some(node => node.props?.href === "/hu/products/other-fixture"));
+  assert.ok(nodes.some(node => node.props?.href === "/hu/products"));
+  assert.ok(text(nodes).includes("Keresés és szűrők törlése"));
+});
+
+test("zero search results differ from empty catalogue; reset restores publication and missing-translation display", () => {
+  const catalogue = reader(product(), product({ publicId: "22345678-abcd-1234-abcd-123456789abc", slug: "private", state: "draft" }));
+  const criteria = { query: "no-match", brand: "beplain" };
+  const nodes = elements(ProductListing({ catalogue, locale: "ko", routeLocale: "ko", criteria }));
+  assert.ok(text(nodes).includes("조건에 맞는 상품이 없습니다"));
+  assert.equal(nodes.filter(node => node.type === "li").length, 0);
+  assert.ok(nodes.some(node => node.props?.href === "/ko/products"));
+  const reset = elements(ProductListing({ catalogue, locale: "ko", routeLocale: "ko" }));
+  assert.equal(reset.filter(node => node.type === "li").length, 1);
+  assert.ok(text(reset).includes("이 상품의 한국어 콘텐츠가 아직 없습니다"));
+  assert.ok(!text(reset).includes("Fictional fixture"));
+  const invalid = elements(ProductListing({ catalogue, criteria: { query: "", brand: "unknown" } }));
+  assert.ok(text(invalid).includes("Unknown brand selection"));
+  assert.equal(invalid.filter(node => node.type === "li").length, 0);
+});
+
+test("language switching retains active catalogue search/brand query for the destination locale", () => {
+  const nodes = elements(LanguageSwitcher({ locale: "en", pathname: "/en/products?q=cleanser&brand=Round+Lab" }));
+  assert.deepEqual(nodes.filter(node => node.props?.href).map(node => node.props.href), [
+    "/en/products?q=cleanser&brand=Round+Lab", "/hu/products?q=cleanser&brand=Round+Lab", "/ko/products?q=cleanser&brand=Round+Lab",
+  ]);
 });

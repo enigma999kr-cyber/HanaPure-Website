@@ -33,6 +33,10 @@ export const storefrontLabels = {
     exploreBrands: "Explore brands", details: "Product details", back: "Back to products",
     missing: "English product content is not available yet.", usage: "How to use", caution: "Cautions",
     notFound: "Product page not found", notFoundDescription: "This product page is not available.",
+    search: "Search", searchProducts: "Search products", searchHint: "Product name, description or brand",
+    filterBrand: "Brand", allBrands: "All brands", apply: "Apply", clear: "Clear search and filters",
+    results: "Results", noResults: "No matching products", noResultsDescription: "Try another search or clear the filters.",
+    invalidBrand: "Unknown brand selection",
   },
   hu: {
     home: "Kezdőlap", shop: "Termékek", brands: "Márkák", language: "Nyelv",
@@ -42,6 +46,10 @@ export const storefrontLabels = {
     exploreBrands: "Márkák felfedezése", details: "Termékadatok", back: "Vissza a termékekhez",
     missing: "A termék magyar nyelvű tartalma még nem érhető el.", usage: "Használat", caution: "Figyelmeztetések",
     notFound: "A termékoldal nem található", notFoundDescription: "Ez a termékoldal nem érhető el.",
+    search: "Keresés", searchProducts: "Termékek keresése", searchHint: "Terméknév, leírás vagy márka",
+    filterBrand: "Márka", allBrands: "Minden márka", apply: "Alkalmazás", clear: "Keresés és szűrők törlése",
+    results: "Találatok", noResults: "Nincs megfelelő termék", noResultsDescription: "Próbáljon más keresést, vagy törölje a szűrőket.",
+    invalidBrand: "Ismeretlen márkaválasztás",
   },
   ko: {
     home: "홈", shop: "상품", brands: "브랜드", language: "언어",
@@ -51,5 +59,9 @@ export const storefrontLabels = {
     exploreBrands: "브랜드 둘러보기", details: "상품 정보", back: "상품 목록으로",
     missing: "이 상품의 한국어 콘텐츠가 아직 없습니다.", usage: "사용 방법", caution: "주의사항",
     notFound: "상품 페이지를 찾을 수 없습니다", notFoundDescription: "이 상품 페이지는 제공되지 않습니다.",
+    search: "검색", searchProducts: "상품 검색", searchHint: "상품명, 설명 또는 브랜드",
+    filterBrand: "브랜드", allBrands: "모든 브랜드", apply: "적용", clear: "검색 및 필터 초기화",
+    results: "검색 결과", noResults: "조건에 맞는 상품이 없습니다", noResultsDescription: "다른 검색어를 입력하거나 필터를 초기화하세요.",
+    invalidBrand: "알 수 없는 브랜드 선택",
   },
 } as const;

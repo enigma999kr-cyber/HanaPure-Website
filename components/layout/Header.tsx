@@ -7,7 +7,7 @@ import { usePathname } from "next/navigation";
 import LanguageSwitcher from "./LanguageSwitcher";
 import { localeFromPath, storefrontHref, storefrontLabels } from "@/lib/storefront/localization";
 
-export default function Header() {
+export default function Header({ catalogueQuery = "" }: { catalogueQuery?: string } = {}) {
   const pathname = usePathname() ?? "/";
   const routeLocale = localeFromPath(pathname);
   const locale = routeLocale ?? "en";
@@ -80,11 +80,11 @@ export default function Header() {
 
           {/* Right Menu */}
           <div className="hidden items-center gap-5 text-sm text-hanapure-muted lg:flex">
-            <button className="transition hover:text-hanapure-text">
-              Search
-            </button>
+            <Link href={`${storefrontHref("/products", routeLocale)}${catalogueQuery}#catalogue-search`} className="transition hover:text-hanapure-text focus-visible:outline-2 focus-visible:outline-hanapure-text">
+              {labels.search}
+            </Link>
 
-            <LanguageSwitcher locale={locale} pathname={pathname} />
+            <LanguageSwitcher locale={locale} pathname={`${pathname}${catalogueQuery}`} />
 
             <button className="transition hover:text-hanapure-text">
               Cart
@@ -145,7 +145,7 @@ export default function Header() {
             >
               {labels.brands}
             </Link>
-            <LanguageSwitcher locale={locale} pathname={pathname} onNavigate={() => setIsMenuOpen(false)} />
+            <LanguageSwitcher locale={locale} pathname={`${pathname}${catalogueQuery}`} onNavigate={() => setIsMenuOpen(false)} />
           </div>
         </Container>
       </nav>
