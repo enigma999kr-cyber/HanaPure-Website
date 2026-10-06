@@ -17,7 +17,7 @@ export default function BrandsPage() {
           <p className="mb-4 text-xs uppercase tracking-[0.3em] text-hanapure-muted sm:text-sm">
             HanaPure directory
           </p>
-          <h1 className="max-w-3xl text-5xl font-light leading-tight sm:text-6xl">
+          <h1 id="main-content" tabIndex={-1} className="max-w-3xl text-5xl font-light leading-tight sm:text-6xl">
             Explore our brands.
           </h1>
           <p className="mt-6 max-w-2xl text-base leading-8 text-hanapure-muted sm:text-lg">

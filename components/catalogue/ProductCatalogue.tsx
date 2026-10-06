@@ -36,14 +36,14 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
   const controlStyle = "min-h-11 w-full rounded-xl border border-hanapure-border bg-hanapure-warm-white px-3 py-3 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text";
   return (
     <Container className="pb-20 pt-32 sm:pt-36">
-      <h1 className="text-4xl font-light text-hanapure-text sm:text-5xl">{labels.heading}</h1>
+      <h1 id="main-content" tabIndex={-1} className="text-4xl font-light text-hanapure-text sm:text-5xl">{labels.heading}</h1>
       <form key={JSON.stringify([locale, criteria.query, criteria.brand])}
         action={listingHref} method="get" role="search" aria-label={labels.searchProducts}
         className="mt-8 grid gap-4 rounded-2xl border border-hanapure-border bg-hanapure-white p-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
         <div className="min-w-0">
           <label htmlFor="catalogue-search" className="mb-2 block text-sm font-medium">{labels.searchProducts}</label>
           <input id="catalogue-search" name="q" type="search" defaultValue={criteria.query} autoComplete="off"
-            placeholder={labels.searchHint} className={`${controlStyle} scroll-mt-28`} />
+            placeholder={labels.searchHint} className={controlStyle} />
         </div>
         <div className="min-w-0">
           <label htmlFor="catalogue-brand" className="mb-2 block text-sm font-medium">{labels.filterBrand}</label>
@@ -74,7 +74,9 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
                 {content?.images[0] && <ProductImage {...content.images[0]} />}
                 <p className="mt-4 text-sm text-hanapure-muted">{product.brand}</p>
                 <h2 className="mt-2 break-words text-2xl font-light">
-                  <Link href={storefrontHref(`/products/${product.slug}`, routeLocale)} className="focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-hanapure-text">
+                  <Link href={storefrontHref(`/products/${product.slug}`, routeLocale)}
+                    aria-label={content ? undefined : `${labels.details}: ${product.brand} (${product.slug})`}
+                    className="block min-h-11 py-2 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-hanapure-text">
                     {content?.name ?? labels.details}
                   </Link>
                 </h2>
@@ -109,7 +111,7 @@ export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en",
         )}
         <div className="min-w-0">
           <p className="text-sm text-hanapure-muted">{product.brand}</p>
-          <h1 className="mt-3 break-words text-4xl font-light sm:text-5xl">{content?.name ?? labels.details}</h1>
+          <h1 id="main-content" tabIndex={-1} className="mt-3 break-words text-4xl font-light sm:text-5xl">{content?.name ?? labels.details}</h1>
           <p className="mt-6 whitespace-pre-line break-words leading-8 text-hanapure-muted">
             {content?.description ?? labels.missing}
           </p>

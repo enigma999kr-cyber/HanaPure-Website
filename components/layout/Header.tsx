@@ -13,13 +13,22 @@ export default function Header({ catalogueQuery = "" }: { catalogueQuery?: strin
   const locale = routeLocale ?? "en";
   const labels = storefrontLabels[locale];
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const headerRef = useRef<HTMLElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const desktopShopRef = useRef<HTMLAnchorElement>(null);
+
+  function closeMenuForNavigation() {
+    setIsMenuOpen(false);
+    // The chosen mobile link is about to be hidden, including same-page links.
+    menuButtonRef.current?.focus();
+  }
 
   useEffect(() => {
     if (!isMenuOpen) return;
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
+        event.preventDefault();
         setIsMenuOpen(false);
         menuButtonRef.current?.focus();
       }
@@ -27,20 +36,45 @@ export default function Header({ catalogueQuery = "" }: { catalogueQuery?: strin
 
     const desktopQuery = window.matchMedia("(min-width: 64rem)");
     function handleBreakpointChange(event: MediaQueryListEvent) {
-      if (event.matches) setIsMenuOpen(false);
+      if (event.matches) {
+        const active = document.activeElement;
+        // CSS may already have blurred a newly hidden mobile control.
+        if (active === document.body || active === menuButtonRef.current ||
+          headerRef.current?.querySelector("#mobile-navigation")?.contains(active)) {
+          desktopShopRef.current?.focus();
+        }
+        setIsMenuOpen(false);
+      }
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      if (event.target instanceof Node && !headerRef.current?.contains(event.target)) {
+        setIsMenuOpen(false);
+      }
     }
 
     document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("pointerdown", handlePointerDown);
     desktopQuery.addEventListener("change", handleBreakpointChange);
 
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("pointerdown", handlePointerDown);
       desktopQuery.removeEventListener("change", handleBreakpointChange);
     };
   }, [isMenuOpen]);
 
   return (
-    <header lang={locale} className="fixed top-0 left-0 z-50 w-full border-b border-hanapure-border bg-hanapure-warm-white/90 backdrop-blur-md">
+    <>
+    <a href="#main-content" lang={locale}
+      className="sr-only focus:not-sr-only focus:fixed focus:left-5 focus:top-3 focus:z-[60] focus:rounded-sm focus:bg-hanapure-white focus:px-4 focus:py-3 focus:text-hanapure-text">
+      {labels.skipContent}
+    </a>
+    <header ref={headerRef} lang={locale}
+      onBlur={(event) => {
+        if (isMenuOpen && !event.currentTarget.contains(event.relatedTarget)) setIsMenuOpen(false);
+      }}
+      className="fixed top-0 left-0 z-50 w-full border-b border-hanapure-border bg-hanapure-warm-white/90 backdrop-blur-md">
       <Container>
         <div className="flex h-20 items-center justify-between">
           {/* Logo */}
@@ -52,41 +86,41 @@ export default function Header({ catalogueQuery = "" }: { catalogueQuery?: strin
           </Link>
 
           {/* Desktop Navigation */}
-          <nav className="hidden items-center gap-8 text-sm text-hanapure-muted lg:flex">
-            <Link href={storefrontHref("/products", routeLocale)} className="transition hover:text-hanapure-text">
+          <nav aria-label={labels.primaryNavigation} className="hidden items-center gap-4 text-sm text-hanapure-muted lg:flex xl:gap-6">
+            <Link ref={desktopShopRef} href={storefrontHref("/products", routeLocale)} className="inline-flex min-h-11 items-center transition hover:text-hanapure-text">
               {labels.shop}
             </Link>
 
-            <Link href={storefrontHref("/brands", routeLocale)} className="transition hover:text-hanapure-text">
+            <Link href={storefrontHref("/brands", routeLocale)} className="inline-flex min-h-11 items-center transition hover:text-hanapure-text">
               {labels.brands}
             </Link>
 
-            <a href="#" className="transition hover:text-hanapure-text">
+            <span className="hidden xl:inline">
               Skin Concerns
-            </a>
+            </span>
 
-            <a href="#" className="transition hover:text-hanapure-text">
+            <span className="hidden xl:inline">
               Best Sellers
-            </a>
+            </span>
 
-            <a href="#" className="transition hover:text-hanapure-text">
+            <span className="hidden xl:inline">
               New Arrivals
-            </a>
+            </span>
 
-            <a href="#" className="transition hover:text-hanapure-text">
+            <span className="hidden xl:inline">
               Why HanaPure
-            </a>
+            </span>
           </nav>
 
           {/* Right Menu */}
           <div className="hidden items-center gap-5 text-sm text-hanapure-muted lg:flex">
-            <Link href={`${storefrontHref("/products", routeLocale)}${catalogueQuery}#catalogue-search`} className="transition hover:text-hanapure-text focus-visible:outline-2 focus-visible:outline-hanapure-text">
+            <a href={`${storefrontHref("/products", routeLocale)}${catalogueQuery}#catalogue-search`} className="inline-flex min-h-11 items-center transition hover:text-hanapure-text focus-visible:outline-2 focus-visible:outline-hanapure-text">
               {labels.search}
-            </Link>
+            </a>
 
             <LanguageSwitcher locale={locale} pathname={`${pathname}${catalogueQuery}`} />
 
-            <button className="transition hover:text-hanapure-text">
+            <button type="button" disabled>
               Cart
             </button>
           </div>
@@ -120,35 +154,36 @@ export default function Header({ catalogueQuery = "" }: { catalogueQuery?: strin
         id="mobile-navigation"
         aria-label={labels.navigation}
         hidden={!isMenuOpen}
-        className="border-t border-hanapure-border bg-hanapure-warm-white lg:hidden"
+        className="max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain border-t border-hanapure-border bg-hanapure-warm-white lg:hidden"
       >
         <Container>
           <div className="flex flex-col py-3 text-base text-hanapure-text">
             <Link
               href={storefrontHref("/", routeLocale)}
               className="rounded-sm px-2 py-3 hover:bg-hanapure-beige-light focus-visible:outline-2 focus-visible:outline-hanapure-text"
-              onClick={() => setIsMenuOpen(false)}
+              onClick={closeMenuForNavigation}
             >
               {labels.home}
             </Link>
             <Link
               href={storefrontHref("/products", routeLocale)}
               className="rounded-sm px-2 py-3 hover:bg-hanapure-beige-light focus-visible:outline-2 focus-visible:outline-hanapure-text"
-              onClick={() => setIsMenuOpen(false)}
+              onClick={closeMenuForNavigation}
             >
               {labels.shop}
             </Link>
             <Link
               href={storefrontHref("/brands", routeLocale)}
               className="rounded-sm px-2 py-3 hover:bg-hanapure-beige-light focus-visible:outline-2 focus-visible:outline-hanapure-text"
-              onClick={() => setIsMenuOpen(false)}
+              onClick={closeMenuForNavigation}
             >
               {labels.brands}
             </Link>
-            <LanguageSwitcher locale={locale} pathname={`${pathname}${catalogueQuery}`} onNavigate={() => setIsMenuOpen(false)} />
+            <LanguageSwitcher locale={locale} pathname={`${pathname}${catalogueQuery}`} onNavigate={closeMenuForNavigation} />
           </div>
         </Container>
       </nav>
     </header>
+    </>
   );
 }

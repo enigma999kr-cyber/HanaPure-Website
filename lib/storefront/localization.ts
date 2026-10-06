@@ -28,6 +28,7 @@ export const storefrontLabels = {
   en: {
     home: "Home", shop: "Shop", brands: "Brands", language: "Language",
     openMenu: "Open menu", closeMenu: "Close menu", navigation: "Mobile navigation",
+    skipContent: "Skip to content", primaryNavigation: "Main navigation",
     heading: "Shop Korean skincare", empty: "No products to browse yet",
     emptyDescription: "Explore our brands while our catalogue is being prepared.",
     exploreBrands: "Explore brands", details: "Product details", back: "Back to products",
@@ -41,6 +42,7 @@ export const storefrontLabels = {
   hu: {
     home: "Kezdőlap", shop: "Termékek", brands: "Márkák", language: "Nyelv",
     openMenu: "Menü megnyitása", closeMenu: "Menü bezárása", navigation: "Mobil navigáció",
+    skipContent: "Ugrás a tartalomra", primaryNavigation: "Fő navigáció",
     heading: "Koreai bőrápolási termékek", empty: "Nincs még böngészhető termék",
     emptyDescription: "Fedezze fel márkáinkat, amíg katalógusunk készül.",
     exploreBrands: "Márkák felfedezése", details: "Termékadatok", back: "Vissza a termékekhez",
@@ -54,6 +56,7 @@ export const storefrontLabels = {
   ko: {
     home: "홈", shop: "상품", brands: "브랜드", language: "언어",
     openMenu: "메뉴 열기", closeMenu: "메뉴 닫기", navigation: "모바일 탐색",
+    skipContent: "본문으로 건너뛰기", primaryNavigation: "주 탐색",
     heading: "한국 스킨케어 상품", empty: "아직 둘러볼 상품이 없습니다",
     emptyDescription: "상품 카탈로그를 준비하는 동안 브랜드를 둘러보세요.",
     exploreBrands: "브랜드 둘러보기", details: "상품 정보", back: "상품 목록으로",

@@ -125,7 +125,7 @@ test("route wiring uses the authoritative reader and promised slug; Header Shop 
   assert.match(detail, /productMetadata\(slug, "en", \{ legacy: true \}\)/);
   const header = source("components/layout/Header.tsx");
   assert.equal((header.match(/storefrontHref\("\/products", routeLocale\)/g) ?? []).length, 3);
-  assert.match(header, /storefrontHref\("\/products", routeLocale\)[\s\S]*?onClick=\{\(\) => setIsMenuOpen\(false\)\}/);
+  assert.match(header, /storefrontHref\("\/products", routeLocale\)[\s\S]*?onClick=\{closeMenuForNavigation\}/);
 });
 
 test("EN/HU/KO catalogue views select only the requested editorial content and keep identity/slug", () => {
@@ -221,4 +221,87 @@ test("language switching retains active catalogue search/brand query for the des
   assert.deepEqual(nodes.filter(node => node.props?.href).map(node => node.props.href), [
     "/en/products?q=cleanser&brand=Round+Lab", "/hu/products?q=cleanser&brand=Round+Lab", "/ko/products?q=cleanser&brand=Round+Lab",
   ]);
+});
+
+test("catalogue keyboard entry has a unique skip target and native labelled controls in logical order", () => {
+  for (const locale of ["en", "hu", "ko"]) {
+    const nodes = elements(ProductListing({ locale, routeLocale: locale,
+      criteria: { query: "no-match", brand: "beplain" } }));
+    const target = nodes.filter(node => node.props?.id === "main-content");
+    assert.equal(target.length, 1);
+    assert.equal(target[0].type, "h1");
+    assert.equal(target[0].props.tabIndex, -1);
+    const controls = nodes.filter(node => ["input", "select", "button"].includes(node.type));
+    assert.deepEqual(controls.map(node => node.type), ["input", "select", "button"]);
+    for (const control of controls.filter(node => node.type !== "button")) {
+      assert.ok(nodes.some(node => node.type === "label" && node.props.htmlFor === control.props.id));
+      assert.equal(control.props.tabIndex, undefined);
+    }
+    assert.equal(controls[2].props.type, "submit");
+    assert.equal(nodes.find(node => node.type === "form").props.method, "get");
+    assert.ok(nodes.some(node => node.props?.href === `/${locale}/products`));
+    assert.ok(nodes.some(node => node.props?.href === `/${locale}/brands`));
+    assert.ok(!nodes.some(node => node.props?.tabIndex > 0));
+  }
+});
+
+test("missing translations retain distinct product link names and published-only navigation", () => {
+  const first = product();
+  const second = product({ publicId: "22345678-abcd-1234-abcd-123456789abc", slug: "other-fixture" });
+  const draft = product({ publicId: "32345678-abcd-1234-abcd-123456789abc", slug: "draft-fixture", state: "draft" });
+  for (const locale of ["hu", "ko"]) {
+    const nodes = elements(ProductListing({ catalogue: reader(first, second, draft), locale, routeLocale: locale }));
+    const links = nodes.filter(node => node.props?.href?.includes("/products/"));
+    assert.equal(links.length, 2);
+    assert.equal(new Set(links.map(link => link.props["aria-label"])).size, 2);
+    for (const [index, record] of [first, second].entries()) {
+      assert.ok(links[index].props["aria-label"].includes(record.brand));
+      assert.ok(links[index].props["aria-label"].includes(record.slug));
+      assert.match(links[index].props.className, /min-h-11/);
+    }
+    assert.ok(!text(nodes).includes("Fictional fixture"));
+    const detail = elements(ProductDetail({ catalogue: reader(first), locale, routeLocale: locale, slug: first.slug }));
+    assert.equal(detail.find(node => node.props?.id === "main-content").props.tabIndex, -1);
+    assert.ok(detail.some(node => node.props?.href === `/${locale}/products`));
+  }
+});
+
+test("locale controls retain native named links with usable touch targets and no synthetic tab order", () => {
+  const nodes = elements(LanguageSwitcher({ locale: "ko", pathname: "/ko/products?q=fixture&brand=beplain" }));
+  const links = nodes.filter(node => node.props?.href);
+  assert.deepEqual(links.map(node => node.props["aria-label"]), ["English", "Magyar", "한국어"]);
+  for (const link of links) {
+    assert.match(link.props.className, /min-h-11 min-w-11/);
+    assert.equal(link.props.tabIndex, undefined);
+    assert.ok(link.props.href.endsWith("?q=fixture&brand=beplain"));
+    assert.equal(link.props.role, undefined);
+  }
+});
+
+test("Header disclosure keeps explicit focus recovery, cleanup, bounded scrolling and a skip destination on each shell", () => {
+  const source = path => readFileSync(join(repo, path), "utf8");
+  const header = source("components/layout/Header.tsx");
+  assert.match(header, /href="#main-content"/);
+  assert.match(header, /<a href=\{`\$\{storefrontHref\("\/products", routeLocale\)\}\$\{catalogueQuery\}#catalogue-search`\}/);
+  assert.match(header, /aria-expanded=\{isMenuOpen\}/);
+  assert.match(header, /aria-controls="mobile-navigation"/);
+  assert.match(header, /hidden=\{!isMenuOpen\}/);
+  assert.match(header, /max-h-\[calc\(100dvh-5rem\)\] overflow-y-auto/);
+  assert.match(header, /event\.key === "Escape"[\s\S]*?menuButtonRef\.current\?\.focus\(\)/);
+  assert.match(header, /desktopShopRef\.current\?\.focus\(\)/);
+  assert.match(header, /event\.currentTarget\.contains\(event\.relatedTarget\)/);
+  for (const event of ["keydown", "pointerdown"]) {
+    assert.ok(header.includes(`document.addEventListener("${event}"`));
+    assert.ok(header.includes(`document.removeEventListener("${event}"`));
+  }
+  assert.match(header, /desktopQuery\.removeEventListener\("change"/);
+  assert.doesNotMatch(header, /href="#"/);
+  assert.match(header, /<button type="button" disabled>/);
+  for (const path of ["components/home/Hero.tsx", "app/brands/page.tsx", "app/products/[slug]/not-found.tsx"]) {
+    assert.match(source(path), /<h1 id="main-content" tabIndex=\{-1\}/);
+  }
+  const css = source("app/globals.css");
+  assert.match(css, /scroll-padding-top: 6rem/);
+  assert.match(css, /prefers-reduced-motion: reduce/);
+  assert.match(source("app/layout.tsx"), /data-scroll-behavior="smooth"/);
 });

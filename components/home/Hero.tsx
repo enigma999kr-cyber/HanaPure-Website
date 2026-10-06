@@ -12,7 +12,7 @@ export default function Hero() {
           Trusted Korean Skincare
         </p>
 
-        <h1 className="mx-auto mb-6 max-w-4xl text-4xl font-light leading-[1.08] text-hanapure-text sm:text-5xl md:text-7xl">
+        <h1 id="main-content" tabIndex={-1} className="mx-auto mb-6 max-w-4xl text-4xl font-light leading-[1.08] text-hanapure-text sm:text-5xl md:text-7xl">
           Feel confident in your skin.
         </h1>
 
