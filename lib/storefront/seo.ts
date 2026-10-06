@@ -7,6 +7,7 @@ import type { EditorialLocale, EditorialImage } from "../catalog/editorial-catal
 import type { CatalogueSearchParams } from "../catalog/catalogue-discovery";
 import { storefrontHref, storefrontLabels, storefrontLocales } from "./localization";
 import { publicSiteOrigin } from "./site-origin";
+import { marketingCopy } from "./marketing-copy";
 
 type Reader = typeof localCatalogue;
 type Options = { origin?: string | null; legacy?: boolean };
@@ -39,16 +40,15 @@ export function rootMetadata(origin = publicSiteOrigin()): Metadata {
     metadataBase: origin ? new URL(origin) : null, robots: { index: false, follow: true } };
 }
 
-/** These bodies remain English in the current code; do not advertise HU/KO translations. */
+/** Marketing bodies have matching EN/HU/KO copy; editorial approval is separate. */
 export function marketingMetadata(kind: "home" | "brands", locale: EditorialLocale,
   { origin = publicSiteOrigin(), legacy = false }: Options = {}): Metadata {
   const labels = storefrontLabels[locale];
+  const copy = marketingCopy[locale];
   return pageMetadata({ title: kind === "home" ? "HanaPure" : `${labels.brands} | HanaPure`,
-    // Existing Hero strapline and Brands page description, with no invented translations.
-    description: locale === "en" ? (kind === "home" ? "Trusted Korean Skincare" :
-      "Explore Korean skincare brands in the HanaPure directory.") : null,
-    locale, path: kind === "home" ? "/" : "/brands", translatedLocales: ["en"],
-    canonicalLocale: "en", indexable: locale === "en" && !legacy, origin });
+    description: kind === "home" ? copy.hero.eyebrow : copy.brands.seoDescription,
+    locale, path: kind === "home" ? "/" : "/brands", translatedLocales: storefrontLocales,
+    indexable: !legacy, origin });
 }
 
 export function listingMetadata(locale: EditorialLocale, params: CatalogueSearchParams = {},
@@ -76,7 +76,10 @@ export function storefrontSitemap(catalogue: Reader = localCatalogue,
   origin = publicSiteOrigin()): MetadataRoute.Sitemap {
   if (!origin) return [];
   const entries: MetadataRoute.Sitemap = [
-    ...["/", "/brands"].map((path) => ({ url: languages(path, ["en"], origin).en })),
+    ...["/", "/brands"].flatMap((path) => storefrontLocales.map((locale) => ({
+      url: languages(path, [locale], origin)[locale],
+      alternates: { languages: languages(path, storefrontLocales, origin) },
+    }))),
     ...storefrontLocales.map((locale) => ({ url: languages("/products", [locale], origin)[locale],
       alternates: { languages: languages("/products", storefrontLocales, origin) } })),
   ];

@@ -3,6 +3,7 @@ type BrandCardProps = {
   tagline: string;
   description: string;
   accent: string;
+  discover: string;
 };
 
 export default function BrandCard({
@@ -10,6 +11,7 @@ export default function BrandCard({
   tagline,
   description,
   accent,
+  discover,
 }: BrandCardProps) {
   return (
     <article className="group overflow-hidden rounded-[2rem] border border-hanapure-border bg-hanapure-warm-white shadow-sm transition duration-300 hover:-translate-y-1 hover:bg-hanapure-white hover:shadow-lg">
@@ -26,7 +28,7 @@ export default function BrandCard({
           href="#"
           className="text-sm font-medium text-hanapure-text transition group-hover:tracking-wide"
         >
-          Discover Brand →
+          {discover} →
         </a>
       </div>
     </article>

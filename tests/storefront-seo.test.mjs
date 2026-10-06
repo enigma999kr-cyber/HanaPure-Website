@@ -4,6 +4,7 @@ import { registerHooks } from "node:module";
 import { createLocalCatalogueReader } from "../lib/catalog/editorial-catalogue.ts";
 import { publicSiteOrigin } from "../lib/storefront/site-origin.ts";
 import { storefrontLabels } from "../lib/storefront/localization.ts";
+import { marketingCopy } from "../lib/storefront/marketing-copy.ts";
 
 registerHooks({ resolve(specifier, context, nextResolve) {
   if (specifier === "next/navigation") return nextResolve("next/dist/client/components/navigation.react-server.js", context);
@@ -103,7 +104,8 @@ test("draft and unknown detail metadata invoke Next's real notFound interrupt", 
 
 test("sitemap contains only canonical public routes and actually supplied published translations", () => {
   const sitemap = storefrontSitemap(catalogue, origin);
-  assert.deepEqual(sitemap.map(entry => entry.url), [`${origin}/en`, `${origin}/en/brands`,
+  assert.deepEqual(sitemap.map(entry => entry.url), [`${origin}/en`, `${origin}/hu`, `${origin}/ko`,
+    `${origin}/en/brands`, `${origin}/hu/brands`, `${origin}/ko/brands`,
     `${origin}/en/products`, `${origin}/hu/products`, `${origin}/ko/products`,
     `${origin}/en/products/fictional-1`, `${origin}/hu/products/fictional-1`, `${origin}/ko/products/fictional-1`,
     `${origin}/hu/products/fictional-3`]);
@@ -113,14 +115,22 @@ test("sitemap contains only canonical public routes and actually supplied publis
   assert.deepEqual(sitemap.at(-1).alternates.languages, { hu: `${origin}/hu/products/fictional-3` });
 });
 
-test("English-only home/brand bodies advertise only EN, without invented HU/KO descriptions", () => {
+test("translated home/brand bodies advertise matching locale copy and reciprocal available languages", () => {
   for (const kind of ["home", "brands"]) for (const locale of ["en", "hu", "ko"]) {
     const metadata = marketingMetadata(kind, locale, { origin });
-    assert.equal(metadata.robots.index, locale === "en");
-    assert.equal(metadata.alternates.canonical, `${origin}/en${kind === "brands" ? "/brands" : ""}`);
-    assert.deepEqual(Object.keys(metadata.alternates.languages), ["en"]);
-    if (locale !== "en") assert.equal(metadata.description, null);
+    const path = kind === "brands" ? "/brands" : "";
+    assert.equal(metadata.robots.index, true);
+    assert.equal(metadata.alternates.canonical, `${origin}/${locale}${path}`);
+    assert.deepEqual(metadata.alternates.languages, { en: `${origin}/en${path}`, hu: `${origin}/hu${path}`, ko: `${origin}/ko${path}` });
+    assert.equal(metadata.description, kind === "home" ? marketingCopy[locale].hero.eyebrow : marketingCopy[locale].brands.seoDescription);
+    const absent = marketingMetadata(kind, locale, { origin: null });
+    assert.equal(absent.robots.index, false);
+    assert.equal(absent.alternates, null);
     assert.equal(marketingMetadata(kind, "en", { origin, legacy: true }).robots.index, false);
+  }
+  for (const entry of storefrontSitemap(catalogue, origin).slice(0, 6)) {
+    const path = entry.url.endsWith("/brands") ? "/brands" : "";
+    assert.deepEqual(entry.alternates.languages, { en: `${origin}/en${path}`, hu: `${origin}/hu${path}`, ko: `${origin}/ko${path}` });
   }
 });
 

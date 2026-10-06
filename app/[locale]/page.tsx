@@ -1,4 +1,4 @@
-import Home from "@/app/page";
+import HomeContent from "@/components/home/HomeContent";
 import { requireStorefrontLocale } from "@/lib/storefront/require-locale";
 import { marketingMetadata } from "@/lib/storefront/seo";
 
@@ -7,7 +7,6 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
 }
 
 export default async function LocalizedHome({ params }: { params: Promise<{ locale: string }> }) {
-  requireStorefrontLocale((await params).locale);
-  // Existing marketing copy remains English; Header carries its own selected lang.
-  return <div lang="en"><Home /></div>;
+  const locale = requireStorefrontLocale((await params).locale);
+  return <HomeContent locale={locale} />;
 }

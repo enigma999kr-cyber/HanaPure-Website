@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { brandNames } from "@/data/brands";
 import Container from "@/components/ui/Container";
+import type { MarketingCopy } from "@/lib/storefront/marketing-copy";
 
 const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 const sortedBrands = [...brandNames].sort((first, second) =>
@@ -12,7 +13,7 @@ const availableLetters = new Set(
   sortedBrands.map((brand) => brand[0].toUpperCase()),
 );
 
-export default function BrandDirectory() {
+export default function BrandDirectory({ labels }: { labels: MarketingCopy["directory"] }) {
   const [query, setQuery] = useState("");
   const [selectedLetter, setSelectedLetter] = useState<string | null>(null);
   const normalizedQuery = query.trim().toLowerCase();
@@ -27,14 +28,14 @@ export default function BrandDirectory() {
   );
 
   return (
-    <section aria-label="Browse brands" className="pb-24 pt-4 sm:pt-8">
+    <section aria-label={labels.browse} className="pb-24 pt-4 sm:pt-8">
       <Container>
         <div className="rounded-3xl border border-hanapure-border bg-hanapure-white p-5 shadow-sm sm:p-8">
           <label
             htmlFor="brand-search"
             className="mb-3 block text-sm font-medium text-hanapure-text"
           >
-            Search by brand name
+            {labels.searchLabel}
           </label>
           <input
             id="brand-search"
@@ -42,22 +43,22 @@ export default function BrandDirectory() {
             autoComplete="off"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search brands"
+            placeholder={labels.searchPlaceholder}
             className="w-full rounded-2xl border border-hanapure-border bg-hanapure-warm-white px-5 py-4 text-base text-hanapure-text outline-none placeholder:text-hanapure-muted focus-visible:border-hanapure-beige-deep focus-visible:ring-2 focus-visible:ring-hanapure-beige"
           />
 
-          <div className="mt-8" aria-label="Filter brands by first letter">
+          <div className="mt-8" aria-label={labels.filterLabel}>
             <p className="mb-3 text-sm font-medium text-hanapure-text">
-              Browse A–Z
+              {labels.alphabet}
             </p>
             <div className="grid grid-cols-7 gap-1.5 sm:grid-cols-10 md:grid-cols-14 lg:grid-cols-[repeat(27,minmax(0,1fr))]">
               <button
                 type="button"
                 aria-pressed={selectedLetter === null}
                 onClick={() => setSelectedLetter(null)}
-                className="min-h-10 rounded-lg px-1 text-sm font-medium transition hover:bg-hanapure-beige-light focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text aria-pressed:bg-hanapure-text aria-pressed:text-hanapure-white"
+                className="min-h-10 break-words rounded-lg px-1 text-sm font-medium transition hover:bg-hanapure-beige-light focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text aria-pressed:bg-hanapure-text aria-pressed:text-hanapure-white"
               >
-                All
+                {labels.all}
               </button>
               {alphabet.map((letter) => (
                 <button
@@ -76,15 +77,14 @@ export default function BrandDirectory() {
         </div>
 
         <p aria-live="polite" className="mt-8 text-sm text-hanapure-muted">
-          {matchingBrands.length}{" "}
-          {matchingBrands.length === 1 ? "brand" : "brands"} found
+          {(matchingBrands.length === 1 ? labels.resultOne : labels.resultMany).replace("{count}", String(matchingBrands.length))}
         </p>
 
         {matchingBrands.length === 0 ? (
           <div className="mt-6 rounded-3xl border border-hanapure-border bg-hanapure-white px-6 py-12 text-center">
-            <h2 className="text-2xl font-light">No brands found</h2>
+            <h2 className="text-2xl font-light">{labels.empty}</h2>
             <p className="mt-3 text-hanapure-muted">
-              Try another name or choose All to browse every brand.
+              {labels.emptyDescription}
             </p>
           </div>
         ) : (

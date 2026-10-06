@@ -297,7 +297,7 @@ test("Header disclosure keeps explicit focus recovery, cleanup, bounded scrollin
   assert.match(header, /desktopQuery\.removeEventListener\("change"/);
   assert.doesNotMatch(header, /href="#"/);
   assert.match(header, /<button type="button" disabled>/);
-  for (const path of ["components/home/Hero.tsx", "app/brands/page.tsx", "app/products/[slug]/not-found.tsx"]) {
+  for (const path of ["components/home/Hero.tsx", "components/brands/BrandsContent.tsx", "app/products/[slug]/not-found.tsx"]) {
     assert.match(source(path), /<h1 id="main-content" tabIndex=\{-1\}/);
   }
   const css = source("app/globals.css");

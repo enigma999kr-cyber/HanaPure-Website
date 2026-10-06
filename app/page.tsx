@@ -1,7 +1,4 @@
-import Header from "@/components/layout/Header";
-import Hero from "@/components/home/Hero";
-import WhyHanaPure from "@/components/home/WhyHanaPure";
-import FeaturedBrands from "@/components/brands/FeaturedBrands";
+import HomeContent from "@/components/home/HomeContent";
 import { marketingMetadata } from "@/lib/storefront/seo";
 
 export function generateMetadata() {
@@ -9,15 +6,5 @@ export function generateMetadata() {
 }
 
 export default function Home() {
-  return (
-    <main className="min-h-screen bg-hanapure-white">
-      <Header />
-
-      <Hero />
-
-      <FeaturedBrands />
-
-      <WhyHanaPure />
-    </main>
-  );
+  return <HomeContent />;
 }
