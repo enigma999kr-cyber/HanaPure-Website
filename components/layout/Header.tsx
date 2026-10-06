@@ -46,9 +46,9 @@ export default function Header() {
 
           {/* Desktop Navigation */}
           <nav className="hidden items-center gap-8 text-sm text-hanapure-muted lg:flex">
-            <a href="#" className="transition hover:text-hanapure-text">
+            <Link href="/products" className="transition hover:text-hanapure-text">
               Shop
-            </a>
+            </Link>
 
             <Link href="/brands" className="transition hover:text-hanapure-text">
               Brands
@@ -123,6 +123,13 @@ export default function Header() {
               onClick={() => setIsMenuOpen(false)}
             >
               Home
+            </Link>
+            <Link
+              href="/products"
+              className="rounded-sm px-2 py-3 hover:bg-hanapure-beige-light focus-visible:outline-2 focus-visible:outline-hanapure-text"
+              onClick={() => setIsMenuOpen(false)}
+            >
+              Shop
             </Link>
             <Link
               href="/brands"
