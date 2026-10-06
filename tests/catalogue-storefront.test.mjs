@@ -40,6 +40,7 @@ registerHooks({
   },
 });
 const { ProductListing, ProductDetail } = await import("../components/catalogue/ProductCatalogue.tsx");
+const { default: LanguageSwitcher } = await import("../components/layout/LanguageSwitcher.tsx");
 // Expand the actual pure server views, preserving host-element attributes/text.
 function elements(node) {
   if (node == null || typeof node === "boolean") return [];
@@ -123,6 +124,58 @@ test("route wiring uses the authoritative reader and promised slug; Header Shop 
   assert.match(detail, /ProductDetail\(\{ slug \}\)/);
   assert.match(detail, /localCatalogue\.findPublishedBySlug\(slug\)/);
   const header = source("components/layout/Header.tsx");
-  assert.equal((header.match(/href="\/products"/g) ?? []).length, 2);
-  assert.match(header, /href="\/products"[\s\S]*?onClick=\{\(\) => setIsMenuOpen\(false\)\}/);
+  assert.equal((header.match(/storefrontHref\("\/products", routeLocale\)/g) ?? []).length, 2);
+  assert.match(header, /storefrontHref\("\/products", routeLocale\)[\s\S]*?onClick=\{\(\) => setIsMenuOpen\(false\)\}/);
+});
+
+test("EN/HU/KO catalogue views select only the requested editorial content and keep identity/slug", () => {
+  const record = product();
+  for (const locale of ["en", "hu", "ko"]) record.translations[locale] = {
+    ...content(), name: `${locale} fixture`, description: `${locale} description`,
+    images: [{ src: `/fixtures/${locale}.webp`, alt: `${locale} image` }],
+    usage: `${locale} usage`, caution: `${locale} caution`,
+  };
+  const catalogue = reader(record);
+  for (const locale of ["en", "hu", "ko"]) {
+    for (const view of [ProductListing({ catalogue, locale, routeLocale: locale }),
+      ProductDetail({ catalogue, slug: record.slug, locale, routeLocale: locale })]) {
+      const nodes = elements(view);
+      assert.ok(text(nodes).includes(`${locale} fixture`));
+      assert.equal(nodes.find((node) => node.type === "img").props.alt, `${locale} image`);
+      assert.ok(nodes.some((node) => node.props?.href === `/${locale}/products/${record.slug}` || node.props?.href === `/${locale}/products`));
+      for (const other of ["en", "hu", "ko"].filter((value) => value !== locale)) assert.ok(!text(nodes).includes(`${other} fixture`));
+    }
+  }
+  assert.equal(catalogue.listPublished()[0].publicId, record.publicId);
+});
+
+test("missing HU/KO never fall back to EN; drafts remain inaccessible in every locale", () => {
+  const { storefrontLabels } = require("../lib/storefront/localization.ts");
+  const record = product();
+  for (const locale of ["hu", "ko"]) {
+    const catalogue = reader(record);
+    for (const view of [ProductListing({ catalogue, locale, routeLocale: locale }),
+      ProductDetail({ slug: record.slug, catalogue, locale, routeLocale: locale })]) {
+      const nodes = elements(view);
+      assert.ok(text(nodes).includes(storefrontLabels[locale].missing));
+      assert.ok(!text(nodes).includes(record.translations.en.name));
+      assert.equal(nodes.filter((node) => node.type === "img").length, 0);
+    }
+  }
+  for (const locale of ["en", "hu", "ko"]) {
+    const catalogue = reader(product({ state: "draft" }));
+    assert.throws(() => ProductDetail({ slug: record.slug, catalogue, locale }),
+      (error) => error.digest === "NEXT_HTTP_ERROR_FALLBACK;404");
+  }
+});
+
+test("language links preserve the product destination, expose current locale, and close mobile navigation", () => {
+  let closed = 0;
+  const nodes = elements(LanguageSwitcher({ locale: "hu", pathname: "/hu/products/fictional-fixture", onNavigate: () => closed++ }));
+  const links = nodes.filter((node) => node.props?.href);
+  assert.deepEqual(links.map((node) => node.props.href), ["/en/products/fictional-fixture", "/hu/products/fictional-fixture", "/ko/products/fictional-fixture"]);
+  assert.equal(links.filter((node) => node.props["aria-current"] === "true").length, 1);
+  assert.equal(links[1].props.lang, "hu");
+  for (const link of links) link.props.onClick();
+  assert.equal(closed, 3);
 });

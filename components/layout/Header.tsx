@@ -3,8 +3,15 @@
 import Container from "@/components/ui/Container";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
+import LanguageSwitcher from "./LanguageSwitcher";
+import { localeFromPath, storefrontHref, storefrontLabels } from "@/lib/storefront/localization";
 
 export default function Header() {
+  const pathname = usePathname() ?? "/";
+  const routeLocale = localeFromPath(pathname);
+  const locale = routeLocale ?? "en";
+  const labels = storefrontLabels[locale];
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -33,12 +40,12 @@ export default function Header() {
   }, [isMenuOpen]);
 
   return (
-    <header className="fixed top-0 left-0 z-50 w-full border-b border-hanapure-border bg-hanapure-warm-white/90 backdrop-blur-md">
+    <header lang={locale} className="fixed top-0 left-0 z-50 w-full border-b border-hanapure-border bg-hanapure-warm-white/90 backdrop-blur-md">
       <Container>
         <div className="flex h-20 items-center justify-between">
           {/* Logo */}
           <Link
-            href="/"
+            href={storefrontHref("/", routeLocale)}
             className="text-2xl font-light tracking-wide text-hanapure-text focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-hanapure-text"
           >
             HanaPure
@@ -46,12 +53,12 @@ export default function Header() {
 
           {/* Desktop Navigation */}
           <nav className="hidden items-center gap-8 text-sm text-hanapure-muted lg:flex">
-            <Link href="/products" className="transition hover:text-hanapure-text">
-              Shop
+            <Link href={storefrontHref("/products", routeLocale)} className="transition hover:text-hanapure-text">
+              {labels.shop}
             </Link>
 
-            <Link href="/brands" className="transition hover:text-hanapure-text">
-              Brands
+            <Link href={storefrontHref("/brands", routeLocale)} className="transition hover:text-hanapure-text">
+              {labels.brands}
             </Link>
 
             <a href="#" className="transition hover:text-hanapure-text">
@@ -77,7 +84,7 @@ export default function Header() {
               Search
             </button>
 
-            <button className="transition hover:text-hanapure-text">EN</button>
+            <LanguageSwitcher locale={locale} pathname={pathname} />
 
             <button className="transition hover:text-hanapure-text">
               Cart
@@ -89,7 +96,7 @@ export default function Header() {
             ref={menuButtonRef}
             type="button"
             className="flex min-h-11 min-w-11 flex-col items-center justify-center gap-1.5 rounded-sm text-hanapure-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text lg:hidden"
-            aria-label={isMenuOpen ? "Close menu" : "Open menu"}
+            aria-label={isMenuOpen ? labels.closeMenu : labels.openMenu}
             aria-expanded={isMenuOpen}
             aria-controls="mobile-navigation"
             onClick={() => setIsMenuOpen((open) => !open)}
@@ -111,33 +118,34 @@ export default function Header() {
       </Container>
       <nav
         id="mobile-navigation"
-        aria-label="Mobile navigation"
+        aria-label={labels.navigation}
         hidden={!isMenuOpen}
         className="border-t border-hanapure-border bg-hanapure-warm-white lg:hidden"
       >
         <Container>
           <div className="flex flex-col py-3 text-base text-hanapure-text">
             <Link
-              href="/"
+              href={storefrontHref("/", routeLocale)}
               className="rounded-sm px-2 py-3 hover:bg-hanapure-beige-light focus-visible:outline-2 focus-visible:outline-hanapure-text"
               onClick={() => setIsMenuOpen(false)}
             >
-              Home
+              {labels.home}
             </Link>
             <Link
-              href="/products"
+              href={storefrontHref("/products", routeLocale)}
               className="rounded-sm px-2 py-3 hover:bg-hanapure-beige-light focus-visible:outline-2 focus-visible:outline-hanapure-text"
               onClick={() => setIsMenuOpen(false)}
             >
-              Shop
+              {labels.shop}
             </Link>
             <Link
-              href="/brands"
+              href={storefrontHref("/brands", routeLocale)}
               className="rounded-sm px-2 py-3 hover:bg-hanapure-beige-light focus-visible:outline-2 focus-visible:outline-hanapure-text"
               onClick={() => setIsMenuOpen(false)}
             >
-              Brands
+              {labels.brands}
             </Link>
+            <LanguageSwitcher locale={locale} pathname={pathname} onNavigate={() => setIsMenuOpen(false)} />
           </div>
         </Container>
       </nav>
