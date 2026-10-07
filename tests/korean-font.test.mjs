@@ -5,6 +5,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
 import ts from "typescript";
+import { brotliDecompressSync } from "node:zlib";
+import { createHash } from "node:crypto";
+import { losslessWoff2 } from "../scripts/optimize-gowun-batang.mjs";
 
 const repo = dirname(dirname(fileURLToPath(import.meta.url)));
 // next/font is a build-time transform. The real generated CSS/loading is checked
@@ -55,17 +58,75 @@ test("Gowun Batang is scoped to Korean locale and preserves children and languag
 
 test("local regular/bold font faces use swap without shared-locale preloading", () => {
   assert.deepEqual(font.options.src, [
-    { path: "../fonts/gowun-batang/GowunBatang-Regular.ttf", weight: "400", style: "normal" },
-    { path: "../fonts/gowun-batang/GowunBatang-Bold.ttf", weight: "700", style: "normal" },
+    { path: "../fonts/gowun-batang/GowunBatang-Regular.woff2", weight: "400", style: "normal" },
+    { path: "../fonts/gowun-batang/GowunBatang-Bold.woff2", weight: "700", style: "normal" },
   ]);
   assert.equal(font.options.display, "swap");
   assert.equal(font.options.preload, false);
   for (const face of font.options.src) {
     const bytes = readFileSync(join(repo, "app/[locale]", face.path));
-    assert.equal(bytes.readUInt32BE(0), 0x00010000); // TrueType sfnt header.
+    assert.equal(bytes.toString("ascii", 0, 4), "wOF2");
     assert.ok(bytes.length > 0);
   }
   const license = readFileSync(join(repo, "app/fonts/gowun-batang/OFL.txt"), "utf8");
   assert.ok(license.includes("Copyright 2021 The Gowun Batang Project Authors"));
   assert.ok(license.includes("SIL OPEN FONT LICENSE Version 1.1"));
+});
+
+test("delivered WOFF2 retains every original table, character mapping, outline, metric and license", () => {
+  // Independent reader for the null-transform WOFF2 assets. All tables are
+  // compared, including cmap, GSUB/GPOS, glyf, hinting, metrics and name/license.
+  const knownTags = ["cmap", "head", "hhea", "hmtx", "maxp", "name", "OS/2", "post",
+    "cvt ", "fpgm", "glyf", "loca", "prep", "CFF ", "VORG", "EBDT", "EBLC",
+    "gasp", "hdmx", "kern", "LTSH", "PCLT", "VDMX", "vhea", "vmtx", "BASE",
+    "GDEF", "GPOS", "GSUB"];
+  const originalHashes = {
+    Regular: "3d88c3ed57ba84f81d0c36772e6f01912cb6aa6cd2b66e29d81531fa15b3451e",
+    Bold: "0d34417080b706037f3624ad2527f47f898dc333a5ff19262ef22ca064e2d580",
+  };
+  for (const weight of ["Regular", "Bold"]) {
+    const base = join(repo, "app/fonts/gowun-batang", `GowunBatang-${weight}`);
+    const original = readFileSync(base + ".ttf");
+    assert.equal(createHash("sha256").update(original).digest("hex"), originalHashes[weight]);
+    const output = readFileSync(base + ".woff2");
+    assert.equal(output.readUInt32BE(8), output.length);
+    assert.equal(output.readUInt32BE(4), original.readUInt32BE(0));
+    const count = output.readUInt16BE(12);
+    assert.equal(count, original.readUInt16BE(4));
+    assert.equal(output.readUInt16BE(14), 0);
+    assert.ok(output.subarray(28, 48).every(byte => byte === 0));
+    let cursor = 48;
+    const entries = [];
+    for (let i = 0; i < count; i++) {
+      const flags = output[cursor++];
+      const tag = knownTags[flags & 63];
+      assert.ok(tag, "Unexpected table tag");
+      assert.equal(flags >> 6, ["glyf", "loca"].includes(tag) ? 3 : 0);
+      let length = 0;
+      let byte;
+      do { byte = output[cursor++]; length = length * 128 + (byte & 127); } while (byte & 128);
+      entries.push({ tag, length });
+    }
+    assert.equal(cursor + output.readUInt32BE(20), output.length);
+    const decoded = brotliDecompressSync(output.subarray(cursor));
+    let position = 0;
+    for (const [i, entry] of entries.entries()) {
+      const offset = 12 + i * 16;
+      assert.equal(entry.tag, original.toString("ascii", offset, offset + 4));
+      assert.equal(entry.length, original.readUInt32BE(offset + 12));
+      const start = original.readUInt32BE(offset + 8);
+      assert.deepEqual(decoded.subarray(position, position + entry.length),
+        original.subarray(start, start + entry.length), `${weight} ${entry.tag} must remain byte-identical`);
+      position += entry.length;
+    }
+    assert.equal(position, decoded.length);
+    assert.ok(output.length < original.length * 0.65, "Meaningful payload reduction required");
+  }
+});
+
+test("offline font conversion rejects unsupported or incomplete input", () => {
+  assert.throws(() => losslessWoff2(Buffer.alloc(0)), /Missing sfnt header/);
+  assert.throws(() => losslessWoff2(Buffer.from("ttcf00000000")), /Only single TrueType/);
+  const truncated = Buffer.alloc(12); truncated.writeUInt32BE(0x00010000); truncated.writeUInt16BE(16, 4);
+  assert.throws(() => losslessWoff2(truncated), /Invalid sfnt directory/);
 });

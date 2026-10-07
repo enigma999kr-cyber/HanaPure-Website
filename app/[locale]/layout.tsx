@@ -3,8 +3,8 @@ import localFont from "next/font/local";
 
 const gowunBatang = localFont({
   src: [
-    { path: "../fonts/gowun-batang/GowunBatang-Regular.ttf", weight: "400", style: "normal" },
-    { path: "../fonts/gowun-batang/GowunBatang-Bold.ttf", weight: "700", style: "normal" },
+    { path: "../fonts/gowun-batang/GowunBatang-Regular.woff2", weight: "400", style: "normal" },
+    { path: "../fonts/gowun-batang/GowunBatang-Bold.woff2", weight: "700", style: "normal" },
   ],
   display: "swap",
   // This shared layout also wraps EN/HU: only Korean text should load these files.
