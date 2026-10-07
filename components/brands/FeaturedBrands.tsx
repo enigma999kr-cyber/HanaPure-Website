@@ -22,7 +22,9 @@ const brands = [
   },
 ] as const;
 
-export default function FeaturedBrands({ locale = "en" }: { locale?: EditorialLocale }) {
+export default function FeaturedBrands({ locale = "en", routeLocale = null }: {
+  locale?: EditorialLocale; routeLocale?: EditorialLocale | null;
+}) {
   const copy = marketingCopy[locale].featured;
   return (
     <section className="bg-hanapure-ivory py-28">
@@ -50,6 +52,7 @@ export default function FeaturedBrands({ locale = "en" }: { locale?: EditorialLo
               description={copy[brand.copyKey].description}
               discover={copy.discover}
               accent={brand.accent}
+              routeLocale={routeLocale}
             />
           ))}
         </div>

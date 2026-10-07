@@ -1,8 +1,11 @@
 import Button from "@/components/ui/Button";
 import { marketingCopy } from "@/lib/storefront/marketing-copy";
 import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
+import { storefrontHref } from "@/lib/storefront/localization";
 
-export default function Hero({ locale = "en" }: { locale?: EditorialLocale }) {
+export default function Hero({ locale = "en", routeLocale = null }: {
+  locale?: EditorialLocale; routeLocale?: EditorialLocale | null;
+}) {
   const copy = marketingCopy[locale].hero;
   return (
     <section className="relative flex min-h-[100svh] items-start justify-center overflow-hidden px-5 pb-16 pt-32 text-center sm:px-6 sm:pb-20 sm:pt-36 lg:min-h-screen lg:items-center lg:py-28">
@@ -24,7 +27,7 @@ export default function Hero({ locale = "en" }: { locale?: EditorialLocale }) {
         </p>
 
         <div className="mx-auto flex w-full max-w-sm flex-col gap-3 sm:max-w-none sm:flex-row sm:justify-center sm:gap-4">
-          <Button className="w-full sm:w-auto">{copy.shop}</Button>
+          <Button href={storefrontHref("/products", routeLocale)} className="w-full sm:w-auto">{copy.shop}</Button>
           <Button className="w-full sm:w-auto" variant="secondary">
             {copy.routine}
           </Button>

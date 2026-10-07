@@ -1,9 +1,16 @@
+import Link from "next/link";
+import { storefrontHref } from "@/lib/storefront/localization";
+import { catalogueQueryString } from "@/lib/catalog/catalogue-discovery";
+import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
+import type { brandNames } from "@/data/brands";
+
 type BrandCardProps = {
-  name: string;
+  name: (typeof brandNames)[number];
   tagline: string;
   description: string;
   accent: string;
   discover: string;
+  routeLocale?: EditorialLocale | null;
 };
 
 export default function BrandCard({
@@ -12,6 +19,7 @@ export default function BrandCard({
   description,
   accent,
   discover,
+  routeLocale = null,
 }: BrandCardProps) {
   return (
     <article className="group overflow-hidden rounded-[2rem] border border-hanapure-border bg-hanapure-warm-white shadow-sm transition duration-300 hover:-translate-y-1 hover:bg-hanapure-white hover:shadow-lg">
@@ -24,12 +32,12 @@ export default function BrandCard({
 
         <p className="mb-8 leading-7 text-hanapure-muted">{description}</p>
 
-        <a
-          href="#"
+        <Link
+          href={storefrontHref("/products", routeLocale) + catalogueQueryString({ query: "", brand: name })}
           className="text-sm font-medium text-hanapure-text transition group-hover:tracking-wide"
         >
           {discover} →
-        </a>
+        </Link>
       </div>
     </article>
   );

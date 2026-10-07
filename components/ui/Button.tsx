@@ -1,11 +1,13 @@
-import { ButtonHTMLAttributes, ReactNode } from "react";
+import { ButtonHTMLAttributes, ComponentProps, ReactNode } from "react";
+import Link from "next/link";
 
 type ButtonVariant = "primary" | "secondary" | "accent";
 
-type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+type ButtonProps = {
   children: ReactNode;
   variant?: ButtonVariant;
-};
+} & ((ButtonHTMLAttributes<HTMLButtonElement> & { href?: never }) |
+  (Omit<ComponentProps<typeof Link>, "children"> & { href: string }));
 
 export default function Button({
   children,
@@ -24,6 +26,10 @@ export default function Button({
     accent:
       "bg-hanapure-beige text-hanapure-text hover:bg-hanapure-beige-deep",
   };
+
+  if (props.href !== undefined) {
+    return <Link className={`${baseStyle} ${variants[variant]} ${className}`} {...props}>{children}</Link>;
+  }
 
   return (
     <button className={`${baseStyle} ${variants[variant]} ${className}`} {...props}>

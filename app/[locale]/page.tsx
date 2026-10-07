@@ -8,5 +8,5 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
 
 export default async function LocalizedHome({ params }: { params: Promise<{ locale: string }> }) {
   const locale = requireStorefrontLocale((await params).locale);
-  return <HomeContent locale={locale} />;
+  return <HomeContent locale={locale} routeLocale={locale} />;
 }

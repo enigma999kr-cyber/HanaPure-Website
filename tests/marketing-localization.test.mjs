@@ -7,6 +7,8 @@ import test from "node:test";
 import ts from "typescript";
 import { marketingCopy } from "../lib/storefront/marketing-copy.ts";
 import { brandNames } from "../data/brands.ts";
+import { readCatalogueCriteria } from "../lib/catalog/catalogue-discovery.ts";
+import { storefrontHref, switchLocalePath, storefrontLabels } from "../lib/storefront/localization.ts";
 
 // Same installed TypeScript/React loader convention as catalogue-storefront tests.
 const require = createRequire(import.meta.url);
@@ -43,6 +45,7 @@ const { default: Home } = await import("../app/page.tsx");
 const { default: Brands } = await import("../app/brands/page.tsx");
 const { default: LocalizedHome } = await import("../app/[locale]/page.tsx");
 const { default: LocalizedBrands } = await import("../app/[locale]/brands/page.tsx");
+const { ProductListing } = await import("../components/catalogue/ProductCatalogue.tsx");
 
 // Header pathname hooks belong to Next's browser router; its unchanged behavior
 // is covered separately. Render the actual body, including the real BrandDirectory.
@@ -74,8 +77,8 @@ test("actual EN/HU/KO Home and Brands routes render their selected body and dire
     }
     for (const brand of brandNames) assert.ok(brands.includes(`>${brand}</li>`), brand);
     assert.equal((brands.match(/aria-pressed=/g) ?? []).length, 27);
-    assert.ok(home.includes('href="#"')); // Existing CTA policy was not implemented.
-    assert.equal((home.match(/<button/g) ?? []).length, 2);
+    assert.ok(!home.includes('href="#"'));
+    assert.equal((home.match(/<button/g) ?? []).length, 1); // Routine remains unresolved.
     if (locale !== "en") {
       assert.ok(!home.includes(marketingCopy.en.hero.heading));
       assert.ok(!brands.includes(marketingCopy.en.directory.searchLabel));
@@ -84,12 +87,42 @@ test("actual EN/HU/KO Home and Brands routes render their selected body and dire
 });
 
 test("legacy routes retain the same English body as EN routes and source claims", async () => {
-  assert.equal(render(Home()), render(await LocalizedHome({ params: Promise.resolve({ locale: "en" }) })));
+  const withoutLinkDestinations = html => html.replace(/href="[^"]*"/g, 'href=""');
+  assert.equal(withoutLinkDestinations(render(Home())), withoutLinkDestinations(render(await LocalizedHome({ params: Promise.resolve({ locale: "en" }) }))));
   assert.equal(render(Brands()), render(await LocalizedBrands({ params: Promise.resolve({ locale: "en" }) })));
   assert.ok(render(Home()).includes("Feel confident in your skin."));
   assert.ok(render(Brands()).includes("16 brands found"));
   for (const route of [LocalizedHome, LocalizedBrands]) {
     await assert.rejects(route({ params: Promise.resolve({ locale: "fr" }) }), error => error.digest === "NEXT_HTTP_ERROR_FALLBACK;404");
+  }
+});
+
+test("Home shop and featured brand links reach the existing listing with exact locale and brand criteria", async () => {
+  for (const locale of [null, "en", "hu", "ko"]) {
+    const home = render(locale === null ? Home() : await LocalizedHome({ params: Promise.resolve({ locale }) }));
+    const links = [...home.matchAll(/<a\b[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gs)];
+    assert.equal(links.length, 4);
+    assert.equal(links[0][1], storefrontHref("/products", locale));
+    assert.ok(links[0][2].includes(marketingCopy[locale ?? "en"].hero.shop));
+    for (const [index, brand] of ["Round Lab", "Anua", "SKIN1004"].entries()) {
+      const url = new URL(links[index + 1][1], "http://localhost");
+      assert.equal(url.pathname, storefrontHref("/products", locale));
+      const criteria = readCatalogueCriteria(Object.fromEntries(url.searchParams));
+      assert.deepEqual(criteria, { query: "", brand });
+      assert.ok(brandNames.includes(criteria.brand));
+      const listing = renderToStaticMarkup(ProductListing({ locale: locale ?? "en", routeLocale: locale, criteria }));
+      assert.ok(listing.includes(`<option value="${brand}" selected="">${brand}</option>`));
+      assert.ok(listing.includes(storefrontLabels[locale ?? "en"].noResults));
+      assert.ok(listing.includes(`action="${storefrontHref("/products", locale)}"`));
+      for (const destination of ["en", "hu", "ko"]) {
+        const switched = new URL(switchLocalePath(url.pathname + url.search, destination), "http://localhost");
+        assert.equal(switched.pathname, `/${destination}/products`);
+        assert.equal(switched.searchParams.get("brand"), brand);
+      }
+    }
+    assert.ok(home.includes(`<button`));
+    assert.ok(home.includes(marketingCopy[locale ?? "en"].hero.routine));
+    assert.ok(!home.includes('<a href="#"'));
   }
 });
 
