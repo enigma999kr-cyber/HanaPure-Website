@@ -75,7 +75,7 @@ test("actual EN/HU/KO Home and Brands routes render their selected body and dire
       copy.directory.alphabet, copy.directory.all, copy.directory.resultMany.replace("{count}", "16")]) {
       assert.ok(brands.includes(value), `${locale} missing directory string: ${value}`);
     }
-    for (const brand of brandNames) assert.ok(brands.includes(`>${brand}</li>`), brand);
+    for (const brand of brandNames) assert.ok(brands.includes(`>${brand}</a>`), brand);
     assert.equal((brands.match(/aria-pressed=/g) ?? []).length, 27);
     assert.ok(!home.includes('href="#"'));
     assert.equal((home.match(/<button/g) ?? []).length, 1); // Routine remains unresolved.
@@ -89,7 +89,7 @@ test("actual EN/HU/KO Home and Brands routes render their selected body and dire
 test("legacy routes retain the same English body as EN routes and source claims", async () => {
   const withoutLinkDestinations = html => html.replace(/href="[^"]*"/g, 'href=""');
   assert.equal(withoutLinkDestinations(render(Home())), withoutLinkDestinations(render(await LocalizedHome({ params: Promise.resolve({ locale: "en" }) }))));
-  assert.equal(render(Brands()), render(await LocalizedBrands({ params: Promise.resolve({ locale: "en" }) })));
+  assert.equal(withoutLinkDestinations(render(Brands())), withoutLinkDestinations(render(await LocalizedBrands({ params: Promise.resolve({ locale: "en" }) }))));
   assert.ok(render(Home()).includes("Feel confident in your skin."));
   assert.ok(render(Brands()).includes("16 brands found"));
   for (const route of [LocalizedHome, LocalizedBrands]) {
@@ -124,6 +124,44 @@ test("Home shop and featured brand links reach the existing listing with exact l
     assert.ok(home.includes(marketingCopy[locale ?? "en"].hero.routine));
     assert.ok(!home.includes('<a href="#"'));
   }
+});
+
+test("all 16 directory links retain exact brand identity, legacy/locale routing, and existing catalogue behavior", async () => {
+  for (const locale of [null, "en", "hu", "ko"]) {
+    const html = render(locale === null ? Brands() : await LocalizedBrands({ params: Promise.resolve({ locale }) }));
+    const links = [...html.matchAll(/<a\b([^>]*?)href="([^"]*)"([^>]*)>(.*?)<\/a>/gs)];
+    assert.equal(links.length, 16);
+    assert.deepEqual(links.map(link => link[4]).sort(), [...brandNames].sort());
+    for (const [, before, href, after, brand] of links) {
+      const url = new URL(href, "http://localhost");
+      assert.equal(url.pathname, storefrontHref("/products", locale));
+      assert.deepEqual([...url.searchParams.keys()], ["brand"]);
+      assert.deepEqual(readCatalogueCriteria(Object.fromEntries(url.searchParams)), { query: "", brand });
+      assert.match(before + after, /min-h-11/);
+      assert.match(before + after, /focus-visible:outline-2/);
+      assert.doesNotMatch(before + after, /role=|tabindex=|aria-label=/);
+      const listing = renderToStaticMarkup(ProductListing({ locale: locale ?? "en", routeLocale: locale,
+        criteria: { query: "", brand } }));
+      assert.ok(listing.includes(`<option value="${brand}" selected="">${brand}</option>`));
+      assert.ok(listing.includes(storefrontLabels[locale ?? "en"].noResults));
+      assert.ok(listing.includes(`href="${storefrontHref("/products", locale)}"`));
+      assert.ok(!listing.includes("out of stock"));
+      for (const target of ["en", "hu", "ko"]) {
+        const switched = new URL(switchLocalePath(url.pathname + url.search, target), "http://localhost");
+        assert.equal(switched.pathname, `/${target}/products`);
+        assert.equal(switched.searchParams.get("brand"), brand);
+      }
+    }
+  }
+});
+
+test("Directory receives serializable destinations without importing the server-only discovery layer", () => {
+  const source = readFileSync(join(repo, "components/brands/BrandDirectory.tsx"), "utf8");
+  assert.ok(source.startsWith('"use client";'));
+  assert.doesNotMatch(source, /from ["'][^"']*(?:catalogue-discovery|local-catalogue|product-operational)/);
+  assert.match(source, /href=\{catalogueLinks\[brand\]\}/);
+  // Existing search/A-Z continues to render links from the same filtered brand names.
+  assert.match(source, /matchingBrands[\s\S]*?\.filter\(\(brand\) => brand\[0\]\.toUpperCase\(\) === letter\)[\s\S]*?\.map\(\(brand\)/);
 });
 
 test("marketing locales expose the same complete string structure, including zero-results and count patterns", () => {

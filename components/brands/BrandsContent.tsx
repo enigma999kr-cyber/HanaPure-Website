@@ -2,9 +2,17 @@ import BrandDirectory from "./BrandDirectory";
 import Header from "@/components/layout/Header";
 import { marketingCopy } from "@/lib/storefront/marketing-copy";
 import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
+import { brandNames } from "@/data/brands";
+import { catalogueQueryString } from "@/lib/catalog/catalogue-discovery";
+import { storefrontHref } from "@/lib/storefront/localization";
 
-export default function BrandsContent({ locale = "en" }: { locale?: EditorialLocale }) {
+export default function BrandsContent({ locale = "en", routeLocale = null }: {
+  locale?: EditorialLocale; routeLocale?: EditorialLocale | null;
+}) {
   const copy = marketingCopy[locale];
+  const catalogueLinks = Object.fromEntries(brandNames.map((brand) => [brand,
+    storefrontHref("/products", routeLocale) + catalogueQueryString({ query: "", brand }),
+  ]));
   return (
     <main lang={locale} className="min-h-screen bg-hanapure-warm-white text-hanapure-text">
       <Header />
@@ -15,7 +23,7 @@ export default function BrandsContent({ locale = "en" }: { locale?: EditorialLoc
           <p className="mt-6 max-w-2xl text-base leading-8 text-hanapure-muted sm:text-lg">{copy.brands.description}</p>
         </div>
       </div>
-      <BrandDirectory labels={copy.directory} />
+      <BrandDirectory labels={copy.directory} catalogueLinks={catalogueLinks} />
     </main>
   );
 }

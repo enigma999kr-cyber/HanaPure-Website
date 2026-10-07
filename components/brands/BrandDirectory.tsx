@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { brandNames } from "@/data/brands";
 import Container from "@/components/ui/Container";
 import type { MarketingCopy } from "@/lib/storefront/marketing-copy";
@@ -13,7 +14,10 @@ const availableLetters = new Set(
   sortedBrands.map((brand) => brand[0].toUpperCase()),
 );
 
-export default function BrandDirectory({ labels }: { labels: MarketingCopy["directory"] }) {
+export default function BrandDirectory({ labels, catalogueLinks }: {
+  labels: MarketingCopy["directory"];
+  catalogueLinks: Readonly<Record<string, string>>;
+}) {
   const [query, setQuery] = useState("");
   const [selectedLetter, setSelectedLetter] = useState<string | null>(null);
   const normalizedQuery = query.trim().toLowerCase();
@@ -103,9 +107,12 @@ export default function BrandDirectory({ labels }: { labels: MarketingCopy["dire
                     .map((brand) => (
                       <li
                         key={brand}
-                        className="border-b border-hanapure-border px-1 py-6 text-xl font-light text-hanapure-text"
+                        className="border-b border-hanapure-border text-xl font-light text-hanapure-text"
                       >
-                        {brand}
+                        <Link href={catalogueLinks[brand]}
+                          className="flex min-h-11 items-center rounded-sm px-1 py-6 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-hanapure-text">
+                          {brand}
+                        </Link>
                       </li>
                     ))}
                 </ul>
