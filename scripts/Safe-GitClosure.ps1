@@ -16,7 +16,16 @@ function Invoke-ClosureGit([string[]]$Arguments) {
     $ErrorActionPreference = 'Continue'
     $output = @(& git -c core.quotePath=false @Arguments 2>&1)
     if ($LASTEXITCODE -ne 0) { throw "git $($Arguments[0]) failed: $($output -join ' ')" }
-    return ($output -join "`n")
+    # Native stderr is an ErrorRecord in Windows PowerShell 5.1. Do not let
+    # successful Git warnings become path/protocol data (or add LF separators).
+    $stdout = @(foreach ($item in $output) {
+        if ($item -is [System.Management.Automation.ErrorRecord]) {
+            Write-Verbose ([string]$item)
+        } else {
+            [string]$item
+        }
+    })
+    return ($stdout -join "`n")
 }
 function Names([string[]]$Arguments) {
     $raw = Invoke-ClosureGit $Arguments

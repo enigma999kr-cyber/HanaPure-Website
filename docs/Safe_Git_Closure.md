@@ -23,6 +23,8 @@ After separate approval from Kimin / Website Command Center, run the same comman
 
 Any failed Git command or check throws and stops; PowerShell process invocation returns failure. No auto-fix, unstage, rollback, reset, clean, force push or retry. A failure after staging can leave files staged; after commit can leave a local commit; after push can mean the remote was updated even if post-check failed. Inspect `git status`, HEAD, origin/main and live remote before requesting recovery approval. Do not blindly rerun the old baseline after a commit.
 
+Path lists use Git's NUL-delimited output. Successful native stderr warnings (for example LF-to-CRLF warnings represented as ErrorRecord objects in Windows PowerShell 5.1) are reported through `-Verbose`, not parsed as paths. Nonzero Git exits still stop with diagnostics. Actual control characters in paths remain prohibited; NUL is only the protocol delimiter. Hotfix/tool changes do not receive a scope exception: a five-file milestone validation must stop if additional tool changes remain pending.
+
 Keep editors and other Git processes idle while executing. Checks detect scope/tree changes, including changes made by hooks; they do not provide an atomic lock against another process or prevent hook side effects. A remote race causes ordinary push rejection or failed verification. Authentication/network failures also STOP. Existing Git identity, hooks and authentication are used unchanged.
 
 ## Tests
@@ -31,4 +33,4 @@ Keep editors and other Git processes idle while executing. Checks detect scope/t
 & .\tests\Safe-GitClosure.Tests.ps1
 ```
 
-Tests substitute Git with a read-only mock and exercise valid validation, wrong baseline/branch/ahead/remote, tracked audit, whitespace failure, staged/outside changes and invalid approvals. They never stage, commit or push in the real repository. Real read-only validation should also be run with the actual approved scope.
+Run the command above in Windows PowerShell 5.1 for compatibility validation. Tests substitute Git with a mock for all closure operations, including simulated execution failures. They cover identity/scope/protected-file gates, native-style stderr warnings, nonzero exits, normal path spelling and control-character rejection. A final smoke check runs only native read-only `diff` and `ls-files` path parsing in this repository. Tests never stage, commit or push in the real repository. Real read-only validation should also be run with the actual approved scope.
