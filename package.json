@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test:browser": "npm run build && playwright test",
     "test:erp": "node --conditions=react-server --import ./tests/server-only-loader.mjs --test ./tests/erp-product-operational.test.mjs ./tests/https-operational-source.test.mjs ./tests/emergency-override.test.mjs ./tests/effective-operational-state.test.mjs ./tests/emergency-override-mutations.test.mjs",
     "test:erp:postgres": "node --conditions=react-server --import ./tests/server-only-loader.mjs --test ./tests/postgres-emergency-override-store.integration.test.mjs",
     "test:admin": "node --conditions=react-server --import ./tests/server-only-loader.mjs --test ./tests/admin-auth.test.mjs ./tests/admin-authorization.test.mjs ./tests/authorized-emergency-override.test.mjs ./tests/admin-server-boundary.test.mjs",
@@ -24,6 +25,7 @@
     "react-dom": "19.2.4"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/pg": "8.23.1",

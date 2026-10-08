@@ -72,7 +72,17 @@ export default function Header({ catalogueQuery = "" }: { catalogueQuery?: strin
     </a>
     <header ref={headerRef} lang={locale}
       onBlur={(event) => {
-        if (isMenuOpen && !event.currentTarget.contains(event.relatedTarget)) setIsMenuOpen(false);
+        if (isMenuOpen && !event.currentTarget.contains(event.relatedTarget)) {
+          // CSS can blur a hidden mobile control before the media change callback.
+          // Transfer focus before closing removes that callback's effect listener.
+          const fromMobile = event.target === menuButtonRef.current ||
+            event.currentTarget.querySelector("#mobile-navigation")?.contains(event.target);
+          if (event.relatedTarget === null && fromMobile &&
+            window.matchMedia("(min-width: 64rem)").matches) {
+            desktopShopRef.current?.focus();
+          }
+          setIsMenuOpen(false);
+        }
       }}
       className="fixed top-0 left-0 z-50 w-full border-b border-hanapure-border bg-hanapure-warm-white/90 backdrop-blur-md">
       <Container>
