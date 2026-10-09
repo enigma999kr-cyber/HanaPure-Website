@@ -55,6 +55,62 @@ const content = () => ({ name: "Fictional fixture", description: "Only a test fi
 const product = (patch = {}) => ({ publicId: "12345678-abcd-1234-abcd-123456789abc", brand: "beplain",
   slug: "fictional-fixture", state: "published", translations: { en: content(), hu: null, ko: null }, ...patch });
 const reader = (...records) => createLocalCatalogueReader(records);
+const { readCatalogueCriteria, catalogueQueryString } = await import("../lib/catalog/catalogue-discovery.ts");
+const { productMetadata } = await import("../lib/storefront/seo.ts");
+
+test("published listing/detail/Back round-trip preserves only parsed criteria in every locale and legacy URLs", () => {
+  const record = product();
+  record.translations.hu = content();
+  record.translations.ko = content();
+  const catalogue = reader(record);
+  for (const routeLocale of [null, "en", "hu", "ko"]) {
+    const locale = routeLocale ?? "en";
+    const root = routeLocale ? `/${routeLocale}/products` : "/products";
+    for (const params of [
+      {}, { q: "fixture" }, { brand: "beplain" }, { q: "fixture", brand: "beplain" },
+      { q: ["  beplain  ", "ignored"], brand: ["beplain", "Anua"], returnUrl: "https://invalid.example" },
+      { q: ["", "ignored"], brand: [] },
+    ]) {
+      const criteria = readCatalogueCriteria(params);
+      const suffix = catalogueQueryString(criteria);
+      const listing = elements(ProductListing({ catalogue, locale, routeLocale, criteria }));
+      const href = listing.find(node => node.props?.href?.startsWith(`${root}/${record.slug}`)).props.href;
+      assert.equal(href, `${root}/${record.slug}${suffix}`);
+      const parsed = readCatalogueCriteria(Object.fromEntries(new URL(href, "https://test.invalid").searchParams));
+      const detail = elements(ProductDetail({ slug: record.slug, catalogue, locale, routeLocale, criteria: parsed }));
+      assert.ok(detail.some(node => node.props?.href === `${root}${suffix}`));
+      const languages = elements(LanguageSwitcher({ locale, pathname: href })).filter(node => node.props?.href);
+      assert.deepEqual(languages.map(node => node.props.href), ["en", "hu", "ko"].map(next => `/${next}/products/${record.slug}${suffix}`));
+    }
+    for (const query of ["테스트 & lemosó + / ? #", "https://invalid.example/?returnUrl=/", "%2F"]) {
+      const criteria = readCatalogueCriteria({ q: query, brand: "unknown & brand", returnUrl: "//invalid.example" });
+      const suffix = catalogueQueryString(criteria);
+      const detail = elements(ProductDetail({ slug: record.slug, catalogue, locale, routeLocale, criteria }));
+      assert.ok(detail.some(node => node.props?.href === `${root}${suffix}`));
+      assert.deepEqual(readCatalogueCriteria(Object.fromEntries(new URLSearchParams(suffix))), criteria);
+      const metadata = productMetadata(record.slug, locale, { catalogue, origin: "https://hanapure.test", legacy: routeLocale === null });
+      assert.ok(!JSON.stringify(metadata.alternates).includes("?"));
+      assert.equal(metadata.alternates.canonical, `https://hanapure.test/${locale}/products/${record.slug}`);
+    }
+    const direct = elements(ProductDetail({ slug: record.slug, catalogue, locale, routeLocale }));
+    assert.ok(direct.some(node => node.props?.href === root));
+    for (const slug of ["missing", "private-draft"]) {
+      const unpublished = reader(record, product({ publicId: "22345678-abcd-1234-abcd-123456789abc", slug: "private-draft", state: "draft" }));
+      assert.throws(() => ProductDetail({ slug, catalogue: unpublished, locale, routeLocale,
+        criteria: { query: "fixture", brand: "beplain" } }), error => error.digest === "NEXT_HTTP_ERROR_FALLBACK;404");
+    }
+  }
+});
+
+test("detail route shells pass normalized criteria to Back and locale navigation without changing metadata", () => {
+  for (const path of ["app/products/[slug]/page.tsx", "app/[locale]/products/[slug]/page.tsx"]) {
+    const source = readFileSync(join(repo, path), "utf8");
+    assert.match(source, /readCatalogueCriteria\(await searchParams\)/);
+    assert.match(source, /<Header catalogueQuery=\{catalogueQueryString\(criteria\)\}/);
+    const metadata = source.slice(source.indexOf("export async function generateMetadata"), source.indexOf("export default"));
+    assert.doesNotMatch(metadata, /searchParams|criteria|catalogueQuery/);
+  }
+});
 
 test("actual production listing is an editorial empty state, not out-of-stock or operational readiness", () => {
   const nodes = elements(ProductListing());
@@ -121,7 +177,7 @@ test("route wiring uses the authoritative reader and promised slug; Header Shop 
   assert.match(source("app/products/page.tsx"), /<ProductListing criteria=\{criteria\}\s*\/>/);
   const detail = source("app/products/[slug]/page.tsx");
   assert.match(detail, /await params/);
-  assert.match(detail, /ProductDetail\(\{ slug \}\)/);
+  assert.match(detail, /ProductDetail\(\{ slug, criteria \}\)/);
   assert.match(detail, /productMetadata\(slug, "en", \{ legacy: true \}\)/);
   const header = source("components/layout/Header.tsx");
   assert.equal((header.match(/storefrontHref\("\/products", routeLocale\)/g) ?? []).length, 3);
@@ -194,7 +250,7 @@ test("localized GET search/filter controls reflect state and render only combine
   assert.equal(nodes.find(node => node.type === "select").props.defaultValue, "beplain");
   assert.ok(nodes.some(node => node.type === "button" && node.props.type === "submit"));
   assert.equal(nodes.filter(node => node.type === "li").length, 1);
-  assert.ok(nodes.some(node => node.props?.href === "/hu/products/fictional-fixture"));
+  assert.ok(nodes.some(node => node.props?.href === "/hu/products/fictional-fixture?q=lemos%C3%B3&brand=beplain"));
   assert.ok(!nodes.some(node => node.props?.href === "/hu/products/other-fixture"));
   assert.ok(nodes.some(node => node.props?.href === "/hu/products"));
   assert.ok(text(nodes).includes("Keresés és szűrők törlése"));

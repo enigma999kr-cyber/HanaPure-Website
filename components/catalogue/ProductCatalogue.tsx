@@ -7,7 +7,7 @@ import { localCatalogue } from "@/lib/catalog/local-catalogue";
 import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
 import { storefrontHref, storefrontLabels } from "@/lib/storefront/localization";
 import { brandNames } from "@/data/brands";
-import { discoverCatalogue, type CatalogueCriteria } from "@/lib/catalog/catalogue-discovery";
+import { catalogueQueryString, discoverCatalogue, type CatalogueCriteria } from "@/lib/catalog/catalogue-discovery";
 
 type CatalogueReader = typeof localCatalogue;
 const linkStyle = "inline-flex min-h-11 items-center text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-hanapure-text";
@@ -74,7 +74,7 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
                 {content?.images[0] && <ProductImage {...content.images[0]} />}
                 <p className="mt-4 text-sm text-hanapure-muted">{product.brand}</p>
                 <h2 className="mt-2 break-words text-2xl font-light">
-                  <Link href={storefrontHref(`/products/${product.slug}`, routeLocale)}
+                  <Link href={`${storefrontHref(`/products/${product.slug}`, routeLocale)}${catalogueQueryString(criteria)}`}
                     aria-label={content ? undefined : `${labels.details}: ${product.brand} (${product.slug})`}
                     className="block min-h-11 py-2 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-hanapure-text">
                     {content?.name ?? labels.details}
@@ -92,8 +92,10 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
   );
 }
 
-export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en", routeLocale = null }: {
+export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en", routeLocale = null,
+  criteria = { query: "", brand: "" } }: {
   slug: string; catalogue?: CatalogueReader; locale?: EditorialLocale; routeLocale?: EditorialLocale | null;
+  criteria?: CatalogueCriteria;
 }) {
   const product = catalogue.findPublishedBySlug(slug);
   // Absent/draft editorial records are not public pages. No ERP absence is inferred.
@@ -102,7 +104,7 @@ export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en",
   const labels = storefrontLabels[locale];
   return (
     <Container className="pb-20 pt-32 sm:pt-36">
-      <Link href={storefrontHref("/products", routeLocale)} className={linkStyle}>{labels.back}</Link>
+      <Link href={`${storefrontHref("/products", routeLocale)}${catalogueQueryString(criteria)}`} className={linkStyle}>{labels.back}</Link>
       <article className="mt-6 grid min-w-0 gap-8 lg:grid-cols-2 lg:gap-12">
         {content && content.images.length > 0 && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-1">

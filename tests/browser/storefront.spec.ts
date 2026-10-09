@@ -179,4 +179,23 @@ for (const locale of storefrontLocales) {
     await expect(page).toHaveURL(`/${locale}/products`);
     await expect(page.getByRole("heading", { name: labels.empty })).toBeVisible();
   });
+
+  test(`${locale}: repeated/encoded browse criteria normalize during locale navigation; unknown detail stays 404`, async ({ page }) => {
+    const criteria = new URLSearchParams({ q: "테스트 & lemosó + / ? #", brand: "Round Lab" });
+    await visit(page, `/${locale}/products?${criteria}&q=ignored&brand=Anua&returnUrl=https%3A%2F%2Finvalid.example`);
+    await expect(page.getByRole("searchbox", { name: labels.searchProducts, exact: true })).toHaveValue(criteria.get("q")!);
+    await expect(page.getByLabel(labels.filterBrand, { exact: true })).toHaveValue("Round Lab");
+    if (page.viewportSize()!.width < 1024) await page.locator('[aria-controls="mobile-navigation"]').click();
+    const target = locale === "en" ? "hu" : "en";
+    await page.getByRole("link", { name: target === "hu" ? "Magyar" : "English", exact: true }).filter({ visible: true }).click();
+    await expect(page).toHaveURL(`/${target}/products?${criteria}`);
+    await noOverflow(page);
+    const response = await visit(page, `/${locale}/products/unknown-browser-test-product?${criteria}`);
+    expect(response?.status()).toBe(404);
+    const back = page.getByRole("link", { name: labels.back, exact: true });
+    await expect(back).toHaveAttribute("href", `/${locale}/products`);
+    await back.click();
+    await expect(page).toHaveURL(`/${locale}/products`);
+    await expect(page.getByRole("heading", { name: labels.empty })).toBeVisible();
+  });
 }
