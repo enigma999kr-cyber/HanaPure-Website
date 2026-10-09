@@ -43,6 +43,29 @@ for (const locale of storefrontLocales) {
   const labels = storefrontLabels[locale];
   const directory = marketingCopy[locale].directory;
 
+  test(`${locale}: general 404 supports direct entry, refresh, keyboard recovery and history`, async ({ page }) => {
+    const path = `/${locale}/unmatched-wave2-route`;
+    const response = await page.goto(path);
+    expect(response?.status()).toBe(404);
+    await expect(page.getByRole("heading", { name: "404", exact: true })).toBeVisible();
+    const home = page.locator("main").getByRole("link", { name: labels.home, exact: true });
+    await expect(home).toHaveAttribute("href", `/${locale}`);
+    await expect(page.locator('meta[name="robots"]').first()).toHaveAttribute("content", /noindex/);
+    expect((await page.reload())?.status()).toBe(404);
+    await expect(home).toBeVisible();
+    await noOverflow(page);
+    await home.focus();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(`/${locale}`);
+    await expect(page.locator("#main-content")).toBeVisible();
+    await page.goBack();
+    await expect(page).toHaveURL(path);
+    await expect(home).toBeVisible();
+    await page.goForward();
+    await expect(page).toHaveURL(`/${locale}`);
+    await expect(page.locator("#main-content")).toBeVisible();
+  });
+
   test(`${locale}: hydrated menu keyboard/focus and breakpoint cleanup`, async ({ page }) => {
     await visit(page, `/${locale}`);
     await noOverflow(page);
@@ -199,3 +222,12 @@ for (const locale of storefrontLocales) {
     await expect(page.getByRole("heading", { name: labels.empty })).toBeVisible();
   });
 }
+
+test("unsupported locale recovers to the existing legacy English home", async ({ page }) => {
+  expect((await page.goto("/invalid-locale"))?.status()).toBe(404);
+  const home = page.locator("main").getByRole("link", { name: "Home", exact: true });
+  await expect(home).toHaveAttribute("href", "/");
+  await home.click();
+  await expect(page).toHaveURL("/");
+  await expect(page.locator("#main-content")).toBeVisible();
+});
