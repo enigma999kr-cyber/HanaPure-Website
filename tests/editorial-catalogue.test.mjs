@@ -1,9 +1,124 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { once } from "node:events";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { brandNames } from "../data/brands.ts";
 import { createLocalCatalogueReader, validateEditorialCatalogue } from "../lib/catalog/editorial-catalogue.ts";
 import { localCatalogue } from "../lib/catalog/local-catalogue.ts";
+import { publishedCatalogueFixtures, publishedSlug, draftSlug } from "./browser/published-catalogue-fixtures.mjs";
+import { fixtureEnvironment, createFixtureWorkspace, stopOwnedChild, waitForFixtureServer } from "./browser/published-catalogue-server.mjs";
+
+const browserRepo = fileURLToPath(new URL("../", import.meta.url));
+const safetyWorkspace = () => {
+  const owner = randomUUID();
+  return { owner, workspace: createFixtureWorkspace(join(browserRepo, ".next", `published-safety-${owner}`), owner) };
+};
+const quiet = ["ignore", "pipe", "pipe"];
+
+test("fixture environment allowlist blocks prefixed, arbitrary, mixed-case secrets and execution hooks in a real child", () => {
+  const env = fixtureEnvironment({ ...process.env,
+    CUSTOM_BUSINESS_SECRET: "test-sentinel", AWS_SECRET_ACCESS_KEY: "test-sentinel",
+    SUPABASE_SERVICE_ROLE_KEY: "test-sentinel", DATABASE_URL: "test-sentinel",
+    NEXT_PUBLIC_TOKEN: "test-sentinel", NODE_OPTIONS: "test-sentinel",
+    NODE_PATH: "test-sentinel", HTTP_PROXY: "test-sentinel", Gh_ToKeN: "test-sentinel",
+  });
+  const allowed = ["SYSTEMROOT", "WINDIR", "PATH", "PATHEXT", "COMSPEC", "TEMP", "TMP", "LOCALAPPDATA", "USERPROFILE",
+    "NODE_ENV", "NEXT_TELEMETRY_DISABLED", "HANAPURE_PUBLIC_SITE_ORIGIN"];
+  assert.ok(Object.keys(env).every(key => allowed.includes(key)));
+  const child = spawnSync(process.execPath, ["-e", "console.log(JSON.stringify(process.env))"], { env, encoding: "utf8" });
+  assert.equal(child.status, 0);
+  const received = JSON.parse(child.stdout);
+  assert.ok(!Object.values(received).includes("test-sentinel"));
+  assert.equal(received.NODE_OPTIONS, undefined);
+  assert.equal(received.HANAPURE_PUBLIC_SITE_ORIGIN, "");
+});
+
+test("termination rejects a reused/lookalike PID, wrong owner and changed process identity without killing the real child", async () => {
+  const { owner, workspace } = safetyWorkspace();
+  const child = workspace.spawn(["-e", "console.log('READY');setInterval(()=>{},1000)"], fixtureEnvironment(), quiet);
+  try {
+    await once(child.stdout, "data");
+    let fakeKillCalls = 0;
+    await assert.rejects(stopOwnedChild({ pid: child.pid, spawnfile: child.spawnfile,
+      spawnargs: child.spawnargs, kill: () => { fakeKillCalls++; } }, owner), /identity\/ownership/);
+    await assert.rejects(stopOwnedChild(child, "another-owner"), /identity\/ownership/);
+    child.spawnargs.push("changed-identity");
+    try { await assert.rejects(workspace.cleanup(), /identity\/ownership/); }
+    finally { child.spawnargs.pop(); }
+    const nativeKill = child.kill;
+    child.kill = () => { fakeKillCalls++; };
+    try { await assert.rejects(stopOwnedChild(child, owner), /identity\/ownership/); }
+    finally { child.kill = nativeKill; }
+    assert.equal(fakeKillCalls, 0);
+    assert.equal(child.exitCode, null);
+    assert.equal(child.signalCode, null);
+    assert.ok(existsSync(workspace.root));
+  } finally { await workspace.cleanup(); }
+  assert.ok(!existsSync(workspace.root));
+});
+
+test("marker owner/hash mismatch refuses cleanup before touching an owned live child; existing directories cannot be adopted", async () => {
+  const { workspace } = safetyWorkspace();
+  const marker = join(workspace.root, ".test-only-owner");
+  const original = readFileSync(marker, "utf8");
+  const child = workspace.spawn(["-e", "console.log('READY');setInterval(()=>{},1000)"], fixtureEnvironment(), quiet);
+  try {
+    await once(child.stdout, "data");
+    assert.throws(() => createFixtureWorkspace(workspace.root, randomUUID()), /EEXIST/);
+    for (const patch of [{ owner: "wrong-owner" }, { catalogueHash: "wrong-hash" }]) {
+      writeFileSync(marker, JSON.stringify({ ...JSON.parse(original), ...patch }));
+      await assert.rejects(workspace.cleanup(), /integrity unverified/);
+      assert.equal(child.exitCode, null);
+      assert.equal(child.signalCode, null);
+      assert.ok(existsSync(workspace.root));
+    }
+  } finally { writeFileSync(marker, original); await workspace.cleanup(); }
+  assert.ok(!existsSync(workspace.root));
+});
+
+test("actual next start failure without a build closes its owned child and removes only its fixture", async () => {
+  const { workspace } = safetyWorkspace();
+  const next = join(browserRepo, "node_modules", "next", "dist", "bin", "next");
+  try {
+    const child = workspace.spawn([next, "start", "--hostname", "127.0.0.1", "--port", "0"], fixtureEnvironment(), quiet);
+    await assert.rejects(workspace.wait(child), /Fixture child failed/);
+    assert.ok(child.exitCode !== null);
+  } finally { await workspace.cleanup(); }
+  assert.ok(!existsSync(workspace.root));
+});
+
+test("readiness timeout cleans a still-live owned child; closed-server startup failure is distinguished", async () => {
+  const { workspace } = safetyWorkspace();
+  try {
+    const child = workspace.spawn(["-e", "console.log('READY');setInterval(()=>{},1000)"], fixtureEnvironment(), quiet);
+    await once(child.stdout, "data");
+    await assert.rejects(waitForFixtureServer(child, "http://127.0.0.1:1", 50), /readiness timed out/);
+    const failed = workspace.spawn(["-e", "process.exit(7)"], fixtureEnvironment(), quiet);
+    await assert.rejects(workspace.wait(failed), /Fixture child failed/);
+    await assert.rejects(waitForFixtureServer(failed, "http://127.0.0.1:1"), /failed before readiness/);
+  } finally { await workspace.cleanup(); }
+  assert.ok(!existsSync(workspace.root));
+});
+
+test("fixture workspace refuses repository-root and path traversal targets", () => {
+  assert.throws(() => createFixtureWorkspace(browserRepo, randomUUID()), /Unsafe fixture/);
+  assert.throws(() => createFixtureWorkspace(join(browserRepo, ".next", "..", "data"), randomUUID()), /Unsafe fixture/);
+});
+
+test("isolated browser fixtures satisfy the unchanged editorial authority, without operational fields", () => {
+  const reader = createLocalCatalogueReader(publishedCatalogueFixtures);
+  assert.equal(reader.listPublished().length, 2);
+  assert.equal(reader.findPublishedBySlug(publishedSlug).publicId, publishedCatalogueFixtures[0].publicId);
+  assert.equal(reader.findPublishedBySlug(draftSlug), null);
+  for (const record of publishedCatalogueFixtures) {
+    assert.deepEqual(Object.keys(record).sort(), ["brand", "publicId", "slug", "state", "translations"]);
+  }
+  assert.deepEqual(localCatalogue.listPublished(), []);
+});
 
 // Entirely fictional editorial fixtures; no sale, efficacy or availability claims.
 const firstId = "12345678-abcd-1234-abcd-123456789abc";

@@ -33,3 +33,35 @@ actual behavior and artifact paths. Do not fix production code as part of this
 foundation milestone. Test-harness mistakes may be corrected without relaxing
 the behavior asserted. No arbitrary sleeps, retries, mocked storefront responses,
 production test flags or pixel baselines.
+
+## Published synthetic catalogue journey
+
+```powershell
+node tests/browser/published-catalogue-server.mjs
+```
+
+This separate 375/1280px EN/HU/KO matrix production-builds an isolated tracked
+application copy at `.next/published-catalogue-app` on loopback port 3101. Only
+that disposable copy receives `published-catalogue-fixtures.mjs`: visibly TEST
+ONLY editorial records with no commerce fields. It reuses the installed dependencies,
+copies no environment files or protected documents, and passes only explicitly
+allowed OS/path variables plus locally assigned test settings. The normal production catalogue stays empty and ordinary
+`test:browser` continues to select only `storefront.spec.ts`.
+
+The runner owns build/server/test ChildProcess handles and cleans its marked
+directory in finally, including start/readiness/test failures. Termination requires
+the original object identity, run owner and unchanged spawn executable/arguments;
+no persisted PID can authorize termination. It waits for child close before deleting.
+Existing directories and ownership/integrity mismatches are rejected. Abrupt OS
+termination can leave an orphan directory: this tool refuses to adopt or kill
+orphan processes; inspect and obtain separate authority for any recovery.
+No automatic production-data restoration is needed or attempted.
+Cleanup checks a per-run ownership token and the unchanged real catalogue hash.
+The fixture's Webpack production
+build uses Next's test-only Google font hook with existing `.next/static` font
+bytes/CSS, avoiding external font requests without changing application layouts.
+Run the normal build first if those offline assets are absent. This fixture
+does not validate font delivery or Turbopack behavior; the ordinary app build does.
+Browser evidence remains in `.next/published-browser-*`; there are no remote
+images, fixture APIs, production flags, credentials or new publication semantics.
+Synthetic results do not establish real LP catalogue or commerce launch readiness.

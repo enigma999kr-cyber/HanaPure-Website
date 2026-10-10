@@ -3,6 +3,7 @@ import { defineConfig } from "@playwright/test";
 // Production server, loopback only. Never reuse an unknown/stale running app.
 export default defineConfig({
   testDir: "./tests/browser",
+  testMatch: "storefront.spec.ts",
   fullyParallel: false,
   workers: 1,
   retries: 0,
