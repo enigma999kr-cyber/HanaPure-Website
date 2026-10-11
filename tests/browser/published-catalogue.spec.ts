@@ -35,6 +35,89 @@ async function visit(page: Page, path: string) {
 
 for (const locale of storefrontLocales) {
   const labels = storefrontLabels[locale];
+  test.describe(`${locale}: JavaScript disabled`, () => {
+    test.use({ javaScriptEnabled: false });
+    test("normal listing/detail images retain native visibility and editorial alt", async ({ page }, testInfo) => {
+      const criteria = expectedQuery("TEST ONLY", "Round Lab");
+      for (const path of [`/${locale}/products${criteria}`, `/${locale}/products/${publishedSlug}${criteria}`]) {
+        expect((await page.goto(path))?.status()).toBe(200);
+        const image = page.getByRole("img", { name: `TEST ONLY ${locale} image`, exact: true });
+        await expect(image).toHaveCount(1);
+        await image.scrollIntoViewIfNeeded();
+        await expect(image).toBeVisible();
+        await expect(image).toHaveCSS("opacity", "1");
+        expect(await image.evaluate(async node => {
+          await (node as HTMLImageElement).decode();
+          return (node as HTMLImageElement).naturalWidth;
+        })).toBeGreaterThan(0);
+        const frame = await image.locator("../..").boundingBox();
+        expect(frame).not.toBeNull();
+        expect(Math.abs(frame!.width - frame!.height)).toBeLessThanOrEqual(1);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width + 1);
+      }
+      await expect(page.getByRole("link", { name: labels.back, exact: true })).toHaveAttribute("href", `/${locale}/products${criteria}`);
+      await page.screenshot({ path: testInfo.outputPath(`no-javascript-${locale}.png`), fullPage: true });
+    });
+  });
+  test(`${locale}: image decode, missing/corrupt recovery and source replacement preserve browse context`, async ({ page }, testInfo) => {
+    const imagePath = `/file.svg?locale=${locale}`;
+    const other = locale === "en" ? "hu" : "en";
+    const criteria = expectedQuery("TEST ONLY", "Round Lab");
+    for (const failure of ["missing", "corrupt"] as const) {
+      await page.route(`**${imagePath}`, route => route.fulfill({
+        status: failure === "missing" ? 404 : 200,
+        contentType: failure === "missing" ? "text/plain" : "image/png",
+        body: "TEST ONLY invalid image bytes",
+      }));
+      await visit(page, `/${locale}/products${criteria}`);
+      const fallback = page.getByRole("img", { name: `TEST ONLY ${locale} image`, exact: true });
+      await expect(fallback).toHaveJSProperty("tagName", "DIV");
+      await expect(fallback).toBeVisible();
+      await expect(page.locator('img[src*="file.svg"]')).toHaveCount(0);
+      const frame = await fallback.locator("..").boundingBox();
+      expect(frame).not.toBeNull();
+      expect(Math.abs(frame!.width - frame!.height)).toBeLessThanOrEqual(1);
+      // Listing retains the same product key: exercise src replacement without
+      // relying on the detail gallery's per-source key to remount the leaf.
+      for (const nextLocale of [other, locale]) {
+        if (page.viewportSize()!.width < 1024) await page.locator('[aria-controls="mobile-navigation"]').click();
+        const name = nextLocale === "hu" ? "Magyar" : nextLocale === "ko" ? "한국어" : "English";
+        await page.getByRole("link", { name, exact: true }).filter({ visible: true }).press("Enter");
+        await expect(page).toHaveURL(`/${nextLocale}/products${criteria}`);
+        const image = page.getByRole("img", { name: `TEST ONLY ${nextLocale} image`, exact: true });
+        await expect(image).toHaveJSProperty("tagName", nextLocale === locale ? "DIV" : "IMG");
+        if (nextLocale !== locale) {
+          expect(await image.evaluate(async node => {
+            await (node as HTMLImageElement).decode();
+            return (node as HTMLImageElement).naturalWidth;
+          })).toBeGreaterThan(0);
+          await expect(image).toHaveCSS("opacity", "1");
+        }
+      }
+      await page.getByRole("link", { name: `TEST ONLY ${locale} published item`, exact: true }).press("Enter");
+      await expect(page).toHaveURL(`/${locale}/products/${publishedSlug}${criteria}`);
+      await expect(fallback).toHaveJSProperty("tagName", "DIV");
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText(`TEST ONLY ${locale} published item`);
+      await page.evaluate(() => document.fonts.ready);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width + 1);
+      await page.screenshot({ path: testInfo.outputPath(`${failure}-${locale}.png`), fullPage: true });
+      if (page.viewportSize()!.width < 1024) await page.locator('[aria-controls="mobile-navigation"]').click();
+      await page.getByRole("link", { name: other === "hu" ? "Magyar" : "English", exact: true }).filter({ visible: true }).press("Enter");
+      await expect(page).toHaveURL(`/${other}/products/${publishedSlug}${criteria}`);
+      const replacement = page.getByRole("img", { name: `TEST ONLY ${other} image`, exact: true });
+      await expect(replacement).toHaveJSProperty("tagName", "IMG");
+      await expect(replacement).toHaveCSS("opacity", "1");
+      expect(await replacement.evaluate(async image => {
+        await (image as HTMLImageElement).decode();
+        return (image as HTMLImageElement).naturalWidth;
+      })).toBeGreaterThan(0);
+      await page.getByRole("link", { name: storefrontLabels[other].back, exact: true }).press("Enter");
+      await expect(page).toHaveURL(`/${other}/products${criteria}`);
+      await page.evaluate(() => document.fonts.ready);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width + 1);
+      await page.unroute(`**${imagePath}`);
+    }
+  });
   test(`${locale}: published Brands → filtered listing → detail → Back, history and locale context`, async ({ page }) => {
     await visit(page, `/${locale}/brands`);
     const directory = marketingCopy[locale].directory;
@@ -60,6 +143,10 @@ for (const locale of storefrontLocales) {
     await expect(page).toHaveURL(`/${locale}/products/${publishedSlug}${criteria}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(`TEST ONLY ${locale} published item`);
     await expect(page.getByRole("img", { name: `TEST ONLY ${locale} image` })).toBeVisible();
+    expect(await page.getByRole("img", { name: `TEST ONLY ${locale} image` }).evaluate(async image => {
+      await (image as HTMLImageElement).decode();
+      return (image as HTMLImageElement).naturalWidth;
+    })).toBeGreaterThan(0);
     await expect(page.locator('meta[name="robots"]').first()).toHaveAttribute("content", /noindex/);
     await expect(page.locator('link[rel="canonical"]')).toHaveCount(0);
     const back = page.getByRole("link", { name: labels.back, exact: true });

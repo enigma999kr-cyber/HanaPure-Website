@@ -3,6 +3,7 @@ import "server-only";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import Container from "@/components/ui/Container";
+import ProductImage from "./ProductImage";
 import { localCatalogue } from "@/lib/catalog/local-catalogue";
 import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
 import { storefrontHref, storefrontLabels } from "@/lib/storefront/localization";
@@ -11,16 +12,6 @@ import { catalogueQueryString, discoverCatalogue, type CatalogueCriteria } from 
 
 type CatalogueReader = typeof localCatalogue;
 const linkStyle = "inline-flex min-h-11 items-center text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-hanapure-text";
-
-/** Native images use editorial URLs directly; no optimizer/provider allowlist is invented. */
-function ProductImage({ src, alt }: { src: string; alt: string }) {
-  return (
-    <div className="aspect-square overflow-hidden rounded-2xl bg-hanapure-ivory">
-      {/* eslint-disable-next-line @next/next/no-img-element -- Editorial v1 has no dimensions or approved image-provider configuration. */}
-      <img src={src} alt={alt} loading="lazy" decoding="async" className="h-full w-full object-contain" />
-    </div>
-  );
-}
 
 /** Missing selected-locale content stays explicit. null retains legacy English URLs. */
 export function ProductListing({ catalogue = localCatalogue, locale = "en", routeLocale = null,
@@ -108,7 +99,7 @@ export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en",
       <article className="mt-6 grid min-w-0 gap-8 lg:grid-cols-2 lg:gap-12">
         {content && content.images.length > 0 && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-1">
-            {content.images.map((image, index) => <ProductImage key={`${image.src}-${index}`} {...image} />)}
+            {content.images.map((image, index) => <ProductImage key={`${product.publicId}-${image.src}-${index}`} {...image} />)}
           </div>
         )}
         <div className="min-w-0">

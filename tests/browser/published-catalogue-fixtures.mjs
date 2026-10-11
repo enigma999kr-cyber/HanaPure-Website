@@ -2,7 +2,7 @@
 const content = (locale) => ({
   name: `TEST ONLY ${locale} published item`,
   description: `TEST ONLY ${locale} editorial fixture. Not a real product.`,
-  images: [{ src: "/file.svg", alt: `TEST ONLY ${locale} image` }],
+  images: [{ src: `/file.svg?locale=${encodeURIComponent(locale)}`, alt: `TEST ONLY ${locale} image` }],
   usage: null,
   caution: null,
 });

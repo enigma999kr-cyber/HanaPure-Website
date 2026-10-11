@@ -130,6 +130,15 @@ async function runJourney() {
       mkdirSync(dirname(target), { recursive: true });
       copyFileSync(join(repo, file), target);
     }
+    // Explicitly approved untracked leaf only; do not widen the tracked copy list.
+    workspace.verify();
+    const imageFile = "components/catalogue/ProductImage.tsx";
+    const imageSource = join(repo, imageFile);
+    if (lstatSync(imageSource).isSymbolicLink() || !lstatSync(imageSource).isFile()) {
+      throw new Error("Refusing non-regular ProductImage source");
+    }
+    copyFileSync(imageSource, join(fixtureRoot, imageFile));
+    workspace.verify();
     // Only the disposable copy receives test content; real source stays empty.
     writeFileSync(join(fixtureRoot, "data", "catalogue.ts"),
       'import "server-only";\nimport type { EditorialProduct } from "../lib/catalog/editorial-catalogue";\n' +

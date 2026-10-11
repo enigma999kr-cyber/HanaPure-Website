@@ -41,11 +41,14 @@ registerHooks({
 });
 const { ProductListing, ProductDetail } = await import("../components/catalogue/ProductCatalogue.tsx");
 const { default: LanguageSwitcher } = await import("../components/layout/LanguageSwitcher.tsx");
+const { default: ProductImage } = await import("../components/catalogue/ProductImage.tsx");
 // Expand the actual pure server views, preserving host-element attributes/text.
 function elements(node) {
   if (node == null || typeof node === "boolean") return [];
   if (Array.isArray(node)) return node.flatMap(elements);
   if (typeof node !== "object") return [node];
+  // Client hooks are exercised in the hydrated browser, not called as server functions.
+  if (node.type === ProductImage) return [node];
   if (typeof node.type === "function") return elements(node.type(node.props));
   return [node, ...elements(node.props?.children)];
 }
@@ -57,6 +60,23 @@ const product = (patch = {}) => ({ publicId: "12345678-abcd-1234-abcd-123456789a
 const reader = (...records) => createLocalCatalogueReader(records);
 const { readCatalogueCriteria, catalogueQueryString } = await import("../lib/catalog/catalogue-discovery.ts");
 const { productMetadata } = await import("../lib/storefront/seo.ts");
+
+test("image sources get distinct state identities without altering editorial publication or links", () => {
+  const first = ProductImage({ src: "/missing-test-only.png", alt: "Editorial meaning" });
+  const second = ProductImage({ src: "/replacement-test-only.png", alt: "Editorial meaning" });
+  assert.notEqual(first.key, second.key);
+  assert.equal(first.props.alt, second.props.alt);
+  const record = product();
+  record.translations.en.images[0].src = "/missing-test-only.png";
+  const catalogue = reader(record);
+  const nodes = elements(ProductListing({ catalogue, criteria: { query: "fixture", brand: "beplain" } }));
+  assert.equal(nodes.filter(node => node.type === ProductImage).length, 1);
+  assert.ok(nodes.some(node => node.props?.href === "/products/fictional-fixture?q=fixture&brand=beplain"));
+  assert.equal(catalogue.listPublished().length, 1);
+  assert.equal(catalogue.listPublished()[0].publicId, record.publicId);
+  const detail = elements(ProductDetail({ catalogue, slug: record.slug }));
+  assert.ok(detail.find(node => node.type === ProductImage).key.startsWith(`${record.publicId}-`));
+});
 
 test("published listing/detail/Back round-trip preserves only parsed criteria in every locale and legacy URLs", () => {
   const record = product();
@@ -126,7 +146,7 @@ test("listing links only published records using the stable slug and exact brand
   const nodes = elements(ProductListing({ catalogue }));
   assert.deepEqual(nodes.filter((node) => node.props?.href).map((node) => node.props.href), ["/products/fictional-fixture"]);
   assert.match(text(nodes), /beplain Fictional fixture Only a test fixture/);
-  assert.equal(nodes.find((node) => node.type === "img").props.alt, published.translations.en.images[0].alt);
+  assert.equal(nodes.find((node) => node.type === ProductImage).props.alt, published.translations.en.images[0].alt);
   assert.equal(catalogue.listPublished()[0].publicId, published.publicId);
 });
 
@@ -136,7 +156,7 @@ test("detail resolves a published slug and renders supplied images, usage and ca
   for (const value of [record.brand, record.translations.en.name, record.translations.en.description,
     record.translations.en.usage, record.translations.en.caution]) assert.ok(text(nodes).includes(value));
   assert.ok(nodes.some((node) => node.props?.href === "/products"));
-  assert.equal(nodes.find((node) => node.type === "img").props.src, record.translations.en.images[0].src);
+  assert.equal(nodes.find((node) => node.type === ProductImage).props.src, record.translations.en.images[0].src);
   assert.ok(nodes.every((node) => !node.props?.dangerouslySetInnerHTML));
 });
 
@@ -162,7 +182,7 @@ test("text-only published content works without invented images, usage/caution o
   const record = product(); record.translations.en.images = [];
   record.translations.en.usage = null; record.translations.en.caution = null;
   const nodes = elements(ProductDetail({ slug: record.slug, catalogue: reader(record) }));
-  assert.equal(nodes.filter((node) => node.type === "img").length, 0);
+  assert.equal(nodes.filter((node) => node.type === ProductImage).length, 0);
   assert.doesNotMatch(text(nodes), /How to use|Cautions|HUF|stock|available for sale/i);
 });
 
@@ -197,7 +217,7 @@ test("EN/HU/KO catalogue views select only the requested editorial content and k
       ProductDetail({ catalogue, slug: record.slug, locale, routeLocale: locale })]) {
       const nodes = elements(view);
       assert.ok(text(nodes).includes(`${locale} fixture`));
-      assert.equal(nodes.find((node) => node.type === "img").props.alt, `${locale} image`);
+      assert.equal(nodes.find((node) => node.type === ProductImage).props.alt, `${locale} image`);
       assert.ok(nodes.some((node) => node.props?.href === `/${locale}/products/${record.slug}` || node.props?.href === `/${locale}/products`));
       for (const other of ["en", "hu", "ko"].filter((value) => value !== locale)) assert.ok(!text(nodes).includes(`${other} fixture`));
     }
@@ -215,7 +235,7 @@ test("missing HU/KO never fall back to EN; drafts remain inaccessible in every l
       const nodes = elements(view);
       assert.ok(text(nodes).includes(storefrontLabels[locale].missing));
       assert.ok(!text(nodes).includes(record.translations.en.name));
-      assert.equal(nodes.filter((node) => node.type === "img").length, 0);
+      assert.equal(nodes.filter((node) => node.type === ProductImage).length, 0);
     }
   }
   for (const locale of ["en", "hu", "ko"]) {
