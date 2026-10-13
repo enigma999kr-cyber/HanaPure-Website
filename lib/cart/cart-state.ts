@@ -12,21 +12,31 @@ export function validCartId(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }
 /** Reject the whole untrusted payload, including extra operational fields. */
-export function parseCart(raw: string | null): readonly CartLine[] {
-  if (!raw || raw.length > 100_000) return [];
+export function inspectStoredCart(raw: string | null): Readonly<{ lines: readonly CartLine[]; invalid: boolean }> {
+  const rejected = { lines: [], invalid: true } as const;
+  if (raw === null) return { lines: [], invalid: false };
+  if (!raw || raw.length > 100_000) return rejected;
   try {
     const value = JSON.parse(raw);
-    if (!value || Object.keys(value).sort().join(",") !== "lines,version" || value.version !== 1 || !Array.isArray(value.lines)) return [];
+    if (!value || Object.keys(value).sort().join(",") !== "lines,version" || value.version !== 1 || !Array.isArray(value.lines)) return rejected;
     const seen = new Set<string>();
     const lines: CartLine[] = [];
     for (const line of value.lines) {
       if (!line || Object.keys(line).sort().join(",") !== "publicId,quantity" ||
-        !validCartId(line.publicId) || !validQuantity(line.quantity) || seen.has(line.publicId.toLowerCase())) return [];
+        !validCartId(line.publicId) || !validQuantity(line.quantity) || seen.has(line.publicId.toLowerCase())) return rejected;
       seen.add(line.publicId.toLowerCase());
       lines.push(Object.freeze({ publicId: line.publicId, quantity: line.quantity }));
     }
-    return Object.freeze(lines);
-  } catch { return []; }
+    return { lines: Object.freeze(lines), invalid: false };
+  } catch { return rejected; }
+}
+export function parseCart(raw: string | null): readonly CartLine[] {
+  return inspectStoredCart(raw).lines;
+}
+/** Compare identities only. Never delete selections or infer commercial availability. */
+export function reconcileCart<T extends Readonly<{ publicId: string }>>(lines: readonly CartLine[], products: readonly T[]) {
+  return lines.map(line => ({ line, product: products.find(product =>
+    product.publicId.toLowerCase() === line.publicId.toLowerCase()) ?? null }));
 }
 export function serializeCart(lines: readonly CartLine[]): string {
   return JSON.stringify({ version: 1, lines: lines.map(({ publicId, quantity }) => ({ publicId, quantity })) });

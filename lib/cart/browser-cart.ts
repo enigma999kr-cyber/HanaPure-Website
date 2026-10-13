@@ -1,15 +1,15 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { CART_STORAGE_KEY, parseCart, serializeCart, type CartLine } from "./cart-state";
+import { CART_STORAGE_KEY, inspectStoredCart, serializeCart, type CartLine } from "./cart-state";
 
-type Snapshot = Readonly<{ lines: readonly CartLine[]; ready: boolean; persistent: boolean }>;
-const serverSnapshot: Snapshot = { lines: [], ready: false, persistent: true };
+type Snapshot = Readonly<{ lines: readonly CartLine[]; ready: boolean; persistent: boolean; invalid: boolean }>;
+const serverSnapshot: Snapshot = { lines: [], ready: false, persistent: true, invalid: false };
 let snapshot = serverSnapshot;
 const listeners = new Set<() => void>();
 function emit() { listeners.forEach(listener => listener()); }
 function readStorage() {
-  try { snapshot = { lines: parseCart(window.localStorage.getItem(CART_STORAGE_KEY)), ready: true, persistent: true }; }
+  try { snapshot = { ...inspectStoredCart(window.localStorage.getItem(CART_STORAGE_KEY)), ready: true, persistent: true }; }
   catch { snapshot = { ...snapshot, ready: true, persistent: false }; }
   emit();
 }
@@ -32,11 +32,16 @@ export function useBrowserCart() {
   return useSyncExternalStore(subscribe, () => snapshot, () => serverSnapshot);
 }
 export function changeBrowserCart(change: (lines: readonly CartLine[]) => readonly CartLine[]) {
+  // Malformed persisted data requires an explicit reset, never a silent overwrite.
+  if (snapshot.invalid) return;
+  saveSelection(change(snapshot.lines));
+}
+export function resetBrowserCart() { saveSelection([]); }
+function saveSelection(lines: readonly CartLine[]) {
   // Storage can be blocked; keep the current tab usable without promising persistence.
-  const lines = change(snapshot.lines);
   let persistent = true;
   try { window.localStorage.setItem(CART_STORAGE_KEY, serializeCart(lines)); }
   catch { persistent = false; }
-  snapshot = { lines, ready: true, persistent };
+  snapshot = { lines, ready: true, persistent, invalid: false };
   emit();
 }

@@ -5,8 +5,8 @@ import { useRef, useState } from "react";
 import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
 import { storefrontHref, storefrontLabels } from "@/lib/storefront/localization";
 import { cartLabels } from "@/lib/cart/labels";
-import { updateCartLine, validQuantity } from "@/lib/cart/cart-state";
-import { changeBrowserCart, useBrowserCart } from "@/lib/cart/browser-cart";
+import { reconcileCart, updateCartLine, validQuantity } from "@/lib/cart/cart-state";
+import { changeBrowserCart, resetBrowserCart, useBrowserCart } from "@/lib/cart/browser-cart";
 import { cartControl } from "./AddToCart";
 
 export type CartProduct = Readonly<{ publicId: string; slug: string; brand: string;
@@ -40,13 +40,19 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
   const [message, setMessage] = useState("");
   const browseRef = useRef<HTMLAnchorElement>(null);
   const removeRefs = useRef(new Map<string, HTMLButtonElement>());
+  const items = reconcileCart(cart.lines, products);
   return <>
     <p className="mt-5 leading-7 text-hanapure-muted">{labels.notice}</p>
     {!cart.persistent && <p role="status" className="mt-4">{labels.storage}</p>}
+    {cart.invalid && <div className="mt-4">
+      <p role="status">{labels.invalidStorage}</p>
+      <button type="button" className={`${cartControl} mt-3`} onClick={() => {
+        browseRef.current?.focus(); resetBrowserCart(); setMessage(labels.updated);
+      }}>{labels.reset}</button>
+    </div>}
     {!cart.ready ? <p className="mt-8">{labels.loading}</p> : cart.lines.length === 0 ? <p className="mt-8 text-xl">{labels.empty}</p> : <>
       <ul className="mt-8 space-y-5">
-        {cart.lines.map((line, index) => {
-          const product = products.find(product => product.publicId === line.publicId);
+        {items.map(({ line, product }, index) => {
           const name = product?.names[locale] ?? storefrontLabels[locale].details;
           return <li key={line.publicId} className="min-w-0 rounded-2xl border border-hanapure-border bg-hanapure-white p-5">
             {product ? <>
@@ -54,7 +60,8 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
               <Link href={storefrontHref(`/products/${product.slug}`, routeLocale)} className={`${cartControl} mt-2 block max-w-full break-words text-xl`}>{name}</Link>
               {!product.names[locale] && <p className="mt-3">{storefrontLabels[locale].missing}</p>}
             </> : <p>{labels.unavailable}</p>}
-            <QuantityForm {...line} name={name} locale={locale} announce={setMessage} />
+            {product ? <QuantityForm {...line} name={name} locale={locale} announce={setMessage} />
+              : <p className="mt-4">{labels.quantity}: {line.quantity}</p>}
             <button ref={button => {
               if (button) removeRefs.current.set(line.publicId, button);
               else removeRefs.current.delete(line.publicId);

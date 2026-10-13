@@ -1,9 +1,34 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseCart, serializeCart, addCartLine, updateCartLine, validQuantity, cartQuantity } from "../lib/cart/cart-state.ts";
+import { parseCart, inspectStoredCart, reconcileCart, serializeCart, addCartLine, updateCartLine, validQuantity, cartQuantity } from "../lib/cart/cart-state.ts";
 import { switchLocalePath } from "../lib/storefront/localization.ts";
 const id = "12345678-abcd-1234-abcd-123456789abc";
 const payload = lines => JSON.stringify({ version: 1, lines });
+test("invalid persisted quantities are distinguishable from an empty cart and input is not repaired silently", () => {
+  assert.deepEqual(inspectStoredCart(null), { lines: [], invalid: false });
+  assert.deepEqual(inspectStoredCart(payload([])), { lines: [], invalid: false });
+  for (const quantity of [0, -1, 1.5, "2", null, Number.MAX_SAFE_INTEGER + 1]) {
+    const raw = payload([{ publicId: id, quantity }]);
+    assert.deepEqual(inspectStoredCart(raw), { lines: [], invalid: true });
+  }
+  for (const raw of ["{", "", JSON.stringify({ version: 2, lines: [] }),
+    payload([{ publicId: id, quantity: 1, price: 500 }])]) {
+    assert.equal(inspectStoredCart(raw).invalid, true);
+  }
+});
+test("catalogue reconciliation uses UUID identity, preserves selections, and never asserts price or stock", () => {
+  const missing = "22345678-abcd-1234-abcd-123456789abc";
+  const lines = [{ publicId: id.toUpperCase(), quantity: 2 }, { publicId: missing, quantity: 3 }];
+  const product = { publicId: id, slug: "test-only" };
+  const result = reconcileCart(lines, [product]);
+  assert.strictEqual(result[0].product, product);
+  assert.strictEqual(result[1].product, null);
+  assert.strictEqual(result[0].line, lines[0]);
+  assert.strictEqual(result[1].line, lines[1]);
+  assert.deepEqual(Object.keys(result[0]).sort(), ["line", "product"]);
+  assert.equal(reconcileCart(lines, [])[0].product, null);
+  assert.deepEqual(lines, [{ publicId: id.toUpperCase(), quantity: 2 }, { publicId: missing, quantity: 3 }]);
+});
 test("Header quantity sums selections rather than line count, without unsafe-number rounding", () => {
   assert.equal(cartQuantity([]), "0");
   assert.equal(cartQuantity([{ publicId: id, quantity: 2 }, { publicId: id, quantity: 3 }]), "5");

@@ -169,6 +169,44 @@ for (const locale of storefrontLocales) {
     await expect(page.getByRole("spinbutton")).toHaveValue("1");
     await expect(page.getByText(cart.storage, { exact: true })).toBeVisible();
   });
+  test(`${locale}: cart reconciliation preserves stale selections and requires explicit invalid-storage recovery`, async ({ page }) => {
+    await visit(page, `/${locale}/cart`);
+    const lines = [
+      { publicId: "12345678-ABCD-1234-ABCD-123456789ABC", quantity: 2 },
+      { publicId: "22345678-abcd-1234-abcd-123456789abc", quantity: 3 },
+      { publicId: "92345678-abcd-1234-abcd-123456789abc", quantity: 4 },
+    ];
+    await page.evaluate(({ key, lines }) => localStorage.setItem(key, JSON.stringify({ version: 1, lines })), { key: CART_STORAGE_KEY, lines });
+    await page.reload();
+    await expect(page.getByRole("link", { name: `TEST ONLY ${locale} published item`, exact: true })).toHaveAttribute("href", `/${locale}/products/${publishedSlug}`);
+    await expect(page.getByText(cart.unavailable, { exact: true })).toHaveCount(2);
+    await expect(page.getByRole("spinbutton")).toHaveCount(1);
+    await expectHeaderQuantity(page, 9);
+    expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)!).lines, CART_STORAGE_KEY)).toEqual(lines);
+    await page.locator("main li").last().getByRole("button").press("Enter");
+    await expect(page.locator("main li")).toHaveCount(2);
+    await expect(page.locator("main li").last().getByRole("button")).toBeFocused();
+    const invalid = JSON.stringify({ version: 1, lines: [{ publicId: lines[0].publicId, quantity: -2 }] });
+    await page.evaluate(({ key, invalid }) => localStorage.setItem(key, invalid), { key: CART_STORAGE_KEY, invalid });
+    await page.reload();
+    await expect(page.getByText(cart.invalidStorage, { exact: true })).toBeVisible();
+    await visit(page, `/${locale}/products/${publishedSlug}`);
+    await expect(page.getByRole("button", { name: cart.add, exact: true })).toBeDisabled();
+    expect(await page.evaluate(key => localStorage.getItem(key), CART_STORAGE_KEY)).toBe(invalid);
+    await page.locator("main section").getByRole("link", { name: cart.cart, exact: true }).press("Enter");
+    await expect(page.getByRole("button", { name: cart.reset, exact: true })).toBeVisible();
+    const otherTab = await page.context().newPage();
+    try {
+      await otherTab.goto(`/${locale}/cart`);
+      await expect(otherTab.getByText(cart.invalidStorage, { exact: true })).toBeVisible();
+      await page.getByRole("button", { name: cart.reset, exact: true }).press("Enter");
+      await expect(page.getByRole("link", { name: cart.browse, exact: true })).toBeFocused();
+      await expect(otherTab.getByText(cart.invalidStorage, { exact: true })).toHaveCount(0);
+      expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), CART_STORAGE_KEY)).toEqual({ version: 1, lines: [] });
+    } finally { await otherTab.close(); }
+    await expectHeaderQuantity(page, 0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width + 1);
+  });
   test.describe(`${locale}: JavaScript disabled`, () => {
     test.use({ javaScriptEnabled: false });
     test("normal listing/detail images retain native visibility and editorial alt", async ({ page }, testInfo) => {

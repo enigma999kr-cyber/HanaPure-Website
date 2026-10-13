@@ -1,5 +1,7 @@
 export const cartLabels = {
   en: {
+    invalidStorage: "Your saved cart could not be read safely. Open the cart and reset it before adding items. Resetting clears the saved selection.",
+    reset: "Reset saved cart",
     selectedQuantity: "Selected quantity",
     cart: "Cart", quantity: "Quantity", add: "Add to cart", added: "Added to cart", update: "Update quantity",
     remove: "Remove", clear: "Empty cart", empty: "Your cart is empty", browse: "Browse products",
@@ -9,6 +11,8 @@ export const cartLabels = {
     invalid: "Enter a positive whole-number quantity.", loading: "Loading cart", updated: "Cart updated",
   },
   hu: {
+    invalidStorage: "A mentett kosár nem olvasható biztonságosan. Nyissa meg a kosarat, és állítsa alaphelyzetbe, mielőtt terméket ad hozzá. Ez törli a mentett kiválasztást.",
+    reset: "Mentett kosár alaphelyzetbe állítása",
     selectedQuantity: "Kiválasztott mennyiség",
     cart: "Kosár", quantity: "Mennyiség", add: "Kosárba helyezés", added: "A kosárba került", update: "Mennyiség módosítása",
     remove: "Eltávolítás", clear: "Kosár ürítése", empty: "A kosara üres", browse: "Termékek böngészése",
@@ -18,6 +22,8 @@ export const cartLabels = {
     invalid: "Adjon meg pozitív egész mennyiséget.", loading: "Kosár betöltése", updated: "Kosár frissítve",
   },
   ko: {
+    invalidStorage: "저장된 장바구니를 안전하게 읽을 수 없습니다. 상품을 추가하기 전에 장바구니를 열어 초기화해 주세요. 초기화하면 저장된 선택 항목이 삭제됩니다.",
+    reset: "저장된 장바구니 초기화",
     selectedQuantity: "선택 수량",
     cart: "장바구니", quantity: "수량", add: "장바구니에 담기", added: "장바구니에 담았습니다", update: "수량 변경",
     remove: "삭제", clear: "장바구니 비우기", empty: "장바구니가 비어 있습니다", browse: "상품 둘러보기",
