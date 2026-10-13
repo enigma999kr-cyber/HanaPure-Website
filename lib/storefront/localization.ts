@@ -18,7 +18,7 @@ export function switchLocalePath(path: string, locale: EditorialLocale): string 
   const suffix = path.slice(pathname.length);
   const current = localeFromPath(pathname);
   const destination = current ? pathname.slice(current.length + 1) || "/" : pathname;
-  if (!/^\/(?:brands\/?|products(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)?\/?)?$/.test(destination)) {
+  if (!/^\/(?:cart\/?|brands\/?|products(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)?\/?)?$/.test(destination)) {
     return storefrontHref("/", locale);
   }
   return storefrontHref(destination.replace(/\/$/, "") || "/", locale) + suffix;

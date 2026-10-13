@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import Container from "@/components/ui/Container";
 import ProductImage from "./ProductImage";
+import AddToCart from "@/components/cart/AddToCart";
 import { localCatalogue } from "@/lib/catalog/local-catalogue";
 import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
 import { storefrontHref, storefrontLabels } from "@/lib/storefront/localization";
@@ -120,6 +121,7 @@ export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en",
               <p className="mt-3 whitespace-pre-line break-words leading-7 text-hanapure-muted">{content.caution}</p>
             </section>
           )}
+          <AddToCart key={product.publicId} publicId={product.publicId} locale={locale} routeLocale={routeLocale} />
         </div>
       </article>
     </Container>

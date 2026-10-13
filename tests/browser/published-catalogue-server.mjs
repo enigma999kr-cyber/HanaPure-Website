@@ -138,6 +138,16 @@ async function runJourney() {
       throw new Error("Refusing non-regular ProductImage source");
     }
     copyFileSync(imageSource, join(fixtureRoot, imageFile));
+    // This milestone's explicit new leaves only; retain ownership/path checks.
+    for (const file of ["components/cart/AddToCart.tsx", "components/cart/CartContent.tsx", "components/cart/ShoppingCart.tsx",
+      "lib/cart/cart-state.ts", "lib/cart/browser-cart.ts", "lib/cart/labels.ts", "app/cart/page.tsx", "app/[locale]/cart/page.tsx"]) {
+      workspace.verify();
+      const source = join(repo, file);
+      if (lstatSync(source).isSymbolicLink() || !lstatSync(source).isFile()) throw new Error("Refusing non-regular cart source");
+      const target = join(fixtureRoot, file);
+      mkdirSync(dirname(target), { recursive: true });
+      copyFileSync(source, target);
+    }
     workspace.verify();
     // Only the disposable copy receives test content; real source stays empty.
     writeFileSync(join(fixtureRoot, "data", "catalogue.ts"),
@@ -165,7 +175,8 @@ async function runJourney() {
     const server = workspace.spawn([next, "start", "--hostname", "127.0.0.1", "--port", "3101"], environment);
     await waitForFixtureServer(server, "http://127.0.0.1:3101/en/products");
     const playwright = join(repo, "node_modules", "@playwright", "test", "cli.js");
-    await workspace.wait(workspace.spawn([playwright, "test", "--config", join(repo, "playwright.published.config.ts")],
+    const selection = process.argv.includes("--cart-only") ? ["--grep", ": cart "] : [];
+    await workspace.wait(workspace.spawn([playwright, "test", "--config", join(repo, "playwright.published.config.ts"), ...selection],
       { ...environment, HANAPURE_PUBLISHED_TEST_RUN_ID: owner }));
   } finally {
     // Covers build/start/readiness/test errors. Only this living controller holds

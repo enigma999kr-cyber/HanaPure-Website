@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import LanguageSwitcher from "./LanguageSwitcher";
+import { cartLabels } from "@/lib/cart/labels";
+import { cartQuantity } from "@/lib/cart/cart-state";
+import { useBrowserCart } from "@/lib/cart/browser-cart";
 import { localeFromPath, storefrontHref, storefrontLabels } from "@/lib/storefront/localization";
 
 export default function Header({ catalogueQuery = "" }: { catalogueQuery?: string } = {}) {
@@ -12,6 +15,9 @@ export default function Header({ catalogueQuery = "" }: { catalogueQuery?: strin
   const routeLocale = localeFromPath(pathname);
   const locale = routeLocale ?? "en";
   const labels = storefrontLabels[locale];
+  const cart = useBrowserCart();
+  const quantity = cartQuantity(cart.lines);
+  const cartName = `${cartLabels[locale].cart}: ${cartLabels[locale].selectedQuantity} ${quantity}`;
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -130,9 +136,7 @@ export default function Header({ catalogueQuery = "" }: { catalogueQuery?: strin
 
             <LanguageSwitcher locale={locale} pathname={`${pathname}${catalogueQuery}`} />
 
-            <button type="button" disabled>
-              Cart
-            </button>
+            <Link href={storefrontHref("/cart", routeLocale)} aria-label={cartName} className="inline-flex min-h-11 items-center gap-1 focus-visible:outline-2 focus-visible:outline-hanapure-text">{cartLabels[locale].cart} <span aria-hidden="true">({quantity})</span></Link>
           </div>
 
           {/* Mobile Menu */}
@@ -190,6 +194,8 @@ export default function Header({ catalogueQuery = "" }: { catalogueQuery?: strin
               {labels.brands}
             </Link>
             <LanguageSwitcher locale={locale} pathname={`${pathname}${catalogueQuery}`} onNavigate={closeMenuForNavigation} />
+            <Link href={storefrontHref("/cart", routeLocale)} aria-label={cartName} onClick={closeMenuForNavigation}
+              className="rounded-sm px-2 py-3 focus-visible:outline-2 focus-visible:outline-hanapure-text">{cartLabels[locale].cart} <span aria-hidden="true">({quantity})</span></Link>
           </div>
         </Container>
       </nav>

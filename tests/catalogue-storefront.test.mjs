@@ -42,13 +42,14 @@ registerHooks({
 const { ProductListing, ProductDetail } = await import("../components/catalogue/ProductCatalogue.tsx");
 const { default: LanguageSwitcher } = await import("../components/layout/LanguageSwitcher.tsx");
 const { default: ProductImage } = await import("../components/catalogue/ProductImage.tsx");
+const { default: AddToCart } = await import("../components/cart/AddToCart.tsx");
 // Expand the actual pure server views, preserving host-element attributes/text.
 function elements(node) {
   if (node == null || typeof node === "boolean") return [];
   if (Array.isArray(node)) return node.flatMap(elements);
   if (typeof node !== "object") return [node];
   // Client hooks are exercised in the hydrated browser, not called as server functions.
-  if (node.type === ProductImage) return [node];
+  if (node.type === ProductImage || node.type === AddToCart) return [node];
   if (typeof node.type === "function") return elements(node.type(node.props));
   return [node, ...elements(node.props?.children)];
 }
@@ -372,7 +373,7 @@ test("Header disclosure keeps explicit focus recovery, cleanup, bounded scrollin
   }
   assert.match(header, /desktopQuery\.removeEventListener\("change"/);
   assert.doesNotMatch(header, /href="#"/);
-  assert.match(header, /<button type="button" disabled>/);
+  assert.match(header, /storefrontHref\("\/cart", routeLocale\)/);
   for (const path of ["components/home/Hero.tsx", "components/brands/BrandsContent.tsx", "app/products/[slug]/not-found.tsx"]) {
     assert.match(source(path), /<h1 id="main-content" tabIndex=\{-1\}/);
   }
@@ -380,4 +381,15 @@ test("Header disclosure keeps explicit focus recovery, cleanup, bounded scrollin
   assert.match(css, /scroll-padding-top: 6rem/);
   assert.match(css, /prefers-reduced-motion: reduce/);
   assert.match(source("app/layout.tsx"), /data-scroll-behavior="smooth"/);
+});
+
+test("cart entry receives only published ERP identity and locale, never operational facts or a server reader", () => {
+  const record = product();
+  for (const locale of ["en", "hu", "ko"]) {
+    const nodes = elements(ProductDetail({ catalogue: reader(record), slug: record.slug, locale, routeLocale: locale }));
+    const control = nodes.find(node => node.type === AddToCart);
+    assert.deepEqual(control.props, { publicId: record.publicId, locale, routeLocale: locale });
+    assert.ok(!elements(ProductListing({ catalogue: reader(record) })).some(node => node.type === AddToCart));
+  }
+  assert.throws(() => ProductDetail({ catalogue: reader(product({ state: "draft" })), slug: record.slug }));
 });

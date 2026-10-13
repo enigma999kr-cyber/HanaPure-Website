@@ -2,6 +2,8 @@ import { test as base, expect, type Page } from "@playwright/test";
 import { storefrontLabels, storefrontLocales } from "../../lib/storefront/localization";
 import { marketingCopy } from "../../lib/storefront/marketing-copy";
 import { publishedSlug, draftSlug, missingLocaleSlug } from "./published-catalogue-fixtures.mjs";
+import { cartLabels } from "../../lib/cart/labels";
+import { CART_STORAGE_KEY } from "../../lib/cart/cart-state";
 
 // Expected browser URLs, not a replacement for the server-only parser/serializer.
 const expectedQuery = (q: string, brand: string) =>
@@ -35,6 +37,138 @@ async function visit(page: Page, path: string) {
 
 for (const locale of storefrontLocales) {
   const labels = storefrontLabels[locale];
+  const cart = cartLabels[locale];
+  async function expectHeaderQuantity(page: Page, quantity: number) {
+    // The current-language links share this href; select only cart controls.
+    const links = page.locator("header").filter({ visible: true }).locator(`a[href="/${locale}/cart"][aria-label^="${cart.cart}:"]`);
+    await expect(links).toHaveCount(2);
+    for (const link of await links.all()) {
+      const name = `${cart.cart}: ${cart.selectedQuantity} ${quantity}`;
+      await expect(link).toHaveAttribute("aria-label", name);
+      if (await link.isVisible()) await expect(link).toHaveAccessibleName(name);
+      await expect(link).toContainText(`(${quantity})`);
+    }
+  }
+  test(`${locale}: cart add, update, reload, locale switch, Header access, remove and empty`, async ({ page }) => {
+    await visit(page, `/${locale}/products/${publishedSlug}?brand=Round+Lab`);
+    const add = page.getByRole("button", { name: cart.add, exact: true });
+    await expect(add).toBeEnabled();
+    await page.getByLabel(cart.quantity, { exact: true }).fill("2");
+    await add.press("Enter");
+    await expect(page.getByRole("status")).toContainText(cart.added);
+    await expectHeaderQuantity(page, 2);
+    await add.click();
+    await expectHeaderQuantity(page, 4);
+    if (page.viewportSize()!.width < 1024) await page.locator('[aria-controls="mobile-navigation"]').click();
+    await page.locator("header").getByRole("link", { name: `${cart.cart}: ${cart.selectedQuantity} 4`, exact: true }).filter({ visible: true }).press("Enter");
+    await expect(page).toHaveURL(`/${locale}/cart`);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(cart.cart);
+    const quantity = page.getByRole("spinbutton");
+    await expect(quantity).toHaveValue("4");
+    await quantity.fill("3");
+    await quantity.press("Enter");
+    await expect(quantity).toBeFocused();
+    await expectHeaderQuantity(page, 3);
+    await page.reload();
+    await expect(quantity).toHaveValue("3");
+    const stored = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), CART_STORAGE_KEY);
+    expect(stored).toEqual({ version: 1, lines: [{ publicId: "12345678-abcd-1234-abcd-123456789abc", quantity: 3 }] });
+    await quantity.fill("0");
+    await quantity.press("Enter");
+    expect(await quantity.evaluate(input => (input as HTMLInputElement).validity.valid)).toBe(false);
+    await page.reload();
+    await expect(quantity).toHaveValue("3");
+    const otherTab = await page.context().newPage();
+    try {
+      await otherTab.goto(`/${locale}/cart`);
+      const otherQuantity = otherTab.getByRole("spinbutton");
+      await expect(otherQuantity).toHaveValue("3");
+      await otherQuantity.fill("5");
+      await otherTab.getByRole("button", { name: cart.update, exact: true }).click();
+      await expect(quantity).toHaveValue("5");
+      await expectHeaderQuantity(page, 5);
+    } finally { await otherTab.close(); }
+    await expect(page.getByText(cart.notice, { exact: true })).toBeVisible();
+    await expect(page.locator("main")).not.toContainText(/HUF|checkout/i);
+    const other = locale === "en" ? "hu" : "en";
+    if (page.viewportSize()!.width < 1024) await page.locator('[aria-controls="mobile-navigation"]').click();
+    await page.getByRole("link", { name: other === "hu" ? "Magyar" : "English", exact: true }).filter({ visible: true }).press("Enter");
+    await expect(page).toHaveURL(`/${other}/cart`);
+    await expect(quantity).toHaveValue("5");
+    await expect(page.getByRole("link", { name: `TEST ONLY ${other} published item`, exact: true })).toHaveAttribute("href", `/${other}/products/${publishedSlug}`);
+    await page.getByRole("button", { name: `${cartLabels[other].remove}: TEST ONLY ${other} published item`, exact: true }).click();
+    await expect(page.getByText(cartLabels[other].empty, { exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: cartLabels[other].browse, exact: true })).toBeFocused();
+    await visit(page, `/${other}/products/${publishedSlug}`);
+    await expect(page.getByRole("button", { name: cartLabels[other].add, exact: true })).toBeEnabled();
+    await page.getByRole("button", { name: cartLabels[other].add, exact: true }).click();
+    await visit(page, `/${other}/cart`);
+    await page.getByRole("button", { name: cartLabels[other].clear, exact: true }).click();
+    await expect(page.getByText(cartLabels[other].empty, { exact: true })).toBeVisible();
+    await visit(page, `/${locale}/products/${missingLocaleSlug}`);
+    await expect(page.getByRole("button", { name: cart.add, exact: true })).toBeEnabled();
+    await page.getByRole("button", { name: cart.add, exact: true }).click();
+    await visit(page, `/${locale}/cart`);
+    if (locale !== "en") {
+      await expect(page.getByText(labels.missing, { exact: true })).toBeVisible();
+      await expect(page.getByRole("link", { name: labels.details, exact: true })).toHaveAttribute("href", `/${locale}/products/${missingLocaleSlug}`);
+      await expect(page.getByText("TEST ONLY en missing-locale fixture published item", { exact: true })).toHaveCount(0);
+    }
+    await page.getByRole("button", { name: cart.clear, exact: true }).click();
+    await expect(page.getByText(cart.empty, { exact: true })).toBeVisible();
+    await expectHeaderQuantity(page, 0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width + 1);
+  });
+  test(`${locale}: cart Header hydrates saved total and partial removal keeps focus inside remaining items`, async ({ page }) => {
+    await page.addInitScript(({ key, lines }) => {
+      localStorage.setItem(key, JSON.stringify({ version: 1, lines }));
+    }, { key: CART_STORAGE_KEY, lines: [
+      { publicId: "12345678-abcd-1234-abcd-123456789abc", quantity: 2 },
+      { publicId: "32345678-abcd-1234-abcd-123456789abc", quantity: 3 },
+      { publicId: "22345678-abcd-1234-abcd-123456789abc", quantity: 4 },
+    ] });
+    const response = await visit(page, `/${locale}/cart`);
+    // Server starts with the fixed empty snapshot, then hydrates browser data.
+    expect(await response!.text()).toContain(`aria-label="${cart.cart}: ${cart.selectedQuantity} 0"`);
+    await expectHeaderQuantity(page, 9);
+    const rows = page.locator("main li");
+    await expect(rows).toHaveCount(3);
+    await rows.first().locator("button[aria-label]").press("Enter");
+    await expect(rows).toHaveCount(2);
+    await expect(rows.first().locator("button[aria-label]")).toBeFocused();
+    await expectHeaderQuantity(page, 7);
+    // Removing the last row chooses the preceding surviving control.
+    await rows.last().locator("button[aria-label]").press("Enter");
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first().locator("button[aria-label]")).toBeFocused();
+    await expectHeaderQuantity(page, 3);
+    await rows.first().locator("button[aria-label]").press("Enter");
+    await expect(rows).toHaveCount(0);
+    await expect(page.getByRole("link", { name: cart.browse, exact: true })).toBeFocused();
+    await expectHeaderQuantity(page, 0);
+  });
+  test(`${locale}: cart rejects tampered storage and handles unpublished items and denied persistence`, async ({ page }) => {
+    await visit(page, `/${locale}/cart`);
+    await page.evaluate(key => localStorage.setItem(key, JSON.stringify({ version: 1, lines: [{ publicId: "12345678-abcd-1234-abcd-123456789abc", quantity: 1, price: 9 }] })), CART_STORAGE_KEY);
+    await page.reload();
+    await expect(page.getByText(cart.empty, { exact: true })).toBeVisible();
+    // Syntactically valid stale identity cannot become a public product or order.
+    await page.evaluate(key => localStorage.setItem(key, JSON.stringify({ version: 1, lines: [{ publicId: "22345678-abcd-1234-abcd-123456789abc", quantity: 1 }] })), CART_STORAGE_KEY);
+    await page.reload();
+    await expect(page.getByText(cart.unavailable, { exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: /TEST ONLY.*draft/ })).toHaveCount(0);
+    await page.getByRole("button", { name: cart.clear, exact: true }).click();
+    // Reads still succeed: quota/write denial must not replace the in-memory
+    // selection with stale persisted data when the detail unmounts.
+    await page.addInitScript(() => Object.defineProperty(Storage.prototype, "setItem", { value() { throw new Error("TEST ONLY storage write denied"); } }));
+    await visit(page, `/${locale}/products/${publishedSlug}`);
+    await expect(page.getByRole("button", { name: cart.add, exact: true })).toBeEnabled();
+    await page.getByRole("button", { name: cart.add, exact: true }).click();
+    await expect(page.getByText(cart.storage, { exact: true })).toBeVisible();
+    await page.locator("main section").getByRole("link", { name: cart.cart, exact: true }).click();
+    await expect(page.getByRole("spinbutton")).toHaveValue("1");
+    await expect(page.getByText(cart.storage, { exact: true })).toBeVisible();
+  });
   test.describe(`${locale}: JavaScript disabled`, () => {
     test.use({ javaScriptEnabled: false });
     test("normal listing/detail images retain native visibility and editorial alt", async ({ page }, testInfo) => {
