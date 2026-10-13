@@ -6,6 +6,12 @@ import type { localCatalogue } from "./local-catalogue";
 export type CatalogueSearchParams = Record<string, string | string[] | undefined>;
 export type CatalogueCriteria = Readonly<{ query: string; brand: string }>;
 
+/** Publication only, independent of locale/search and never a stock assertion. */
+export function publishedCatalogueBrands(catalogue: typeof localCatalogue) {
+  return [...new Set(catalogue.listPublished().map(product => product.brand))]
+    .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase(), "en"));
+}
+
 /** Repeated query parameters consistently use their first value. */
 export function readCatalogueCriteria(params: CatalogueSearchParams = {}): CatalogueCriteria {
   const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value) ?? "";

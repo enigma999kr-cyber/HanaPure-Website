@@ -2,22 +2,19 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { brandNames } from "@/data/brands";
 import Container from "@/components/ui/Container";
 import type { MarketingCopy } from "@/lib/storefront/marketing-copy";
 
 const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
-const sortedBrands = [...brandNames].sort((first, second) =>
-  first.toLowerCase().localeCompare(second.toLowerCase(), "en"),
-);
-const availableLetters = new Set(
-  sortedBrands.map((brand) => brand[0].toUpperCase()),
-);
 
-export default function BrandDirectory({ labels, catalogueLinks }: {
+export default function BrandDirectory({ labels, catalogueLinks, emptyState }: {
   labels: MarketingCopy["directory"];
   catalogueLinks: Readonly<Record<string, string>>;
+  emptyState: Readonly<{ heading: string; description: string }>;
 }) {
+  const sortedBrands = Object.keys(catalogueLinks).sort((first, second) =>
+    first.toLowerCase().localeCompare(second.toLowerCase(), "en"));
+  const availableLetters = new Set(sortedBrands.map(brand => brand[0].toUpperCase()));
   const [query, setQuery] = useState("");
   const [selectedLetter, setSelectedLetter] = useState<string | null>(null);
   const normalizedQuery = query.trim().toLowerCase();
@@ -86,9 +83,9 @@ export default function BrandDirectory({ labels, catalogueLinks }: {
 
         {matchingBrands.length === 0 ? (
           <div className="mt-6 rounded-3xl border border-hanapure-border bg-hanapure-white px-6 py-12 text-center">
-            <h2 className="text-2xl font-light">{labels.empty}</h2>
+            <h2 className="text-2xl font-light">{sortedBrands.length ? labels.empty : emptyState.heading}</h2>
             <p className="mt-3 text-hanapure-muted">
-              {labels.emptyDescription}
+              {sortedBrands.length ? labels.emptyDescription : emptyState.description}
             </p>
           </div>
         ) : (

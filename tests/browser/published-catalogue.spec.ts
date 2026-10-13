@@ -293,13 +293,27 @@ for (const locale of storefrontLocales) {
   test(`${locale}: published Brands → filtered listing → detail → Back, history and locale context`, async ({ page }) => {
     await visit(page, `/${locale}/brands`);
     const directory = marketingCopy[locale].directory;
-    await page.getByRole("searchbox", { name: directory.searchLabel }).fill("round");
+    const region = page.getByRole("region", { name: directory.browse, exact: true });
+    await expect(region.getByRole("link")).toHaveText(["beplain", "Round Lab"]);
+    await expect(region.getByRole("button", { name: "A", exact: true })).toBeDisabled();
+    const search = page.getByRole("searchbox", { name: directory.searchLabel });
+    await search.fill("zzzz-no-such-brand");
+    await expect(region.getByRole("heading", { name: directory.empty, exact: true })).toBeVisible();
+    await search.fill("");
+    const letter = region.getByRole("button", { name: "R", exact: true });
+    await letter.focus(); await page.keyboard.press("Space");
+    await expect(letter).toHaveAttribute("aria-pressed", "true");
+    await expect(region.getByRole("link")).toHaveText(["Round Lab"]);
+    await region.getByRole("button", { name: directory.all, exact: true }).press("Enter");
+    await expect(region.getByRole("link")).toHaveText(["beplain", "Round Lab"]);
+    await search.fill("round");
     const brandLink = page.getByRole("link", { name: "Round Lab", exact: true });
     await brandLink.focus();
     await page.keyboard.press("Enter");
     const brandQuery = expectedQuery("", "Round Lab");
     await expect(page).toHaveURL(`/${locale}/products${brandQuery}`);
     await expect(page.getByLabel(labels.filterBrand, { exact: true })).toHaveValue("Round Lab");
+    await expect(page.locator('#catalogue-brand option')).toHaveText([labels.allBrands, "beplain", "Round Lab"]);
     await expect(page.locator('li a[href*="/products/"]')).toHaveCount(1);
     await expect(page.getByRole("link", { name: /draft/i })).toHaveCount(0);
 

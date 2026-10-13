@@ -1,7 +1,6 @@
 import { test as base, expect, type Page } from "@playwright/test";
 import { storefrontLabels, storefrontLocales } from "../../lib/storefront/localization";
 import { marketingCopy } from "../../lib/storefront/marketing-copy";
-import { brandNames } from "../../data/brands";
 
 // Collect actual browser errors, not 404 resource console noise. Never mock the app.
 const test = base.extend({
@@ -117,39 +116,29 @@ for (const locale of storefrontLocales) {
     await noOverflow(page);
   });
 
-  test(`${locale}: Brands search, A-Z, zero-results recovery and exact filtered destination`, async ({ page }) => {
+  test(`${locale}: Brands empty published catalogue does not expose candidate navigation`, async ({ page }) => {
     await visit(page, `/${locale}/brands`);
     const section = page.getByRole("region", { name: directory.browse, exact: true });
     const search = page.getByRole("searchbox", { name: directory.searchLabel });
-    await expect(section.getByRole("listitem")).toHaveCount(brandNames.length);
+    await expect(section.getByRole("listitem")).toHaveCount(0);
+    await expect(section.getByRole("link")).toHaveCount(0);
+    await expect(section.getByRole("heading", { name: labels.empty, exact: true })).toBeVisible();
+    await expect(section.getByRole("button", { name: "R", exact: true })).toBeDisabled();
     await noOverflow(page);
     await search.fill("round");
-    await expect(section.getByRole("listitem")).toHaveCount(1);
-    await expect(section.getByRole("link", { name: "Round Lab", exact: true })).toBeVisible();
+    await expect(section.getByRole("listitem")).toHaveCount(0);
     await search.fill("zzzz-no-such-brand");
-    await expect(section.getByRole("heading", { name: directory.empty })).toBeVisible();
+    await expect(section.getByRole("heading", { name: labels.empty, exact: true })).toBeVisible();
     await expect(section.getByRole("listitem")).toHaveCount(0);
     await search.fill("");
-    const r = section.getByRole("button", { name: "R", exact: true });
-    await r.focus();
-    await page.keyboard.press("Space");
-    await expect(r).toHaveAttribute("aria-pressed", "true");
-    await expect(section.getByRole("listitem")).toHaveCount(1);
-    await section.getByRole("button", { name: directory.all, exact: true }).click();
-    await expect(section.getByRole("listitem")).toHaveCount(brandNames.length);
-    await r.click();
-    const round = section.getByRole("link", { name: "Round Lab", exact: true });
-    await expect(round).toHaveAttribute("href", `/${locale}/products?brand=Round+Lab`);
-    await round.focus();
-    await page.keyboard.press("Enter");
-    await expect(page).toHaveURL(`/${locale}/products?brand=Round+Lab`);
-    await expect(page.getByLabel(labels.filterBrand, { exact: true })).toHaveValue("Round Lab");
-    await expect(page.getByRole("heading", { name: labels.noResults })).toBeVisible();
+    await section.getByRole("button", { name: directory.all, exact: true }).press("Enter");
+    await expect(section.getByRole("listitem")).toHaveCount(0);
     await noOverflow(page);
   });
 
   test(`${locale}: native GET apply/reset and locale query preservation`, async ({ page }) => {
-    await visit(page, `/${locale}/products`);
+    // A historical brand URL stays explicit even without published products.
+    await visit(page, `/${locale}/products?brand=Dr.+Althea`);
     const search = page.getByRole("searchbox", { name: labels.searchProducts, exact: true });
     await search.fill("teszt 한국");
     await page.keyboard.press("Tab");

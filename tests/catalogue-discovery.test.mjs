@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createLocalCatalogueReader } from "../lib/catalog/editorial-catalogue.ts";
-import { catalogueQueryString, discoverCatalogue, readCatalogueCriteria } from "../lib/catalog/catalogue-discovery.ts";
+import { catalogueQueryString, discoverCatalogue, publishedCatalogueBrands, readCatalogueCriteria } from "../lib/catalog/catalogue-discovery.ts";
 import { brandNames } from "../data/brands.ts";
 
 const content = (name, description = "Fictional test content only.") => ({ name, description, images: [], usage: null, caution: null });
@@ -11,6 +11,15 @@ const record = (number, brand, state = "published") => ({
 });
 const catalogue = createLocalCatalogueReader([record(1, "beplain"), record(2, "Anua"), record(3, "beplain", "draft")]);
 const search = (query = "", brand = "", locale = "en", reader = catalogue) => discoverCatalogue(reader, locale, { query, brand });
+
+test("brand discovery is unique, alphabetical, published-only, independent of missing locale and stock", () => {
+  const missing = record(4, "COSRX"); missing.translations.hu = null; missing.translations.ko = null;
+  const reader = createLocalCatalogueReader([record(1, "beplain"), record(2, "beplain"), record(3, "Anua", "draft"), missing]);
+  assert.deepEqual(publishedCatalogueBrands(reader), ["beplain", "COSRX"]);
+  assert.deepEqual(publishedCatalogueBrands(createLocalCatalogueReader([])), []);
+  assert.deepEqual(publishedCatalogueBrands(createLocalCatalogueReader([record(1, "Anua", "draft")])), []);
+  assert.equal(reader.listPublished().length, 3);
+});
 
 test("published name/description and brand searches are deterministic and never expose drafts", () => {
   assert.deepEqual(search("  CLEANser  ").map(p => p.slug), ["fixture-1", "fixture-2"]);

@@ -9,7 +9,7 @@ import { localCatalogue } from "@/lib/catalog/local-catalogue";
 import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
 import { storefrontHref, storefrontLabels } from "@/lib/storefront/localization";
 import { brandNames } from "@/data/brands";
-import { catalogueQueryString, discoverCatalogue, type CatalogueCriteria } from "@/lib/catalog/catalogue-discovery";
+import { catalogueQueryString, discoverCatalogue, publishedCatalogueBrands, type CatalogueCriteria } from "@/lib/catalog/catalogue-discovery";
 
 type CatalogueReader = typeof localCatalogue;
 const linkStyle = "inline-flex min-h-11 items-center text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-hanapure-text";
@@ -23,6 +23,7 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
   const products = discoverCatalogue(catalogue, locale, criteria);
   const active = Boolean(criteria.query || criteria.brand);
   const unknownBrand = criteria.brand && !brandNames.some((brand) => brand === criteria.brand);
+  const publishedBrands = publishedCatalogueBrands(catalogue);
   const labels = storefrontLabels[locale];
   const listingHref = storefrontHref("/products", routeLocale);
   const controlStyle = "min-h-11 w-full rounded-xl border border-hanapure-border bg-hanapure-warm-white px-3 py-3 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text";
@@ -41,8 +42,9 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
           <label htmlFor="catalogue-brand" className="mb-2 block text-sm font-medium">{labels.filterBrand}</label>
           <select id="catalogue-brand" name="brand" defaultValue={criteria.brand} className={controlStyle}>
             <option value="">{labels.allBrands}</option>
-            {unknownBrand && <option value={criteria.brand}>{labels.invalidBrand}</option>}
-            {[...brandNames].sort((a, b) => a.localeCompare(b, "en")).map((brand) => <option key={brand} value={brand}>{brand}</option>)}
+            {criteria.brand && !publishedBrands.some(brand => brand === criteria.brand) &&
+              <option value={criteria.brand}>{unknownBrand ? labels.invalidBrand : criteria.brand}</option>}
+            {publishedBrands.map((brand) => <option key={brand} value={brand}>{brand}</option>)}
           </select>
         </div>
         <button type="submit" className="min-h-11 rounded-xl bg-hanapure-text px-5 py-3 text-hanapure-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text">{labels.apply}</button>

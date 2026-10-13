@@ -9,6 +9,8 @@ import { marketingCopy } from "../lib/storefront/marketing-copy.ts";
 import { brandNames } from "../data/brands.ts";
 import { readCatalogueCriteria } from "../lib/catalog/catalogue-discovery.ts";
 import { storefrontHref, switchLocalePath, storefrontLabels } from "../lib/storefront/localization.ts";
+import { createLocalCatalogueReader } from "../lib/catalog/editorial-catalogue.ts";
+import { publishedCatalogueFixtures } from "./browser/published-catalogue-fixtures.mjs";
 
 // Same installed TypeScript/React loader convention as catalogue-storefront tests.
 const require = createRequire(import.meta.url);
@@ -43,6 +45,7 @@ const { renderToStaticMarkup } = await import(pathToFileURL(join(dirname(require
 const { default: Header } = await import("../components/layout/Header.tsx");
 const { default: Home } = await import("../app/page.tsx");
 const { default: Brands } = await import("../app/brands/page.tsx");
+const { default: BrandsContent } = await import("../components/brands/BrandsContent.tsx");
 const { default: LocalizedHome } = await import("../app/[locale]/page.tsx");
 const { default: LocalizedBrands } = await import("../app/[locale]/brands/page.tsx");
 const { ProductListing } = await import("../components/catalogue/ProductCatalogue.tsx");
@@ -72,10 +75,11 @@ test("actual EN/HU/KO Home and Brands routes render their selected body and dire
     }
     for (const value of [copy.brands.heading, copy.brands.description, copy.directory.browse,
       copy.directory.searchLabel, copy.directory.searchPlaceholder, copy.directory.filterLabel,
-      copy.directory.alphabet, copy.directory.all, copy.directory.resultMany.replace("{count}", "16")]) {
+      copy.directory.alphabet, copy.directory.all, copy.directory.resultMany.replace("{count}", "0"),
+      storefrontLabels[locale].empty, storefrontLabels[locale].emptyDescription]) {
       assert.ok(brands.includes(value), `${locale} missing directory string: ${value}`);
     }
-    for (const brand of brandNames) assert.ok(brands.includes(`>${brand}</a>`), brand);
+    for (const brand of brandNames) assert.ok(!brands.includes(`>${brand}</a>`), brand);
     assert.equal((brands.match(/aria-pressed=/g) ?? []).length, 27);
     assert.ok(!home.includes('href="#"'));
     assert.equal((home.match(/<button/g) ?? []).length, 1); // Routine remains unresolved.
@@ -91,7 +95,7 @@ test("legacy routes retain the same English body as EN routes and source claims"
   assert.equal(withoutLinkDestinations(render(Home())), withoutLinkDestinations(render(await LocalizedHome({ params: Promise.resolve({ locale: "en" }) }))));
   assert.equal(withoutLinkDestinations(render(Brands())), withoutLinkDestinations(render(await LocalizedBrands({ params: Promise.resolve({ locale: "en" }) }))));
   assert.ok(render(Home()).includes("Feel confident in your skin."));
-  assert.ok(render(Brands()).includes("16 brands found"));
+  assert.ok(render(Brands()).includes("0 brands found"));
   for (const route of [LocalizedHome, LocalizedBrands]) {
     await assert.rejects(route({ params: Promise.resolve({ locale: "fr" }) }), error => error.digest === "NEXT_HTTP_ERROR_FALLBACK;404");
   }
@@ -127,8 +131,13 @@ test("Home shop and featured brand links reach the existing listing with exact l
 });
 
 test("all 16 directory links retain exact brand identity, legacy/locale routing, and existing catalogue behavior", async () => {
+  const catalogue = createLocalCatalogueReader(brandNames.map((brand, index) => ({
+    publicId: `${String(index + 1).padStart(8, "0")}-abcd-1234-abcd-123456789abc`,
+    brand, slug: `test-only-${index}`, state: "published",
+    translations: { en: { name: "TEST ONLY", description: "Fictional fixture", images: [], usage: null, caution: null }, hu: null, ko: null },
+  })));
   for (const locale of [null, "en", "hu", "ko"]) {
-    const html = render(locale === null ? Brands() : await LocalizedBrands({ params: Promise.resolve({ locale }) }));
+    const html = render({ type: BrandsContent, props: { catalogue, locale: locale ?? "en", routeLocale: locale } });
     const links = [...html.matchAll(/<a\b([^>]*?)href="([^"]*)"([^>]*)>(.*?)<\/a>/gs)];
     assert.equal(links.length, 16);
     assert.deepEqual(links.map(link => link[4]).sort(), [...brandNames].sort());
@@ -162,6 +171,25 @@ test("Directory receives serializable destinations without importing the server-
   assert.match(source, /href=\{catalogueLinks\[brand\]\}/);
   // Existing search/A-Z continues to render links from the same filtered brand names.
   assert.match(source, /matchingBrands[\s\S]*?\.filter\(\(brand\) => brand\[0\]\.toUpperCase\(\) === letter\)[\s\S]*?\.map\(\(brand\)/);
+});
+
+test("directory and catalogue options derive only published brands while keeping historical URL criteria", () => {
+  const catalogue = createLocalCatalogueReader([...publishedCatalogueFixtures,
+    { ...publishedCatalogueFixtures[1], publicId: "42345678-abcd-1234-abcd-123456789abc", brand: "Anua", slug: "test-only-draft-brand" }]);
+  for (const locale of ["en", "hu", "ko"]) {
+    const html = render({ type: BrandsContent, props: { catalogue, locale, routeLocale: locale } });
+    const links = [...html.matchAll(/<a\b[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gs)];
+    assert.deepEqual(links.map(link => link[2]), ["beplain", "Round Lab"]);
+    assert.ok(!html.includes('>Anua</a>'));
+    assert.ok(html.includes(marketingCopy[locale].directory.resultMany.replace("{count}", "2")));
+    const listing = renderToStaticMarkup(ProductListing({ catalogue, locale, routeLocale: locale }));
+    assert.deepEqual([...listing.matchAll(/<option value="([^"]*)"/g)].map(match => match[1]), ["", "beplain", "Round Lab"]);
+    const historical = renderToStaticMarkup(ProductListing({ catalogue, locale, routeLocale: locale,
+      criteria: { query: "TEST ONLY", brand: "Anua" } }));
+    assert.ok(historical.includes('<option value="Anua" selected="">Anua</option>'));
+    assert.ok(historical.includes(storefrontLabels[locale].noResults));
+    assert.ok(historical.includes('value="TEST ONLY"'));
+  }
 });
 
 test("marketing locales expose the same complete string structure, including zero-results and count patterns", () => {
