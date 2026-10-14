@@ -1,5 +1,6 @@
 import BrandDirectory from "./BrandDirectory";
 import Header from "@/components/layout/Header";
+import Footer from "@/components/layout/Footer";
 import { marketingCopy } from "@/lib/storefront/marketing-copy";
 import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
 import { localCatalogue } from "@/lib/catalog/local-catalogue";
@@ -15,7 +16,7 @@ export default function BrandsContent({ locale = "en", routeLocale = null, catal
     storefrontHref("/products", routeLocale) + catalogueQueryString({ query: "", brand }),
   ]));
   return (
-    <main lang={locale} className="min-h-screen bg-hanapure-warm-white text-hanapure-text">
+    <><main lang={locale} className="min-h-screen bg-hanapure-warm-white text-hanapure-text">
       <Header />
       <div className="bg-gradient-to-b from-hanapure-ivory to-hanapure-warm-white px-5 pb-12 pt-36 sm:px-6 sm:pb-16 sm:pt-40">
         <div className="mx-auto max-w-7xl">
@@ -26,6 +27,6 @@ export default function BrandsContent({ locale = "en", routeLocale = null, catal
       </div>
       <BrandDirectory labels={copy.directory} catalogueLinks={catalogueLinks}
         emptyState={{ heading: storefrontLabels[locale].empty, description: storefrontLabels[locale].emptyDescription }} />
-    </main>
+    </main><Footer locale={locale} routeLocale={routeLocale} /></>
   );
 }

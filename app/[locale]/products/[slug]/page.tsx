@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Header from "@/components/layout/Header";
+import Footer from "@/components/layout/Footer";
 import { ProductDetail } from "@/components/catalogue/ProductCatalogue";
 import { requireStorefrontLocale } from "@/lib/storefront/require-locale";
 import { productMetadata } from "@/lib/storefront/seo";
@@ -17,9 +18,9 @@ export default async function LocalizedProduct({ params, searchParams }: Props) 
   const criteria = readCatalogueCriteria(await searchParams);
   const detail = ProductDetail({ slug, locale, routeLocale: locale, criteria });
   return (
-    <main lang={locale} className="min-h-screen bg-hanapure-warm-white text-hanapure-text">
+    <><main lang={locale} className="min-h-screen bg-hanapure-warm-white text-hanapure-text">
       <Header catalogueQuery={catalogueQueryString(criteria)} />
       {detail}
-    </main>
+    </main><Footer locale={locale} routeLocale={locale} /></>
   );
 }

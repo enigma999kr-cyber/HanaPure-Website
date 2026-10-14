@@ -1,6 +1,7 @@
 import { test as base, expect, type Page } from "@playwright/test";
 import { storefrontLabels, storefrontLocales } from "../../lib/storefront/localization";
 import { marketingCopy } from "../../lib/storefront/marketing-copy";
+import { cartLabels } from "../../lib/cart/labels";
 
 // Collect actual browser errors, not 404 resource console noise. Never mock the app.
 const test = base.extend({
@@ -36,6 +37,37 @@ async function noOverflow(page: Page) {
   }))).toEqual(expect.objectContaining({ width: page.viewportSize()!.width }));
   expect(await page.evaluate(() => document.documentElement.scrollWidth))
     .toBeLessThanOrEqual(page.viewportSize()!.width + 1);
+}
+
+for (const routeLocale of [null, ...storefrontLocales]) for (const javaScriptEnabled of [true, false]) {
+  const locale = routeLocale ?? "en";
+  const labels = storefrontLabels[locale];
+  const root = routeLocale ? `/${routeLocale}` : "";
+  const paths = [root || "/", `${root}/products`, `${root}/brands`, `${root}/cart`];
+  test.describe(`${routeLocale ?? "legacy"}: Footer JS ${javaScriptEnabled}`, () => {
+    test.use({ javaScriptEnabled });
+    test("public routes have one accessible Footer; invalid destinations have none", async ({ page }) => {
+      for (const path of paths) {
+        expect((await page.goto(path))?.status()).toBe(200);
+        const footer = page.getByRole("contentinfo", { name: "HanaPure", exact: true });
+        await expect(footer).toHaveCount(1);
+        await expect(page.locator("main footer")).toHaveCount(0);
+        const links = footer.getByRole("navigation", { name: "HanaPure", exact: true }).getByRole("link");
+        await expect(links).toHaveText([labels.home, labels.shop, labels.brands, cartLabels[locale].cart]);
+        for (let index = 0; index < paths.length; index++) await expect(links.nth(index)).toHaveAttribute("href", paths[index]);
+        await links.first().focus(); await page.keyboard.press("Tab");
+        await expect(links.nth(1)).toBeFocused();
+        await expect(links.nth(1)).toHaveCSS("outline-style", "solid");
+        await page.keyboard.press("Enter");
+        await expect(page).toHaveURL(`${root}/products`);
+        await noOverflow(page);
+      }
+      for (const path of [`${root}/unknown-footer-route`, `${root}/products/unknown-footer-item`, "/fr"]) {
+        expect((await page.goto(path))?.status()).toBe(404);
+        await expect(page.getByRole("contentinfo")).toHaveCount(0);
+      }
+    });
+  });
 }
 
 for (const routeLocale of [null, ...storefrontLocales]) {

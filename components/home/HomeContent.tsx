@@ -1,4 +1,5 @@
 import Header from "@/components/layout/Header";
+import Footer from "@/components/layout/Footer";
 import Hero from "./Hero";
 import WhyHanaPure from "./WhyHanaPure";
 import FeaturedBrands from "@/components/brands/FeaturedBrands";
@@ -8,11 +9,11 @@ export default function HomeContent({ locale = "en", routeLocale = null }: {
   locale?: EditorialLocale; routeLocale?: EditorialLocale | null;
 }) {
   return (
-    <main lang={locale} className="min-h-screen bg-hanapure-white">
+    <><main lang={locale} className="min-h-screen bg-hanapure-white">
       <Header />
       <Hero locale={locale} routeLocale={routeLocale} />
       <FeaturedBrands locale={locale} routeLocale={routeLocale} />
       <WhyHanaPure locale={locale} />
-    </main>
+    </main><Footer locale={locale} routeLocale={routeLocale} /></>
   );
 }

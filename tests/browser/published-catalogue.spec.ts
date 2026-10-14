@@ -35,6 +35,30 @@ async function visit(page: Page, path: string) {
   return response;
 }
 
+for (const routeLocale of [null, ...storefrontLocales]) for (const javaScriptEnabled of [true, false]) {
+  const locale = routeLocale ?? "en";
+  const root = routeLocale ? `/${routeLocale}` : "";
+  test.describe(`${routeLocale ?? "legacy"}: Footer detail JS ${javaScriptEnabled}`, () => {
+    test.use({ javaScriptEnabled });
+    test("published detail has one Footer with exact public links and keyboard navigation", async ({ page }) => {
+      expect((await page.goto(`${root}/products/${publishedSlug}`))?.status()).toBe(200);
+      const footer = page.getByRole("contentinfo", { name: "HanaPure", exact: true });
+      await expect(footer).toHaveCount(1);
+      await expect(page.locator("main footer")).toHaveCount(0);
+      const links = footer.getByRole("link");
+      await expect(links).toHaveText([storefrontLabels[locale].home, storefrontLabels[locale].shop, storefrontLabels[locale].brands, cartLabels[locale].cart]);
+      const hrefs = [root || "/", `${root}/products`, `${root}/brands`, `${root}/cart`];
+      for (let index = 0; index < hrefs.length; index++) await expect(links.nth(index)).toHaveAttribute("href", hrefs[index]);
+      await links.first().focus(); await page.keyboard.press("Tab");
+      await expect(links.nth(1)).toBeFocused(); await page.keyboard.press("Enter");
+      await expect(page).toHaveURL(`${root}/products`);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width + 1);
+      expect((await page.goto(`${root}/products/${draftSlug}`))?.status()).toBe(404);
+      await expect(page.getByRole("contentinfo")).toHaveCount(0);
+    });
+  });
+}
+
 for (const locale of storefrontLocales) {
   const labels = storefrontLabels[locale];
   const cart = cartLabels[locale];

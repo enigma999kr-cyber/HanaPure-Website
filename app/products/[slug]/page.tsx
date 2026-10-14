@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Header from "@/components/layout/Header";
+import Footer from "@/components/layout/Footer";
 import { ProductDetail } from "@/components/catalogue/ProductCatalogue";
 import { productMetadata } from "@/lib/storefront/seo";
 import { catalogueQueryString, readCatalogueCriteria, type CatalogueSearchParams } from "@/lib/catalog/catalogue-discovery";
@@ -17,9 +18,9 @@ export default async function ProductPage({ params, searchParams }: Props) {
   // Resolve existence before rendering the page shell; drafts use the same 404 path.
   const detail = ProductDetail({ slug, criteria });
   return (
-    <main className="min-h-screen bg-hanapure-warm-white text-hanapure-text">
+    <><main className="min-h-screen bg-hanapure-warm-white text-hanapure-text">
       <Header catalogueQuery={catalogueQueryString(criteria)} />
       {detail}
-    </main>
+    </main><Footer /></>
   );
 }

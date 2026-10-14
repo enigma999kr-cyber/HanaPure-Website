@@ -43,6 +43,7 @@ registerHooks({
 });
 const { renderToStaticMarkup } = await import(pathToFileURL(join(dirname(require.resolve("react-dom/package.json")), "server.node.js")).href);
 const { default: Header } = await import("../components/layout/Header.tsx");
+const { default: Footer } = await import("../components/layout/Footer.tsx");
 const { default: Home } = await import("../app/page.tsx");
 const { default: Brands } = await import("../app/brands/page.tsx");
 const { default: BrandsContent } = await import("../components/brands/BrandsContent.tsx");
@@ -54,11 +55,38 @@ const { ProductListing } = await import("../components/catalogue/ProductCatalogu
 // Header pathname hooks belong to Next's browser router; its unchanged behavior
 // is covered separately. Render the actual body, including the real BrandDirectory.
 function body(element) {
-  const main = element.type(element.props);
+  const shell = element.type(element.props);
+  const main = shell.type === "main" ? shell : shell.props.children.find(child => child?.type === "main");
   return { ...main, props: { ...main.props,
     children: main.props.children.filter(child => child?.type !== Header) } };
 }
 const render = element => renderToStaticMarkup(body(element));
+
+test("public Footer uses only real localized links and distinguishes its landmark without new copy", () => {
+  for (const routeLocale of [null, "en", "hu", "ko"]) {
+    const locale = routeLocale ?? "en";
+    const html = renderToStaticMarkup(Footer({ locale, routeLocale }));
+    assert.match(html, /<footer lang="[^"]+" aria-label="HanaPure"/);
+    assert.match(html, /<nav aria-label="HanaPure"/);
+    const hrefs = [...html.matchAll(/href="([^"]+)"/g)].map(match => match[1]);
+    assert.deepEqual(hrefs, ["/", "/products", "/brands", "/cart"].map(path => storefrontHref(path, routeLocale)));
+    assert.doesNotMatch(html, /href="#|Contact|Privacy|Terms|Delivery|Returns/);
+    assert.match(html, /min-h-11/);
+    assert.match(html, /focus-visible:outline-2/);
+  }
+});
+
+test("Footer stays outside main and outside global layout/not-found boundaries", () => {
+  for (const component of [Home, Brands]) {
+    const shell = component();
+    const result = shell.type(shell.props);
+    assert.equal(result.props.children[0].type, "main");
+    assert.equal(result.props.children[1].type, Footer);
+  }
+  for (const path of ["app/layout.tsx", "app/[locale]/layout.tsx", "app/not-found.tsx", "app/products/[slug]/not-found.tsx", "app/[locale]/products/[slug]/not-found.tsx"]) {
+    assert.doesNotMatch(readFileSync(join(repo, path), "utf8"), /import Footer|<Footer/);
+  }
+});
 
 test("actual EN/HU/KO Home and Brands routes render their selected body and directory labels", async () => {
   for (const locale of ["en", "hu", "ko"]) {

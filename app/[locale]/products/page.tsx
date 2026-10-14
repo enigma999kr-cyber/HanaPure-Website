@@ -1,4 +1,5 @@
 import Header from "@/components/layout/Header";
+import Footer from "@/components/layout/Footer";
 import { ProductListing } from "@/components/catalogue/ProductCatalogue";
 import { requireStorefrontLocale } from "@/lib/storefront/require-locale";
 import { catalogueQueryString, readCatalogueCriteria, type CatalogueSearchParams } from "@/lib/catalog/catalogue-discovery";
@@ -16,9 +17,9 @@ export default async function LocalizedProducts({ params, searchParams }: {
   const locale = requireStorefrontLocale((await params).locale);
   const criteria = readCatalogueCriteria(await searchParams);
   return (
-    <main lang={locale} className="min-h-screen bg-hanapure-warm-white text-hanapure-text">
+    <><main lang={locale} className="min-h-screen bg-hanapure-warm-white text-hanapure-text">
       <Header catalogueQuery={catalogueQueryString(criteria)} />
       <ProductListing locale={locale} routeLocale={locale} criteria={criteria} />
-    </main>
+    </main><Footer locale={locale} routeLocale={locale} /></>
   );
 }
