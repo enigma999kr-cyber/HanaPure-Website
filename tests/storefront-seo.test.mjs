@@ -58,7 +58,8 @@ test("EN/HU/KO listing metadata reuses localized labels, canonicalizes clean loc
 });
 
 test("legacy English and query variants stay functional but cannot become duplicate indexable listings", () => {
-  for (const params of [{ q: "cleanser" }, { brand: "Anua" }, { q: "", brand: "" }, { utm_source: "fixture" }]) {
+  for (const params of [{ q: "cleanser" }, { brand: "Anua" }, { q: "", brand: "" }, { utm_source: "fixture" },
+    { sort: "name-asc" }, { q: "fixture", brand: "beplain", sort: "name-desc" }, { sort: ["name-asc", "name-desc"] }]) {
     const metadata = listingMetadata("hu", params, { origin });
     assert.equal(metadata.robots.index, false);
     assert.equal(metadata.robots.follow, true);

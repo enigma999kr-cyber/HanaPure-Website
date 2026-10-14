@@ -88,3 +88,46 @@ test("query parsing and serialization preserve active state, use first repeated 
   assert.equal(catalogueQueryString(readCatalogueCriteria()), "");
   assert.equal(catalogueQueryString({ query: "", brand: "Anua" }), "?brand=Anua");
 });
+
+test("sort allowlist round-trips while repeated/invalid sort defaults and q/brand first values remain", () => {
+  for (const sort of ["name-asc", "name-desc"]) {
+    const criteria = readCatalogueCriteria({ q: [" 테스트 & lemosó ", "ignored"], brand: ["Round Lab", "Anua"], sort });
+    assert.deepEqual(criteria, { query: "테스트 & lemosó", brand: "Round Lab", sort });
+    assert.deepEqual(readCatalogueCriteria(Object.fromEntries(new URLSearchParams(catalogueQueryString(criteria)))), criteria);
+    assert.deepEqual(readCatalogueCriteria({ sort: [sort] }), { query: "", brand: "", sort });
+  }
+  for (const sort of ["", "default", "price", "//example.invalid", [], ["name-asc", "name-asc"], ["name-desc", "name-asc"]]) {
+    const criteria = readCatalogueCriteria({ q: ["first", "second"], brand: ["Anua", "beplain"], sort, returnUrl: "//example.invalid" });
+    assert.deepEqual(criteria, { query: "first", brand: "Anua" });
+    assert.equal(catalogueQueryString(criteria), "?q=first&brand=Anua");
+  }
+  assert.equal(catalogueQueryString({ query: "", brand: "", sort: "invalid" }), "");
+});
+
+test("localized names sort after filtering; ties and missing names stay deterministic without mutating publication", () => {
+  for (const locale of ["en", "hu", "ko"]) {
+    const names = locale === "ko" ? ["나 테스트", "가 테스트"] : locale === "hu" ? ["Zebra teszt", "Alma teszt"] : ["Zebra fixture", "Alpha fixture"];
+    const records = [record(1, "beplain"), record(4, "beplain"), record(2, "beplain"), record(6, "Anua"), record(5, "beplain"), record(3, "beplain", "draft")];
+    for (const item of records) item.translations[locale] = content(item.slug === "fixture-1" ? names[0] : names[1]);
+    records[3].translations[locale] = null; records[4].translations[locale] = null;
+    const reader = createLocalCatalogueReader(records);
+    const before = JSON.stringify(reader.listPublished());
+    const slugs = criteria => discoverCatalogue(reader, locale, criteria).map(item => item.slug);
+    assert.deepEqual(slugs({ query: "", brand: "" }), ["fixture-1", "fixture-4", "fixture-2", "fixture-6", "fixture-5"]);
+    assert.deepEqual(slugs({ query: "", brand: "", sort: "name-asc" }), ["fixture-2", "fixture-4", "fixture-1", "fixture-5", "fixture-6"]);
+    assert.deepEqual(slugs({ query: "", brand: "", sort: "name-desc" }), ["fixture-1", "fixture-2", "fixture-4", "fixture-5", "fixture-6"]);
+    assert.deepEqual(slugs({ query: names[1], brand: "beplain", sort: "name-desc" }), ["fixture-2", "fixture-4"]);
+    assert.deepEqual(slugs({ query: "beplain", brand: "beplain", sort: "name-asc" }), ["fixture-2", "fixture-4", "fixture-1", "fixture-5"]);
+    assert.equal(JSON.stringify(reader.listPublished()), before);
+  }
+});
+
+test("the same published identities use selected-language names rather than English sorting", () => {
+  const one = record(1, "beplain"), two = record(2, "beplain");
+  one.translations.en.name = "Zebra"; two.translations.en.name = "Alpha";
+  one.translations.hu.name = "Alma"; two.translations.hu.name = "Zebra";
+  one.translations.ko.name = "가"; two.translations.ko.name = "나";
+  const reader = createLocalCatalogueReader([one, two]);
+  for (const locale of ["en", "hu", "ko"]) assert.deepEqual(discoverCatalogue(reader, locale,
+    { query: "", brand: "", sort: "name-asc" }).map(item => item.slug), locale === "en" ? ["fixture-2", "fixture-1"] : ["fixture-1", "fixture-2"]);
+});

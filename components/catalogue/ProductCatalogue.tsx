@@ -33,9 +33,9 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
   return (
     <Container className="pb-20 pt-32 sm:pt-36">
       <h1 id="main-content" tabIndex={-1} className="text-4xl font-light text-hanapure-text sm:text-5xl">{labels.heading}</h1>
-      <form key={JSON.stringify([locale, criteria.query, criteria.brand])}
-        action={listingHref} method="get" role="search" aria-label={labels.searchProducts}
-        className="mt-8 grid gap-4 rounded-2xl border border-hanapure-border bg-hanapure-white p-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
+      <form key={JSON.stringify([locale, criteria.query, criteria.brand, criteria.sort])}
+        action={listingHref} method="get" autoComplete="off" role="search" aria-label={labels.searchProducts}
+        className="mt-8 grid gap-4 rounded-2xl border border-hanapure-border bg-hanapure-white p-5 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
         <div className="min-w-0">
           <label htmlFor="catalogue-search" className="mb-2 block text-sm font-medium">{labels.searchProducts}</label>
           <input id="catalogue-search" name="q" type="search" defaultValue={criteria.query} autoComplete="off"
@@ -50,11 +50,19 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
             {publishedBrands.map((brand) => <option key={brand} value={brand}>{brand}</option>)}
           </select>
         </div>
+        <div className="min-w-0">
+          <label htmlFor="catalogue-sort" className="mb-2 block text-sm font-medium">{labels.sortBy}</label>
+          <select id="catalogue-sort" name="sort" defaultValue={criteria.sort ?? ""} className={controlStyle}>
+            <option value="">{labels.defaultOrder}</option>
+            <option value="name-asc">{labels.nameAscending}</option>
+            <option value="name-desc">{labels.nameDescending}</option>
+          </select>
+        </div>
         <button type="submit" className="min-h-11 rounded-xl bg-hanapure-text px-5 py-3 text-hanapure-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text">{labels.apply}</button>
       </form>
       <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2">
         <p role="status" className="text-sm text-hanapure-muted">{labels.results}: {products.length}</p>
-        {active && <Link href={listingHref} className={linkStyle}>{labels.clear}</Link>}
+        {(active || criteria.sort) && <Link href={listingHref} className={linkStyle}>{labels.clear}</Link>}
       </div>
       {products.length > 0 && <p className="mt-4 text-sm leading-6 text-hanapure-muted">{cartLabels[locale].notice}</p>}
       {products.length === 0 ? (

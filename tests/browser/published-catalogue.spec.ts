@@ -40,6 +40,77 @@ for (const routeLocale of [null, ...storefrontLocales]) for (const javaScriptEna
   const root = routeLocale ? `/${routeLocale}` : "";
   test.describe(`${routeLocale ?? "legacy"}: Footer detail JS ${javaScriptEnabled}`, () => {
     test.use({ javaScriptEnabled });
+    test("sort continuity preserves filtered names, GET/history/detail/locale and native no-JS controls", async ({ page }) => {
+      const labels = storefrontLabels[locale];
+      const listing = `${root}/products`;
+      const order = async (slugs: string[], suffix: string) => {
+        await expect(page.locator("main li h2 a")).toHaveCount(slugs.length);
+        expect(await page.locator("main li h2 a").evaluateAll(links => links.map(link => link.getAttribute("href"))))
+          .toEqual(slugs.map(slug => `${root}/products/${slug}${suffix}`));
+      };
+      const brandSorted = "?brand=beplain&sort=name-asc";
+      await page.goto(listing + brandSorted);
+      const sort = page.getByLabel(labels.sortBy, { exact: true });
+      await expect(sort).toHaveValue("name-asc");
+      await expect(sort.locator("option")).toHaveText([labels.defaultOrder, labels.nameAscending, labels.nameDescending]);
+      await order(locale === "en" ? [gallerySlug, missingLocaleSlug, textOnlySlug] : [gallerySlug, textOnlySlug, missingLocaleSlug], brandSorted);
+      await expect(page.getByRole("link", { name: /draft/i })).toHaveCount(0);
+      await page.getByRole("searchbox", { name: labels.searchProducts, exact: true }).fill("TEST ONLY");
+      await page.getByLabel(labels.filterBrand, { exact: true }).selectOption("");
+      await sort.focus(); await page.keyboard.press("Home"); await page.keyboard.press("ArrowDown"); await page.keyboard.press("ArrowDown");
+      await expect(sort).toHaveValue("name-desc");
+      await page.keyboard.press("Tab");
+      await expect(page.getByRole("button", { name: labels.apply, exact: true })).toBeFocused();
+      await page.keyboard.press("Enter");
+      const applied = "?q=TEST+ONLY&brand=&sort=name-desc";
+      await expect(page).toHaveURL(listing + applied);
+      const normalized = "?q=TEST+ONLY&sort=name-desc";
+      await order(locale === "en" ? [textOnlySlug, publishedSlug, missingLocaleSlug, gallerySlug] : [textOnlySlug, publishedSlug, gallerySlug], normalized);
+      // HU/KO missing content has no TEST ONLY search text: filtering precedes sorting.
+      await page.goBack(); await expect(page).toHaveURL(listing + brandSorted);
+      await expect(sort).toHaveValue("name-asc");
+      await page.goForward(); await expect(page).toHaveURL(listing + applied);
+      await expect(sort).toHaveValue("name-desc");
+      const detail = page.getByRole("link", { name: `TEST ONLY ${locale} published item`, exact: true });
+      await detail.press("Enter");
+      await expect(page).toHaveURL(`${root}/products/${publishedSlug}${normalized}`);
+      await expect(page.getByRole("link", { name: labels.back, exact: true })).toHaveAttribute("href", listing + normalized);
+      // Explicit same-brand discovery intentionally starts a new brand-only context.
+      await expect(page.locator("article").getByRole("link", { name: "Round Lab", exact: true })).toHaveAttribute("href", `${root}/products?brand=Round+Lab`);
+      const target = locale === "hu" ? "en" : "hu";
+      if (!javaScriptEnabled) await page.setViewportSize({ width: 1280, height: 900 });
+      else if (page.viewportSize()!.width < 1024) await page.locator('[aria-controls="mobile-navigation"]').click();
+      await page.locator("header").getByRole("link", { name: target === "en" ? "English" : "Magyar", exact: true }).filter({ visible: true }).press("Enter");
+      await expect(page).toHaveURL(`/${target}/products/${publishedSlug}${normalized}`);
+      await page.getByRole("link", { name: storefrontLabels[target].back, exact: true }).press("Enter");
+      await expect(page).toHaveURL(`/${target}/products${normalized}`);
+      await expect(page.getByLabel(storefrontLabels[target].sortBy, { exact: true })).toHaveValue("name-desc");
+      await page.goto(listing + "?q=TEST+ONLY&brand=Round+Lab&sort=name-asc");
+      if (javaScriptEnabled && page.viewportSize()!.width < 1024) await page.locator('[aria-controls="mobile-navigation"]').click();
+      const headerSearch = page.locator("header").getByRole("link", { name: labels.search, exact: true }).filter({ visible: true });
+      await expect(headerSearch).toHaveAttribute("href", listing + "?q=TEST+ONLY&brand=Round+Lab&sort=name-asc#catalogue-search");
+      await headerSearch.press("Enter");
+      await expect(page.locator("#catalogue-search")).toBeFocused();
+      await expect(page.locator('meta[name="robots"]').first()).toHaveAttribute("content", /noindex/);
+      await expect(page.locator('link[rel="canonical"]')).toHaveCount(0);
+      await expect(page.locator("footer")).toHaveCount(1);
+      for (const width of [320, 375, 1024, 1280]) {
+        await page.setViewportSize({ width, height: 900 });
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width + 1);
+      }
+      for (const bad of ["sort=price", "sort=name-asc&sort=name-desc"]) {
+        await page.goto(listing + `?q=TEST+ONLY&q=ignored&brand=Round+Lab&brand=Anua&${bad}&returnUrl=https://invalid.example`);
+        await expect(sort).toHaveValue("");
+        await expect(page.getByLabel(labels.filterBrand, { exact: true })).toHaveValue("Round Lab");
+        await expect(page.getByRole("link", { name: `TEST ONLY ${locale} published item`, exact: true }))
+          .toHaveAttribute("href", `${root}/products/${publishedSlug}?q=TEST+ONLY&brand=Round+Lab`);
+      }
+      await page.goto(listing + "?sort=name-desc");
+      await page.getByRole("link", { name: labels.clear, exact: true }).press("Enter");
+      await expect(page).toHaveURL(listing);
+      await expect(sort).toHaveValue("");
+      await order([publishedSlug, missingLocaleSlug, gallerySlug, textOnlySlug], "");
+    });
     test("quick add uses shared cart and keeps native listing navigation honest", async ({ page }) => {
       const cart = cartLabels[locale];
       const name = `TEST ONLY ${locale} published item`;
@@ -545,7 +616,7 @@ for (const locale of storefrontLocales) {
     const criteria = expectedQuery(query, "Round Lab");
     await page.getByRole("searchbox", { name: labels.searchProducts, exact: true }).fill(query);
     await page.getByRole("button", { name: labels.apply, exact: true }).press("Enter");
-    await expect(page).toHaveURL(`/${locale}/products${criteria}`);
+    await expect(page).toHaveURL(`/${locale}/products${criteria}&sort=`);
     const card = page.getByRole("link", { name: `TEST ONLY ${locale} published item`, exact: true });
     await expect(card).toHaveAttribute("href", `/${locale}/products/${publishedSlug}${criteria}`);
     await card.focus();

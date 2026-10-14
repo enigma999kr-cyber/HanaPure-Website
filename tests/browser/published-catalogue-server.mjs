@@ -199,7 +199,8 @@ async function runJourney() {
       : process.argv.includes("--footer-only") ? ["--grep", "Footer"]
       : process.argv.includes("--discovery-only") ? ["--grep", "discovery entry|image decode|normal listing/detail|published Brands"]
       : process.argv.includes("--same-brand-only") ? ["--grep", "same-brand discovery|media gallery|image decode"]
-      : process.argv.includes("--quick-add-only") ? ["--grep", "quick add|: cart "] : [];
+      : process.argv.includes("--quick-add-only") ? ["--grep", "quick add|: cart "]
+      : process.argv.includes("--sort-only") ? ["--grep", "sort continuity|quick add|same-brand discovery|direct entry|published Brands"] : [];
     await workspace.wait(workspace.spawn([playwright, "test", "--config", join(repo, "playwright.published.config.ts"), ...selection],
       { ...environment, HANAPURE_PUBLISHED_TEST_RUN_ID: owner }));
   } finally {

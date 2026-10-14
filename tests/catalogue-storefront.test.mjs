@@ -167,6 +167,8 @@ test("published listing/detail/Back round-trip preserves only parsed criteria in
     const root = routeLocale ? `/${routeLocale}/products` : "/products";
     for (const params of [
       {}, { q: "fixture" }, { brand: "beplain" }, { q: "fixture", brand: "beplain" },
+      { q: "fixture", brand: "beplain", sort: "name-asc" }, { sort: "name-desc" },
+      { q: "fixture", sort: ["name-asc", "name-desc"] },
       { q: ["  beplain  ", "ignored"], brand: ["beplain", "Anua"], returnUrl: "https://invalid.example" },
       { q: ["", "ignored"], brand: [] },
     ]) {
@@ -198,6 +200,22 @@ test("published listing/detail/Back round-trip preserves only parsed criteria in
       assert.throws(() => ProductDetail({ slug, catalogue: unpublished, locale, routeLocale,
         criteria: { query: "fixture", brand: "beplain" } }), error => error.digest === "NEXT_HTTP_ERROR_FALLBACK;404");
     }
+  }
+});
+
+test("localized native sort control preserves normalized criteria and reset keeps sort-only empty state honest", () => {
+  const { storefrontLabels } = require("../lib/storefront/localization.ts");
+  for (const routeLocale of [null, "en", "hu", "ko"]) {
+    const locale = routeLocale ?? "en";
+    const nodes = elements(ProductListing({ locale, routeLocale, criteria: { query: "", brand: "", sort: "name-desc" } }));
+    const sort = nodes.find(node => node.props?.id === "catalogue-sort");
+    assert.equal(sort.type, "select"); assert.equal(sort.props.name, "sort");
+    assert.equal(sort.props.defaultValue, "name-desc");
+    assert.deepEqual(elements(sort.props.children).filter(node => node.type === "option").map(node => node.props.value), ["", "name-asc", "name-desc"]);
+    assert.ok(nodes.some(node => node.type === "label" && node.props.htmlFor === "catalogue-sort"));
+    assert.ok(text(nodes).includes(storefrontLabels[locale].empty));
+    assert.ok(!text(nodes).includes(storefrontLabels[locale].noResults));
+    assert.ok(nodes.some(node => node.props?.href === (routeLocale ? `/${locale}/products` : "/products")));
   }
 });
 
@@ -403,12 +421,12 @@ test("catalogue keyboard entry has a unique skip target and native labelled cont
     assert.equal(target[0].type, "h1");
     assert.equal(target[0].props.tabIndex, -1);
     const controls = nodes.filter(node => ["input", "select", "button"].includes(node.type));
-    assert.deepEqual(controls.map(node => node.type), ["input", "select", "button"]);
+    assert.deepEqual(controls.map(node => node.type), ["input", "select", "select", "button"]);
     for (const control of controls.filter(node => node.type !== "button")) {
       assert.ok(nodes.some(node => node.type === "label" && node.props.htmlFor === control.props.id));
       assert.equal(control.props.tabIndex, undefined);
     }
-    assert.equal(controls[2].props.type, "submit");
+    assert.equal(controls[3].props.type, "submit");
     assert.equal(nodes.find(node => node.type === "form").props.method, "get");
     assert.ok(nodes.some(node => node.props?.href === `/${locale}/products`));
     assert.ok(nodes.some(node => node.props?.href === `/${locale}/brands`));
