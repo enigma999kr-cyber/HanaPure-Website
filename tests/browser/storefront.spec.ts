@@ -39,6 +39,26 @@ async function noOverflow(page: Page) {
     .toBeLessThanOrEqual(page.viewportSize()!.width + 1);
 }
 
+test("draft preview production isolation: no preview route or draft data in public storefront/SEO/cart", async ({ page }) => {
+  const slug = "test-only-private-draft-preview";
+  const marker = "TEST ONLY PRIVATE DRAFT PREVIEW";
+  for (const root of ["", "/en", "/hu", "/ko"]) {
+    for (const path of [`${root}/draft-preview`, `${root}/products/${slug}`]) {
+      const response = await page.goto(path); expect(response?.status()).toBe(404);
+      expect(await response!.text()).not.toContain(`${marker} en`);
+    }
+    for (const path of [`${root}/products?q=${encodeURIComponent(marker)}&brand=beplain&sort=name-asc`, `${root}/brands`, `${root}/cart`]) {
+      const response = await page.goto(path); expect(response?.status()).toBe(200);
+      expect(await response!.text()).not.toContain(`${marker} en`);
+      expect(await page.locator("body").textContent()).not.toContain(slug);
+    }
+  }
+  for (const path of ["/sitemap.xml", "/robots.txt"]) {
+    const response = await page.request.get(path); expect(response.status()).toBe(200);
+    expect(await response.text()).not.toContain(slug);
+  }
+});
+
 for (const routeLocale of [null, ...storefrontLocales]) for (const javaScriptEnabled of [true, false]) {
   const locale = routeLocale ?? "en";
   const labels = storefrontLabels[locale];
