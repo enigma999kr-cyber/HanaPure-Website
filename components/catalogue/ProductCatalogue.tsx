@@ -6,6 +6,8 @@ import Container from "@/components/ui/Container";
 import ProductImage from "./ProductImage";
 import ProductMediaGallery from "./ProductMediaGallery";
 import AddToCart from "@/components/cart/AddToCart";
+import QuickAdd from "@/components/cart/QuickAdd";
+import { cartLabels } from "@/lib/cart/labels";
 import { localCatalogue } from "@/lib/catalog/local-catalogue";
 import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
 import { storefrontHref, storefrontLabels } from "@/lib/storefront/localization";
@@ -54,6 +56,7 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
         <p role="status" className="text-sm text-hanapure-muted">{labels.results}: {products.length}</p>
         {active && <Link href={listingHref} className={linkStyle}>{labels.clear}</Link>}
       </div>
+      {products.length > 0 && <p className="mt-4 text-sm leading-6 text-hanapure-muted">{cartLabels[locale].notice}</p>}
       {products.length === 0 ? (
         <div className="mt-10 rounded-2xl border border-hanapure-border bg-hanapure-white p-6 sm:p-8">
           <h2 className="text-2xl font-light">{active ? labels.noResults : labels.empty}</h2>
@@ -82,6 +85,8 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
                 <p className="mt-3 whitespace-pre-line break-words leading-7 text-hanapure-muted">
                   {content?.description ?? labels.missing}
                 </p>
+                <QuickAdd publicId={product.publicId} locale={locale}
+                  name={content?.name ?? `${labels.details}: ${product.brand} (${product.slug})`} />
               </li>
             );
           })}

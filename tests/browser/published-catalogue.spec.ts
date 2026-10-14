@@ -40,6 +40,88 @@ for (const routeLocale of [null, ...storefrontLocales]) for (const javaScriptEna
   const root = routeLocale ? `/${routeLocale}` : "";
   test.describe(`${routeLocale ?? "legacy"}: Footer detail JS ${javaScriptEnabled}`, () => {
     test.use({ javaScriptEnabled });
+    test("quick add uses shared cart and keeps native listing navigation honest", async ({ page }) => {
+      const cart = cartLabels[locale];
+      const name = `TEST ONLY ${locale} published item`;
+      const query = expectedQuery("TEST ONLY", "Round Lab");
+      const listing = `${root}/products${query}`;
+      await page.goto(listing);
+      const row = page.locator("main li");
+      await expect(row).toHaveCount(1);
+      const add = row.getByRole("button", { name: `${cart.add}: ${name}`, exact: true });
+      await expect(row.locator("a button")).toHaveCount(0);
+      const detail = `${root}/products/${publishedSlug}${query}`;
+      await expect(row.getByRole("link", { name, exact: true })).toHaveAttribute("href", detail);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width + 1);
+      if (!javaScriptEnabled) {
+        await expect(add).toBeDisabled();
+        await expect(row.getByRole("status")).toHaveText("");
+        await expect(row.getByRole("img")).toBeVisible();
+        await row.getByRole("link", { name, exact: true }).press("Enter");
+        await expect(page).toHaveURL(detail);
+        return;
+      }
+      await expect(add).toBeEnabled();
+      await row.getByRole("link", { name, exact: true }).focus();
+      await page.keyboard.press("Tab");
+      await expect(add).toBeFocused();
+      await add.press("Enter"); await expect(page).toHaveURL(listing);
+      await expect(row.getByRole("status")).toHaveText(cart.added);
+      await add.click();
+      const headerCart = page.locator("header").locator(`a[href="${root}/cart"][aria-label]`);
+      await expect(headerCart.first()).toHaveAttribute("aria-label", `${cart.cart}: ${cart.selectedQuantity} 2`);
+      await row.getByRole("link", { name, exact: true }).press("Enter");
+      await page.getByRole("button", { name: cart.add, exact: true }).click();
+      await page.goto(`${root}/cart`);
+      await expect(page.getByRole("spinbutton")).toHaveValue("3");
+      await page.getByRole("spinbutton").fill("4");
+      await page.getByRole("button", { name: cart.update, exact: true }).click();
+      const target = locale === "hu" ? "en" : "hu";
+      if (page.viewportSize()!.width < 1024) await page.locator('[aria-controls="mobile-navigation"]').click();
+      await page.locator("header").getByRole("link", { name: target === "en" ? "English" : "Magyar", exact: true }).filter({ visible: true }).click();
+      await expect(page).toHaveURL(`/${target}/cart`);
+      await expect(page.getByRole("spinbutton")).toHaveValue("4");
+      await page.goto(listing);
+      const stored = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), CART_STORAGE_KEY);
+      expect(stored.lines).toEqual([{ publicId: "12345678-abcd-1234-abcd-123456789abc", quantity: 4 }]);
+      await page.goto(`${root}/cart`);
+      await page.getByRole("button", { name: cart.clear, exact: true }).click();
+      await expect(page.getByText(cart.empty, { exact: true })).toBeVisible();
+      await page.setViewportSize({ width: 320, height: 900 });
+      await page.goto(listing);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(321);
+    });
+    if (javaScriptEnabled) test("quick add rejects corrupt and overflow data and reports blocked storage without success", async ({ page }) => {
+      const cart = cartLabels[locale];
+      const query = expectedQuery("TEST ONLY", "Round Lab");
+      const path = `${root}/products${query}`;
+      await page.goto(path);
+      const row = page.locator("main li");
+      const add = row.getByRole("button", { name: `${cart.add}: TEST ONLY ${locale} published item`, exact: true });
+      const corrupt = JSON.stringify({ version: 1, lines: [{ publicId: "bad-id", quantity: -1 }] });
+      await page.evaluate(({ key, corrupt }) => localStorage.setItem(key, corrupt), { key: CART_STORAGE_KEY, corrupt });
+      await page.reload();
+      await expect(add).toBeDisabled();
+      await expect(row.getByRole("status")).toHaveText(cart.invalidStorage);
+      expect(await page.evaluate(key => localStorage.getItem(key), CART_STORAGE_KEY)).toBe(corrupt);
+      await page.evaluate(key => localStorage.setItem(key, JSON.stringify({ version: 1, lines: [{ publicId: "12345678-abcd-1234-abcd-123456789abc", quantity: Number.MAX_SAFE_INTEGER }] })), CART_STORAGE_KEY);
+      await page.reload(); await add.click();
+      await expect(row.getByRole("status")).toHaveText(cart.invalid);
+      expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)!).lines[0].quantity, CART_STORAGE_KEY)).toBe(Number.MAX_SAFE_INTEGER);
+      await page.evaluate(key => localStorage.removeItem(key), CART_STORAGE_KEY);
+      await page.addInitScript(() => Object.defineProperty(Storage.prototype, "setItem", { value() { throw new Error("TEST ONLY write denied"); } }));
+      await page.reload(); await add.click();
+      await expect(row.getByRole("status")).toHaveText(cart.storage);
+      await expect(row.getByRole("status")).not.toContainText(cart.added);
+      await expect(add).toBeDisabled();
+      await page.locator("footer").getByRole("link", { name: cart.cart, exact: true }).click();
+      await expect(page.getByRole("spinbutton")).toHaveValue("1"); // Existing current-tab fallback policy.
+      await page.addInitScript(() => Object.defineProperty(Storage.prototype, "getItem", { value() { throw new Error("TEST ONLY read denied"); } }));
+      await page.goto(path);
+      await expect(add).toBeDisabled();
+      await expect(row.getByRole("status")).toHaveText(cart.storage);
+      await expect(row.getByRole("status")).not.toContainText(cart.added);
+    });
     test("same-brand discovery preserves original Back and related brand round trip", async ({ page }) => {
       const labels = storefrontLabels[locale];
       const original = expectedQuery("Original & query", "Round Lab");
@@ -289,6 +371,7 @@ for (const locale of storefrontLocales) {
     await expect(page.getByRole("button", { name: cart.add, exact: true })).toBeEnabled();
     await page.getByRole("button", { name: cart.add, exact: true }).click();
     await expect(page.getByText(cart.storage, { exact: true })).toBeVisible();
+    await expect(page.locator("main section").getByRole("status")).not.toContainText(cart.added);
     await page.locator("main section").getByRole("link", { name: cart.cart, exact: true }).click();
     await expect(page.getByRole("spinbutton")).toHaveValue("1");
     await expect(page.getByText(cart.storage, { exact: true })).toBeVisible();

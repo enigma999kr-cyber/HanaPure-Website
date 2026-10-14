@@ -24,12 +24,12 @@ export default function AddToCart({ publicId, locale, routeLocale }: {
       const value = Number(quantity);
       if (!validQuantity(value)) { setMessage(labels.invalid); return; }
       let accepted = false;
-      changeBrowserCart(lines => {
+      const result = changeBrowserCart(lines => {
         const next = addCartLine(lines, publicId, value);
         accepted = next !== lines;
         return next;
       });
-      setMessage(accepted ? labels.added : labels.invalid);
+      setMessage(!accepted ? labels.invalid : result?.persistent ? labels.added : labels.storage);
     }}>
       <div><label htmlFor={id} className="mb-2 block text-sm">{labels.quantity}</label>
         <input id={id} type="number" min="1" step="1" required value={quantity}
@@ -40,6 +40,6 @@ export default function AddToCart({ publicId, locale, routeLocale }: {
     </form>
     <p role="status" className="mt-3 text-sm">{message}</p>
     {cart.invalid && <p role="status" className="mt-3 text-sm">{labels.invalidStorage}</p>}
-    {!cart.persistent && <p className="mt-3 text-sm">{labels.storage}</p>}
+    {!cart.persistent && message !== labels.storage && <p className="mt-3 text-sm">{labels.storage}</p>}
   </section>;
 }

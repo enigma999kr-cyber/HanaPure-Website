@@ -44,13 +44,14 @@ const { default: LanguageSwitcher } = await import("../components/layout/Languag
 const { default: ProductImage } = await import("../components/catalogue/ProductImage.tsx");
 const { default: ProductMediaGallery } = await import("../components/catalogue/ProductMediaGallery.tsx");
 const { default: AddToCart } = await import("../components/cart/AddToCart.tsx");
+const { default: QuickAdd } = await import("../components/cart/QuickAdd.tsx");
 // Expand the actual pure server views, preserving host-element attributes/text.
 function elements(node) {
   if (node == null || typeof node === "boolean") return [];
   if (Array.isArray(node)) return node.flatMap(elements);
   if (typeof node !== "object") return [node];
   // Client hooks are exercised in the hydrated browser, not called as server functions.
-  if (node.type === ProductImage || node.type === ProductMediaGallery || node.type === AddToCart) return [node];
+  if (node.type === ProductImage || node.type === ProductMediaGallery || node.type === AddToCart || node.type === QuickAdd) return [node];
   if (typeof node.type === "function") return elements(node.type(node.props));
   return [node, ...elements(node.props?.children)];
 }
@@ -62,6 +63,22 @@ const product = (patch = {}) => ({ publicId: "12345678-abcd-1234-abcd-123456789a
 const reader = (...records) => createLocalCatalogueReader(records);
 const { readCatalogueCriteria, catalogueQueryString } = await import("../lib/catalog/catalogue-discovery.ts");
 const { productMetadata } = await import("../lib/storefront/seo.ts");
+
+test("Quick Add receives published editorial identity only and respects missing-locale content", () => {
+  const published = product();
+  const draft = product({ publicId: "22345678-abcd-1234-abcd-123456789abc", slug: "test-only-draft", state: "draft" });
+  for (const locale of ["en", "hu", "ko"]) {
+    const nodes = elements(ProductListing({ catalogue: reader(published, draft), locale, routeLocale: locale }));
+    const controls = nodes.filter(node => node.type === QuickAdd);
+    assert.equal(controls.length, 1);
+    assert.deepEqual(Object.keys(controls[0].props).sort(), ["locale", "name", "publicId"]);
+    assert.equal(controls[0].props.publicId, published.publicId);
+    assert.equal(controls[0].props.locale, locale);
+    assert.ok(locale === "en" ? controls[0].props.name === "Fictional fixture" : controls[0].props.name.includes(published.slug));
+    assert.equal(nodes.find(node => node.type === "li").props.children.some(child => child?.type === QuickAdd), true);
+  }
+  assert.equal(elements(ProductListing()).filter(node => node.type === QuickAdd).length, 0);
+});
 
 test("same-brand detail discovery limits only other published identities and preserves original Back criteria", () => {
   for (const count of [0, 1, 2, 3, 4, 5]) for (const routeLocale of [null, "en", "hu", "ko"]) {

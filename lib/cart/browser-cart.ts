@@ -33,8 +33,8 @@ export function useBrowserCart() {
 }
 export function changeBrowserCart(change: (lines: readonly CartLine[]) => readonly CartLine[]) {
   // Malformed persisted data requires an explicit reset, never a silent overwrite.
-  if (snapshot.invalid) return;
-  saveSelection(change(snapshot.lines));
+  if (snapshot.invalid) return null;
+  return saveSelection(change(snapshot.lines));
 }
 export function resetBrowserCart() { saveSelection([]); }
 function saveSelection(lines: readonly CartLine[]) {
@@ -44,4 +44,5 @@ function saveSelection(lines: readonly CartLine[]) {
   catch { persistent = false; }
   snapshot = { lines, ready: true, persistent, invalid: false };
   emit();
+  return { persistent };
 }
