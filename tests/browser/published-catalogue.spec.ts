@@ -291,6 +291,16 @@ for (const locale of storefrontLocales) {
     }
   });
   test(`${locale}: published Brands → filtered listing → detail → Back, history and locale context`, async ({ page }) => {
+    await visit(page, `/${locale}`);
+    const featured = page.getByRole("article").filter({ has: page.getByRole("heading", { name: "Round Lab", exact: true }) });
+    const discover = featured.getByRole("link");
+    await expect(discover).toHaveAttribute("href", `/${locale}/products?brand=Round+Lab`);
+    for (const name of ["Anua", "SKIN1004"]) {
+      await expect(page.getByRole("article").filter({ has: page.getByRole("heading", { name, exact: true }) }).getByRole("link")).toHaveCount(0);
+    }
+    await discover.press("Enter");
+    await expect(page).toHaveURL(`/${locale}/products?brand=Round+Lab`);
+    await expect(page.getByRole("link", { name: `TEST ONLY ${locale} published item`, exact: true })).toBeVisible();
     await visit(page, `/${locale}/brands`);
     const directory = marketingCopy[locale].directory;
     const region = page.getByRole("region", { name: directory.browse, exact: true });

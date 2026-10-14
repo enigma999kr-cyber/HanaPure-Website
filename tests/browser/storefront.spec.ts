@@ -117,6 +117,14 @@ for (const locale of storefrontLocales) {
   });
 
   test(`${locale}: Brands empty published catalogue does not expose candidate navigation`, async ({ page }) => {
+    await visit(page, `/${locale}`);
+    for (const name of ["Round Lab", "Anua", "SKIN1004"]) {
+      const card = page.getByRole("article").filter({ has: page.getByRole("heading", { name, exact: true }) });
+      await expect(card).toBeVisible();
+      await expect(card.getByRole("link")).toHaveCount(0);
+      await expect(card.locator(".min-h-5")).toHaveCSS("min-height", "20px");
+    }
+    await noOverflow(page);
     await visit(page, `/${locale}/brands`);
     const section = page.getByRole("region", { name: directory.browse, exact: true });
     const search = page.getByRole("searchbox", { name: directory.searchLabel });

@@ -1,6 +1,8 @@
 import BrandCard from "./BrandCard";
 import { marketingCopy } from "@/lib/storefront/marketing-copy";
 import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
+import { localCatalogue } from "@/lib/catalog/local-catalogue";
+import { publishedCatalogueBrands } from "@/lib/catalog/catalogue-discovery";
 
 const brands = [
   {
@@ -22,10 +24,12 @@ const brands = [
   },
 ] as const;
 
-export default function FeaturedBrands({ locale = "en", routeLocale = null }: {
+export default function FeaturedBrands({ locale = "en", routeLocale = null, catalogue = localCatalogue }: {
   locale?: EditorialLocale; routeLocale?: EditorialLocale | null;
+  catalogue?: typeof localCatalogue;
 }) {
   const copy = marketingCopy[locale].featured;
+  const publishedBrands = publishedCatalogueBrands(catalogue);
   return (
     <section className="bg-hanapure-ivory py-28">
       <div className="mx-auto max-w-7xl px-6">
@@ -53,6 +57,7 @@ export default function FeaturedBrands({ locale = "en", routeLocale = null }: {
               discover={copy.discover}
               accent={brand.accent}
               routeLocale={routeLocale}
+              hasPublishedProduct={publishedBrands.includes(brand.name)}
             />
           ))}
         </div>

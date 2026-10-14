@@ -46,6 +46,7 @@ const { default: Header } = await import("../components/layout/Header.tsx");
 const { default: Home } = await import("../app/page.tsx");
 const { default: Brands } = await import("../app/brands/page.tsx");
 const { default: BrandsContent } = await import("../components/brands/BrandsContent.tsx");
+const { default: FeaturedBrands } = await import("../components/brands/FeaturedBrands.tsx");
 const { default: LocalizedHome } = await import("../app/[locale]/page.tsx");
 const { default: LocalizedBrands } = await import("../app/[locale]/brands/page.tsx");
 const { ProductListing } = await import("../components/catalogue/ProductCatalogue.tsx");
@@ -69,7 +70,7 @@ test("actual EN/HU/KO Home and Brands routes render their selected body and dire
     assert.ok(brands.includes(`lang="${locale}"`));
     for (const value of [copy.hero.heading, copy.hero.description, copy.hero.shop, copy.hero.routine,
       ...copy.hero.trust, copy.featured.eyebrow, copy.featured.heading, copy.featured.headingEnd,
-      copy.featured.description, copy.featured.discover, ...[copy.featured.roundLab, copy.featured.anua, copy.featured.skin1004].flatMap(item => [item.tagline, item.description]),
+      copy.featured.description, ...[copy.featured.roundLab, copy.featured.anua, copy.featured.skin1004].flatMap(item => [item.tagline, item.description]),
       copy.why.heading, copy.why.description, ...copy.why.points.flatMap(item => [item.title, item.description])]) {
       assert.ok(home.includes(value), `${locale} missing body string: ${value}`);
     }
@@ -101,22 +102,30 @@ test("legacy routes retain the same English body as EN routes and source claims"
   }
 });
 
-test("Home shop and featured brand links reach the existing listing with exact locale and brand criteria", async () => {
+test("Home keeps editorial cards but Discover links require published products, retaining locale and brand criteria", async () => {
+  const content = publishedCatalogueFixtures[0].translations;
+  const catalogue = createLocalCatalogueReader([publishedCatalogueFixtures[0],
+    { ...publishedCatalogueFixtures[1], brand: "Anua" },
+    { publicId: "52345678-abcd-1234-abcd-123456789abc", brand: "SKIN1004", slug: "test-only-featured", state: "published", translations: { en: content.en, hu: null, ko: null } }]);
   for (const locale of [null, "en", "hu", "ko"]) {
     const home = render(locale === null ? Home() : await LocalizedHome({ params: Promise.resolve({ locale }) }));
     const links = [...home.matchAll(/<a\b[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gs)];
-    assert.equal(links.length, 4);
+    assert.equal(links.length, 1);
     assert.equal(links[0][1], storefrontHref("/products", locale));
     assert.ok(links[0][2].includes(marketingCopy[locale ?? "en"].hero.shop));
-    for (const [index, brand] of ["Round Lab", "Anua", "SKIN1004"].entries()) {
-      const url = new URL(links[index + 1][1], "http://localhost");
+    const featured = renderToStaticMarkup(FeaturedBrands({ catalogue, locale: locale ?? "en", routeLocale: locale }));
+    const featuredLinks = [...featured.matchAll(/<a\b[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gs)];
+    assert.equal(featuredLinks.length, 2); // Draft-only Anua has no action.
+    assert.equal((featured.match(/<article/g) ?? []).length, 3);
+    for (const [index, brand] of ["Round Lab", "SKIN1004"].entries()) {
+      const url = new URL(featuredLinks[index][1], "http://localhost");
       assert.equal(url.pathname, storefrontHref("/products", locale));
       const criteria = readCatalogueCriteria(Object.fromEntries(url.searchParams));
       assert.deepEqual(criteria, { query: "", brand });
       assert.ok(brandNames.includes(criteria.brand));
-      const listing = renderToStaticMarkup(ProductListing({ locale: locale ?? "en", routeLocale: locale, criteria }));
+      const listing = renderToStaticMarkup(ProductListing({ catalogue, locale: locale ?? "en", routeLocale: locale, criteria }));
       assert.ok(listing.includes(`<option value="${brand}" selected="">${brand}</option>`));
-      assert.ok(listing.includes(storefrontLabels[locale ?? "en"].noResults));
+      assert.ok(!listing.includes(storefrontLabels[locale ?? "en"].noResults));
       assert.ok(listing.includes(`action="${storefrontHref("/products", locale)}"`));
       for (const destination of ["en", "hu", "ko"]) {
         const switched = new URL(switchLocalePath(url.pathname + url.search, destination), "http://localhost");

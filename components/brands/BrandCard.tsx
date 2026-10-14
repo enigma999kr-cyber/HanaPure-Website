@@ -10,6 +10,7 @@ type BrandCardProps = {
   description: string;
   accent: string;
   discover: string;
+  hasPublishedProduct: boolean;
   routeLocale?: EditorialLocale | null;
 };
 
@@ -19,6 +20,7 @@ export default function BrandCard({
   description,
   accent,
   discover,
+  hasPublishedProduct,
   routeLocale = null,
 }: BrandCardProps) {
   return (
@@ -32,12 +34,14 @@ export default function BrandCard({
 
         <p className="mb-8 leading-7 text-hanapure-muted">{description}</p>
 
-        <Link
+        <div className="min-h-5">
+        {hasPublishedProduct && <Link
           href={storefrontHref("/products", routeLocale) + catalogueQueryString({ query: "", brand: name })}
           className="text-sm font-medium text-hanapure-text transition group-hover:tracking-wide"
         >
           {discover} →
-        </Link>
+        </Link>}
+        </div>
       </div>
     </article>
   );
