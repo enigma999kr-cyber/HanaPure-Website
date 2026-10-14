@@ -28,9 +28,6 @@ export default function Hero({ locale = "en", routeLocale = null }: {
 
         <div className="mx-auto flex w-full max-w-sm flex-col gap-3 sm:max-w-none sm:flex-row sm:justify-center sm:gap-4">
           <Button href={storefrontHref("/products", routeLocale)} className="w-full sm:w-auto">{copy.shop}</Button>
-          <Button className="w-full sm:w-auto" variant="secondary">
-            {copy.routine}
-          </Button>
         </div>
 
         <div className="mx-auto mt-10 grid max-w-3xl gap-3 text-sm leading-6 text-hanapure-muted sm:mt-12 sm:grid-cols-3 sm:gap-4">

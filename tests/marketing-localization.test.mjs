@@ -68,7 +68,7 @@ test("actual EN/HU/KO Home and Brands routes render their selected body and dire
     const copy = marketingCopy[locale];
     assert.ok(home.includes(`lang="${locale}"`));
     assert.ok(brands.includes(`lang="${locale}"`));
-    for (const value of [copy.hero.heading, copy.hero.description, copy.hero.shop, copy.hero.routine,
+    for (const value of [copy.hero.heading, copy.hero.description, copy.hero.shop,
       ...copy.hero.trust, copy.featured.eyebrow, copy.featured.heading, copy.featured.headingEnd,
       copy.featured.description, ...[copy.featured.roundLab, copy.featured.anua, copy.featured.skin1004].flatMap(item => [item.tagline, item.description]),
       copy.why.heading, copy.why.description, ...copy.why.points.flatMap(item => [item.title, item.description])]) {
@@ -83,7 +83,8 @@ test("actual EN/HU/KO Home and Brands routes render their selected body and dire
     for (const brand of brandNames) assert.ok(!brands.includes(`>${brand}</a>`), brand);
     assert.equal((brands.match(/aria-pressed=/g) ?? []).length, 27);
     assert.ok(!home.includes('href="#"'));
-    assert.equal((home.match(/<button/g) ?? []).length, 1); // Routine remains unresolved.
+    assert.equal((home.match(/<button/g) ?? []).length, 0);
+    assert.ok(!home.includes(copy.hero.routine));
     if (locale !== "en") {
       assert.ok(!home.includes(marketingCopy.en.hero.heading));
       assert.ok(!brands.includes(marketingCopy.en.directory.searchLabel));
@@ -133,9 +134,16 @@ test("Home keeps editorial cards but Discover links require published products, 
         assert.equal(switched.searchParams.get("brand"), brand);
       }
     }
-    assert.ok(home.includes(`<button`));
-    assert.ok(home.includes(marketingCopy[locale ?? "en"].hero.routine));
+    assert.ok(!home.includes(`<button`));
+    assert.ok(!home.includes(marketingCopy[locale ?? "en"].hero.routine));
     assert.ok(!home.includes('<a href="#"'));
+  }
+});
+
+test("Header removes unimplemented English menus without changing existing navigation authority", () => {
+  const source = readFileSync(join(repo, "components/layout/Header.tsx"), "utf8");
+  for (const label of ["Skin Concerns", "Best Sellers", "New Arrivals", "Why HanaPure"]) {
+    assert.ok(!source.includes(label));
   }
 });
 

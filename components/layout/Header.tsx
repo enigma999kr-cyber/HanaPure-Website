@@ -111,21 +111,6 @@ export default function Header({ catalogueQuery = "" }: { catalogueQuery?: strin
               {labels.brands}
             </Link>
 
-            <span className="hidden xl:inline">
-              Skin Concerns
-            </span>
-
-            <span className="hidden xl:inline">
-              Best Sellers
-            </span>
-
-            <span className="hidden xl:inline">
-              New Arrivals
-            </span>
-
-            <span className="hidden xl:inline">
-              Why HanaPure
-            </span>
           </nav>
 
           {/* Right Menu */}

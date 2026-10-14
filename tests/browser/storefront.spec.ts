@@ -38,6 +38,49 @@ async function noOverflow(page: Page) {
     .toBeLessThanOrEqual(page.viewportSize()!.width + 1);
 }
 
+for (const routeLocale of [null, ...storefrontLocales]) {
+  const locale = routeLocale ?? "en";
+  const labels = storefrontLabels[locale];
+  const href = (path: string) => routeLocale ? `/${routeLocale}${path === "/" ? "" : path}` : path;
+  test(`${routeLocale ?? "legacy"}: homepage action integrity and existing navigation`, async ({ page }) => {
+    await visit(page, href("/"));
+    const hero = page.locator("main > section").first();
+    await expect(hero.getByRole("button")).toHaveCount(0);
+    await expect(hero).not.toContainText(marketingCopy[locale].hero.routine);
+    const shop = hero.getByRole("link", { name: marketingCopy[locale].hero.shop, exact: true });
+    await expect(shop).toHaveAttribute("href", href("/products"));
+    const header = page.locator("header");
+    for (const text of ["Skin Concerns", "Best Sellers", "New Arrivals", "Why HanaPure"]) {
+      await expect(header).not.toContainText(text);
+    }
+    const mobile = page.viewportSize()!.width < 1024;
+    if (!mobile) {
+      await expect(header.getByRole("navigation", { name: labels.primaryNavigation }).getByRole("link"))
+        .toHaveText([labels.shop, labels.brands]);
+      await expect(header.getByRole("link", { name: labels.search, exact: true }))
+        .toHaveAttribute("href", `${href("/products")}#catalogue-search`);
+    }
+    await noOverflow(page);
+    await shop.focus();
+    await page.keyboard.press("Shift+Tab");
+    if (mobile) await expect(header.locator('[aria-controls="mobile-navigation"]')).toBeFocused();
+    else await expect(header.locator(`a[href="${href("/cart")}"]`).filter({ visible: true })).toBeFocused();
+    await shop.focus(); await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(href("/products"));
+    if (mobile) await page.locator('[aria-controls="mobile-navigation"]').press("Enter");
+    await header.getByRole("link", { name: labels.brands, exact: true }).filter({ visible: true }).press("Enter");
+    await expect(page).toHaveURL(href("/brands"));
+    if (mobile) await page.locator('[aria-controls="mobile-navigation"]').press("Enter");
+    await header.locator(`a[href="${href("/cart")}"][aria-label]`).filter({ visible: true }).press("Enter");
+    await expect(page).toHaveURL(href("/cart"));
+    if (mobile) await page.locator('[aria-controls="mobile-navigation"]').press("Enter");
+    const target = locale === "hu" ? "en" : "hu";
+    await header.getByRole("link", { name: target === "en" ? "English" : "Magyar", exact: true }).filter({ visible: true }).press("Enter");
+    await expect(page).toHaveURL(`/${target}/cart`);
+    await noOverflow(page);
+  });
+}
+
 for (const locale of storefrontLocales) {
   const labels = storefrontLabels[locale];
   const directory = marketingCopy[locale].directory;
