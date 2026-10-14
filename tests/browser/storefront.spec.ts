@@ -74,6 +74,31 @@ for (const routeLocale of [null, ...storefrontLocales]) {
   const locale = routeLocale ?? "en";
   const labels = storefrontLabels[locale];
   const href = (path: string) => routeLocale ? `/${routeLocale}${path === "/" ? "" : path}` : path;
+  test(`${routeLocale ?? "legacy"}: discovery entry Search preserves menu, focus and browse query`, async ({ page }) => {
+    const query = new URLSearchParams({ q: "테스트 & cleanser", brand: "Round Lab" }).toString();
+    for (const path of [href("/"), href("/brands"), href("/cart"), `${href("/products")}?${query}`]) {
+      await visit(page, path);
+      const mobile = page.viewportSize()!.width < 1024;
+      if (mobile) {
+        const toggle = page.locator('[aria-controls="mobile-navigation"]');
+        await toggle.press("Enter"); await page.keyboard.press("Escape");
+        await expect(toggle).toBeFocused(); await toggle.press("Space");
+      }
+      const searchLink = page.locator("header").getByRole("link", { name: labels.search, exact: true }).filter({ visible: true });
+      const suffix = path.includes("?") ? `?${query}` : "";
+      await expect(searchLink).toHaveAttribute("href", `${href("/products")}${suffix}#catalogue-search`);
+      await searchLink.press("Enter");
+      await expect(page).toHaveURL(`${href("/products")}${suffix}#catalogue-search`);
+      await expect(page.locator('[aria-controls="mobile-navigation"]')).toHaveAttribute("aria-expanded", "false");
+      const input = page.getByRole("searchbox", { name: labels.searchProducts, exact: true });
+      await expect(input).toBeFocused();
+      await expect(input).toHaveValue(suffix ? "테스트 & cleanser" : "");
+      const box = await input.boundingBox(); expect(box!.y).toBeGreaterThanOrEqual(80);
+      await page.keyboard.press("Tab");
+      await expect(page.getByLabel(labels.filterBrand, { exact: true })).toBeFocused();
+      await noOverflow(page);
+    }
+  });
   test(`${routeLocale ?? "legacy"}: homepage action integrity and existing navigation`, async ({ page }) => {
     await visit(page, href("/"));
     const hero = page.locator("main > section").first();

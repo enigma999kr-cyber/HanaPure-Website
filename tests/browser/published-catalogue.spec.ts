@@ -40,6 +40,40 @@ for (const routeLocale of [null, ...storefrontLocales]) for (const javaScriptEna
   const root = routeLocale ? `/${routeLocale}` : "";
   test.describe(`${routeLocale ?? "legacy"}: Footer detail JS ${javaScriptEnabled}`, () => {
     test.use({ javaScriptEnabled });
+    test("discovery entry image matches title URL and preserves detailed Search context", async ({ page }) => {
+      const labels = storefrontLabels[locale];
+      const query = expectedQuery("TEST ONLY", "Round Lab");
+      await page.goto(`${root}/products${query}`);
+      const imageLink = page.getByRole("link", { name: `${labels.details}: TEST ONLY ${locale} published item`, exact: true });
+      const titleLink = page.getByRole("link", { name: `TEST ONLY ${locale} published item`, exact: true });
+      const detail = `${root}/products/${publishedSlug}${query}`;
+      await expect(imageLink).toHaveAttribute("href", detail);
+      await expect(titleLink).toHaveAttribute("href", detail);
+      await expect(imageLink.getByRole("img")).toBeVisible();
+      await imageLink.press("Enter"); await expect(page).toHaveURL(detail);
+      await page.getByRole("link", { name: labels.back, exact: true }).press("Enter");
+      await expect(page).toHaveURL(`${root}/products${query}`);
+      if (javaScriptEnabled) {
+        await page.route(`**/file.svg?locale=${locale}`, route => route.fulfill({ status: 404, body: "" }));
+        await page.reload();
+        await expect(imageLink.getByRole("img")).toHaveJSProperty("tagName", "DIV");
+        await imageLink.click(); await expect(page).toHaveURL(detail);
+        const mobile = page.viewportSize()!.width < 1024;
+        if (mobile) await page.locator('[aria-controls="mobile-navigation"]').press("Enter");
+        const search = page.locator("header").getByRole("link", { name: labels.search, exact: true }).filter({ visible: true });
+        await expect(search).toHaveAttribute("href", `${root}/products${query}#catalogue-search`);
+        await search.press("Enter");
+        await expect(page).toHaveURL(`${root}/products${query}#catalogue-search`);
+        await expect(page.getByRole("searchbox", { name: labels.searchProducts, exact: true })).toBeFocused();
+      }
+      await page.goto(`${root}/products?brand=beplain`);
+      const textOnly = page.getByRole("link", { name: `TEST ONLY ${locale} text-only item`, exact: true });
+      await expect(textOnly).toBeVisible();
+      await expect(page.getByRole("link", { name: `${labels.details}: TEST ONLY ${locale} text-only item`, exact: true })).toHaveCount(0);
+      if (locale !== "en") await expect(page.getByRole("link", { name: `${labels.details}: TEST ONLY en missing-locale fixture published item`, exact: true })).toHaveCount(0);
+      await expect(page.getByRole("link", { name: /draft item/i })).toHaveCount(0);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width + 1);
+    });
     test("published detail has one Footer with exact public links and keyboard navigation", async ({ page }) => {
       expect((await page.goto(`${root}/products/${publishedSlug}`))?.status()).toBe(200);
       const footer = page.getByRole("contentinfo", { name: "HanaPure", exact: true });
@@ -386,7 +420,7 @@ for (const locale of storefrontLocales) {
     await expect(page).toHaveURL(`/${locale}/products${brandQuery}`);
     await expect(page.getByLabel(labels.filterBrand, { exact: true })).toHaveValue("Round Lab");
     await expect(page.locator('#catalogue-brand option')).toHaveText([labels.allBrands, "beplain", "Round Lab"]);
-    await expect(page.locator('li a[href*="/products/"]')).toHaveCount(1);
+    await expect(page.locator('li h2 a[href*="/products/"]')).toHaveCount(1);
     await expect(page.getByRole("link", { name: /draft/i })).toHaveCount(0);
 
     const query = "TEST ONLY";
@@ -437,7 +471,7 @@ for (const locale of storefrontLocales) {
     await expect(page.getByRole("heading", { name: labels.noResults, exact: true })).toBeVisible();
     await page.getByRole("link", { name: labels.clear, exact: true }).press("Enter");
     await expect(page).toHaveURL(`/${locale}/products`);
-    await expect(page.locator('li a[href*="/products/"]')).toHaveCount(4);
+    await expect(page.locator('li h2 a[href*="/products/"]')).toHaveCount(4);
     for (const slug of [draftSlug, "test-only-unknown-item"]) {
       expect((await visit(page, `/${locale}/products/${slug}${criteria}`))?.status()).toBe(404);
       await expect(page.getByRole("heading", { name: labels.notFound, exact: true })).toBeVisible();

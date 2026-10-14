@@ -191,7 +191,8 @@ async function runJourney() {
     const playwright = join(repo, "node_modules", "@playwright", "test", "cli.js");
     const selection = process.argv.includes("--cart-only") ? ["--grep", ": cart "]
       : process.argv.includes("--gallery-only") ? ["--grep", "media gallery"]
-      : process.argv.includes("--footer-only") ? ["--grep", "Footer"] : [];
+      : process.argv.includes("--footer-only") ? ["--grep", "Footer"]
+      : process.argv.includes("--discovery-only") ? ["--grep", "discovery entry|image decode|normal listing/detail|published Brands"] : [];
     await workspace.wait(workspace.spawn([playwright, "test", "--config", join(repo, "playwright.published.config.ts"), ...selection],
       { ...environment, HANAPURE_PUBLISHED_TEST_RUN_ID: owner }));
   } finally {

@@ -179,6 +179,11 @@ export default function Header({ catalogueQuery = "" }: { catalogueQuery?: strin
               {labels.brands}
             </Link>
             <LanguageSwitcher locale={locale} pathname={`${pathname}${catalogueQuery}`} onNavigate={closeMenuForNavigation} />
+            <a href={`${storefrontHref("/products", routeLocale)}${catalogueQuery}#catalogue-search`}
+              onClick={closeMenuForNavigation}
+              className="rounded-sm px-2 py-3 hover:bg-hanapure-beige-light focus-visible:outline-2 focus-visible:outline-hanapure-text">
+              {labels.search}
+            </a>
             <Link href={storefrontHref("/cart", routeLocale)} aria-label={cartName} onClick={closeMenuForNavigation}
               className="rounded-sm px-2 py-3 focus-visible:outline-2 focus-visible:outline-hanapure-text">{cartLabels[locale].cart} <span aria-hidden="true">({quantity})</span></Link>
           </div>

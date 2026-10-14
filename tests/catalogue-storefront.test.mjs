@@ -164,7 +164,7 @@ test("listing links only published records using the stable slug and exact brand
   const draft = product({ publicId: "22345678-abcd-1234-abcd-123456789abc", slug: "private-draft", state: "draft" });
   const catalogue = reader(published, draft);
   const nodes = elements(ProductListing({ catalogue }));
-  assert.deepEqual(nodes.filter((node) => node.props?.href).map((node) => node.props.href), ["/products/fictional-fixture"]);
+  assert.deepEqual(nodes.filter((node) => node.props?.href).map((node) => node.props.href), ["/products/fictional-fixture", "/products/fictional-fixture"]);
   assert.match(text(nodes), /beplain Fictional fixture Only a test fixture/);
   assert.equal(nodes.find((node) => node.type === ProductImage).props.alt, published.translations.en.images[0].alt);
   assert.equal(catalogue.listPublished()[0].publicId, published.publicId);
@@ -178,6 +178,22 @@ test("detail resolves a published slug and renders supplied images, usage and ca
   assert.ok(nodes.some((node) => node.props?.href === "/products"));
   assert.equal(nodes.find((node) => node.type === ProductImage).props.src, record.translations.en.images[0].src);
   assert.ok(nodes.every((node) => !node.props?.dangerouslySetInnerHTML));
+});
+
+test("image and title share exact detail criteria without exposing missing media or unpublished records", () => {
+  for (const routeLocale of [null, "en", "hu", "ko"]) {
+    const locale = routeLocale ?? "en";
+    const record = product(); record.translations[locale] = content();
+    const criteria = { query: "fixture", brand: "beplain" };
+    const nodes = elements(ProductListing({ catalogue: reader(record), locale, routeLocale, criteria }));
+    const links = nodes.filter(node => node.props?.href?.includes("/products/"));
+    assert.equal(links.length, 2);
+    assert.equal(links[0].props.href, links[1].props.href);
+    assert.match(links[0].props["aria-label"], /Fictional fixture/);
+    assert.match(links[0].props.className, /focus-visible:outline-2/);
+    record.translations[locale].images = [];
+    assert.equal(elements(ProductListing({ catalogue: reader(record), locale, routeLocale, criteria })).filter(node => node.props?.href?.includes("/products/")).length, 1);
+  }
 });
 
 test("draft and unknown detail slugs take Next's real notFound path", () => {
@@ -220,7 +236,7 @@ test("route wiring uses the authoritative reader and promised slug; Header Shop 
   assert.match(detail, /ProductDetail\(\{ slug, criteria \}\)/);
   assert.match(detail, /productMetadata\(slug, "en", \{ legacy: true \}\)/);
   const header = source("components/layout/Header.tsx");
-  assert.equal((header.match(/storefrontHref\("\/products", routeLocale\)/g) ?? []).length, 3);
+  assert.equal((header.match(/storefrontHref\("\/products", routeLocale\)/g) ?? []).length, 4);
   assert.match(header, /storefrontHref\("\/products", routeLocale\)[\s\S]*?onClick=\{closeMenuForNavigation\}/);
 });
 

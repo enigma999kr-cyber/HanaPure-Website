@@ -37,7 +37,7 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
         <div className="min-w-0">
           <label htmlFor="catalogue-search" className="mb-2 block text-sm font-medium">{labels.searchProducts}</label>
           <input id="catalogue-search" name="q" type="search" defaultValue={criteria.query} autoComplete="off"
-            placeholder={labels.searchHint} className={controlStyle} />
+            placeholder={labels.searchHint} className={`${controlStyle} scroll-mt-24`} />
         </div>
         <div className="min-w-0">
           <label htmlFor="catalogue-brand" className="mb-2 block text-sm font-medium">{labels.filterBrand}</label>
@@ -64,12 +64,16 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
         <ul className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {products.map((product) => {
             const content = product.translations[locale];
+            const detailHref = `${storefrontHref(`/products/${product.slug}`, routeLocale)}${catalogueQueryString(criteria)}`;
             return (
               <li key={product.publicId} className="min-w-0 rounded-2xl border border-hanapure-border bg-hanapure-white p-5">
-                {content?.images[0] && <ProductImage {...content.images[0]} />}
+                {content?.images[0] && <Link href={detailHref} aria-label={`${labels.details}: ${content.name}`}
+                  className="block rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-hanapure-text">
+                  <ProductImage {...content.images[0]} />
+                </Link>}
                 <p className="mt-4 text-sm text-hanapure-muted">{product.brand}</p>
                 <h2 className="mt-2 break-words text-2xl font-light">
-                  <Link href={`${storefrontHref(`/products/${product.slug}`, routeLocale)}${catalogueQueryString(criteria)}`}
+                  <Link href={detailHref}
                     aria-label={content ? undefined : `${labels.details}: ${product.brand} (${product.slug})`}
                     className="block min-h-11 py-2 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-hanapure-text">
                     {content?.name ?? labels.details}
