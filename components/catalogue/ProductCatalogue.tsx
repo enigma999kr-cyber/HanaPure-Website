@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import Container from "@/components/ui/Container";
 import ProductImage from "./ProductImage";
+import ProductMediaGallery from "./ProductMediaGallery";
 import AddToCart from "@/components/cart/AddToCart";
 import { localCatalogue } from "@/lib/catalog/local-catalogue";
 import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
@@ -102,7 +103,8 @@ export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en",
       <article className="mt-6 grid min-w-0 gap-8 lg:grid-cols-2 lg:gap-12">
         {content && content.images.length > 0 && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-1">
-            {content.images.map((image, index) => <ProductImage key={`${product.publicId}-${image.src}-${index}`} {...image} />)}
+            {content.images.length > 1 ? <ProductMediaGallery key={`${product.publicId}-${locale}`} images={content.images} />
+              : content.images.map((image, index) => <ProductImage key={`${product.publicId}-${image.src}-${index}`} {...image} />)}
           </div>
         )}
         <div className="min-w-0">

@@ -138,6 +138,13 @@ async function runJourney() {
       throw new Error("Refusing non-regular ProductImage source");
     }
     copyFileSync(imageSource, join(fixtureRoot, imageFile));
+    workspace.verify();
+    const galleryFile = "components/catalogue/ProductMediaGallery.tsx";
+    const gallerySource = join(repo, galleryFile);
+    if (lstatSync(gallerySource).isSymbolicLink() || !lstatSync(gallerySource).isFile()) {
+      throw new Error("Refusing non-regular ProductMediaGallery source");
+    }
+    copyFileSync(gallerySource, join(fixtureRoot, galleryFile));
     // This milestone's explicit new leaves only; retain ownership/path checks.
     for (const file of ["components/cart/AddToCart.tsx", "components/cart/CartContent.tsx", "components/cart/ShoppingCart.tsx",
       "lib/cart/cart-state.ts", "lib/cart/browser-cart.ts", "lib/cart/labels.ts", "app/cart/page.tsx", "app/[locale]/cart/page.tsx"]) {
@@ -175,7 +182,8 @@ async function runJourney() {
     const server = workspace.spawn([next, "start", "--hostname", "127.0.0.1", "--port", "3101"], environment);
     await waitForFixtureServer(server, "http://127.0.0.1:3101/en/products");
     const playwright = join(repo, "node_modules", "@playwright", "test", "cli.js");
-    const selection = process.argv.includes("--cart-only") ? ["--grep", ": cart "] : [];
+    const selection = process.argv.includes("--cart-only") ? ["--grep", ": cart "]
+      : process.argv.includes("--gallery-only") ? ["--grep", "media gallery"] : [];
     await workspace.wait(workspace.spawn([playwright, "test", "--config", join(repo, "playwright.published.config.ts"), ...selection],
       { ...environment, HANAPURE_PUBLISHED_TEST_RUN_ID: owner }));
   } finally {

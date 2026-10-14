@@ -111,7 +111,7 @@ test("fixture workspace refuses repository-root and path traversal targets", () 
 
 test("isolated browser fixtures satisfy the unchanged editorial authority, without operational fields", () => {
   const reader = createLocalCatalogueReader(publishedCatalogueFixtures);
-  assert.equal(reader.listPublished().length, 2);
+  assert.equal(reader.listPublished().length, 4);
   assert.equal(reader.findPublishedBySlug(publishedSlug).publicId, publishedCatalogueFixtures[0].publicId);
   assert.equal(reader.findPublishedBySlug(draftSlug), null);
   for (const record of publishedCatalogueFixtures) {

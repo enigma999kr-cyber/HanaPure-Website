@@ -42,6 +42,7 @@ registerHooks({
 const { ProductListing, ProductDetail } = await import("../components/catalogue/ProductCatalogue.tsx");
 const { default: LanguageSwitcher } = await import("../components/layout/LanguageSwitcher.tsx");
 const { default: ProductImage } = await import("../components/catalogue/ProductImage.tsx");
+const { default: ProductMediaGallery } = await import("../components/catalogue/ProductMediaGallery.tsx");
 const { default: AddToCart } = await import("../components/cart/AddToCart.tsx");
 // Expand the actual pure server views, preserving host-element attributes/text.
 function elements(node) {
@@ -49,7 +50,7 @@ function elements(node) {
   if (Array.isArray(node)) return node.flatMap(elements);
   if (typeof node !== "object") return [node];
   // Client hooks are exercised in the hydrated browser, not called as server functions.
-  if (node.type === ProductImage || node.type === AddToCart) return [node];
+  if (node.type === ProductImage || node.type === ProductMediaGallery || node.type === AddToCart) return [node];
   if (typeof node.type === "function") return elements(node.type(node.props));
   return [node, ...elements(node.props?.children)];
 }
@@ -61,6 +62,24 @@ const product = (patch = {}) => ({ publicId: "12345678-abcd-1234-abcd-123456789a
 const reader = (...records) => createLocalCatalogueReader(records);
 const { readCatalogueCriteria, catalogueQueryString } = await import("../lib/catalog/catalogue-discovery.ts");
 const { productMetadata } = await import("../lib/storefront/seo.ts");
+
+test("detail gallery receives exact ordered editorial media only for multiple images; zero/one stays unchanged", () => {
+  for (const count of [0, 1, 2, 3]) {
+    const record = product();
+    record.translations.en.images = Array.from({ length: count }, (_, i) => ({ src: `/test-only-${i}.svg`, alt: `Editorial ${i}` }));
+    const catalogue = reader(record);
+    const nodes = elements(ProductDetail({ catalogue, slug: record.slug }));
+    assert.equal(nodes.filter(node => node.type === ProductMediaGallery).length, count > 1 ? 1 : 0);
+    assert.equal(nodes.filter(node => node.type === ProductImage).length, count === 1 ? 1 : 0);
+    if (count > 1) {
+      const images = nodes.find(node => node.type === ProductMediaGallery).props.images;
+      assert.deepEqual(images, record.translations.en.images);
+      assert.deepEqual(Object.keys(nodes.find(node => node.type === ProductMediaGallery).props), ["images"]);
+    }
+  }
+  const images = [{ src: "/test-only.svg", alt: "Editorial" }, { src: "/test-only-2.svg", alt: "Editorial 2" }];
+  assert.notEqual(ProductMediaGallery({ images }).key, ProductMediaGallery({ images: [...images].reverse() }).key);
+});
 
 test("image sources get distinct state identities without altering editorial publication or links", () => {
   const first = ProductImage({ src: "/missing-test-only.png", alt: "Editorial meaning" });

@@ -1,7 +1,7 @@
 import { test as base, expect, type Page } from "@playwright/test";
 import { storefrontLabels, storefrontLocales } from "../../lib/storefront/localization";
 import { marketingCopy } from "../../lib/storefront/marketing-copy";
-import { publishedSlug, draftSlug, missingLocaleSlug } from "./published-catalogue-fixtures.mjs";
+import { publishedSlug, draftSlug, missingLocaleSlug, gallerySlug, textOnlySlug } from "./published-catalogue-fixtures.mjs";
 import { cartLabels } from "../../lib/cart/labels";
 import { CART_STORAGE_KEY } from "../../lib/cart/cart-state";
 
@@ -38,6 +38,37 @@ async function visit(page: Page, path: string) {
 for (const locale of storefrontLocales) {
   const labels = storefrontLabels[locale];
   const cart = cartLabels[locale];
+  test(`${locale}: media gallery selection, fallback, focus and zero/one-image behavior`, async ({ page }) => {
+    const criteria = expectedQuery("TEST ONLY", "beplain");
+    await page.route(`**/file.svg?gallery=3&locale=${locale}`, route => route.fulfill({ status: 200, contentType: "image/svg+xml", body: "TEST ONLY corrupt" }));
+    const response = await visit(page, `/${locale}/products/${gallerySlug}${criteria}`);
+    expect(await response!.text()).toContain(`/file.svg?gallery=1&amp;locale=${locale}`);
+    const media = page.locator("article > div").first();
+    const buttons = media.getByRole("button");
+    await expect(buttons).toHaveCount(3);
+    for (let i = 0; i < 3; i++) await expect(buttons.nth(i)).toHaveAccessibleName(`TEST ONLY ${locale} gallery ${["first", "second", "third"][i]} (${i + 1}/3)`);
+    const image = media.getByRole("img", { name: `TEST ONLY ${locale} gallery first`, exact: true });
+    await expect(image).toBeVisible();
+    expect(await image.evaluate(async node => { await (node as HTMLImageElement).decode(); return (node as HTMLImageElement).naturalWidth; })).toBeGreaterThan(0);
+    await buttons.nth(1).press("Space");
+    await expect(buttons.nth(1)).toBeFocused();
+    await expect(buttons.nth(1)).toHaveAttribute("aria-pressed", "true");
+    await expect(media.getByRole("img", { name: `TEST ONLY ${locale} gallery second`, exact: true })).toHaveJSProperty("tagName", "DIV");
+    await buttons.nth(2).press("Enter");
+    await expect(media.getByRole("img", { name: `TEST ONLY ${locale} gallery third`, exact: true })).toHaveJSProperty("tagName", "DIV");
+    await buttons.nth(0).press("Enter");
+    await expect(image).toHaveJSProperty("tagName", "IMG");
+    await expect(image).toBeVisible();
+    await expect(buttons.nth(0)).toBeFocused();
+    await expect(buttons.nth(0)).toHaveAttribute("aria-pressed", "true");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width + 1);
+    await expect(page.getByRole("link", { name: labels.back, exact: true })).toHaveAttribute("href", `/${locale}/products${criteria}`);
+    await visit(page, `/${locale}/products/${publishedSlug}`);
+    await expect(page.locator("article > div").first().getByRole("button")).toHaveCount(0);
+    await visit(page, `/${locale}/products/${textOnlySlug}`);
+    await expect(page.locator("article").getByRole("img")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: cart.add, exact: true })).toBeEnabled();
+  });
   async function expectHeaderQuantity(page: Page, quantity: number) {
     // The current-language links share this href; select only cart controls.
     const links = page.locator("header").filter({ visible: true }).locator(`a[href="/${locale}/cart"][aria-label^="${cart.cart}:"]`);
@@ -209,6 +240,13 @@ for (const locale of storefrontLocales) {
   });
   test.describe(`${locale}: JavaScript disabled`, () => {
     test.use({ javaScriptEnabled: false });
+    test("media gallery retains first native image and no inert selection controls", async ({ page }) => {
+      await page.goto(`/${locale}/products/${gallerySlug}`);
+      const image = page.getByRole("img", { name: `TEST ONLY ${locale} gallery first`, exact: true });
+      await expect(image).toBeVisible();
+      expect(await image.evaluate(async node => { await (node as HTMLImageElement).decode(); return (node as HTMLImageElement).naturalWidth; })).toBeGreaterThan(0);
+      await expect(page.locator("article > div").first().getByRole("button")).toHaveCount(0);
+    });
     test("normal listing/detail images retain native visibility and editorial alt", async ({ page }, testInfo) => {
       const criteria = expectedQuery("TEST ONLY", "Round Lab");
       for (const path of [`/${locale}/products${criteria}`, `/${locale}/products/${publishedSlug}${criteria}`]) {
@@ -375,7 +413,7 @@ for (const locale of storefrontLocales) {
     await expect(page.getByRole("heading", { name: labels.noResults, exact: true })).toBeVisible();
     await page.getByRole("link", { name: labels.clear, exact: true }).press("Enter");
     await expect(page).toHaveURL(`/${locale}/products`);
-    await expect(page.locator('li a[href*="/products/"]')).toHaveCount(2);
+    await expect(page.locator('li a[href*="/products/"]')).toHaveCount(4);
     for (const slug of [draftSlug, "test-only-unknown-item"]) {
       expect((await visit(page, `/${locale}/products/${slug}${criteria}`))?.status()).toBe(404);
       await expect(page.getByRole("heading", { name: labels.notFound, exact: true })).toBeVisible();
