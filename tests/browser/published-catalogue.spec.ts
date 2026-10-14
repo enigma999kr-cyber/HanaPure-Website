@@ -40,6 +40,41 @@ for (const routeLocale of [null, ...storefrontLocales]) for (const javaScriptEna
   const root = routeLocale ? `/${routeLocale}` : "";
   test.describe(`${routeLocale ?? "legacy"}: Footer detail JS ${javaScriptEnabled}`, () => {
     test.use({ javaScriptEnabled });
+    test("same-brand discovery preserves original Back and related brand round trip", async ({ page }) => {
+      const labels = storefrontLabels[locale];
+      const original = expectedQuery("Original & query", "Round Lab");
+      await page.goto(`${root}/products/${gallerySlug}${original}`);
+      const back = page.getByRole("link", { name: labels.back, exact: true });
+      await expect(back).toHaveAttribute("href", `${root}/products${original}`);
+      const brand = page.locator("article").getByRole("link", { name: "beplain", exact: true });
+      await expect(brand).toHaveAttribute("href", `${root}/products?brand=beplain`);
+      const section = page.getByRole("region", { name: "beplain", exact: true });
+      const links = section.getByRole("link");
+      await expect(links).toHaveCount(2);
+      await expect(links.nth(0)).toHaveAttribute("href", `${root}/products/${missingLocaleSlug}?brand=beplain`);
+      await expect(links.nth(1)).toHaveAttribute("href", `${root}/products/${textOnlySlug}?brand=beplain`);
+      if (locale !== "en") {
+        await expect(links.nth(0)).toHaveAccessibleName(`${labels.details}: beplain (${missingLocaleSlug})`);
+        await expect(section).not.toContainText("TEST ONLY en missing-locale");
+        await expect(section.getByText(labels.missing, { exact: true })).toBeVisible();
+      }
+      await links.nth(1).press("Enter");
+      await expect(page).toHaveURL(`${root}/products/${textOnlySlug}?brand=beplain`);
+      await expect(back).toHaveAttribute("href", `${root}/products?brand=beplain`);
+      await back.press("Enter"); await expect(page).toHaveURL(`${root}/products?brand=beplain`);
+      await page.goto(`${root}/products/${gallerySlug}${original}`);
+      await brand.click(); await expect(page).toHaveURL(`${root}/products?brand=beplain`);
+      await page.goto(`${root}/products/${publishedSlug}`);
+      await expect(page.locator("#same-brand-heading")).toHaveCount(0);
+      await expect(page.locator("article").getByRole("link", { name: "Round Lab", exact: true })).toHaveAttribute("href", `${root}/products?brand=Round+Lab`);
+      if (page.viewportSize()!.width > 320) await page.setViewportSize({ width: 320, height: 900 });
+      await page.goto(`${root}/products/${gallerySlug}`);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320 + 1);
+      await expect(page.getByRole("contentinfo", { name: "HanaPure" })).toHaveCount(1);
+      await expect(page.locator('meta[name="robots"]').first()).toHaveAttribute("content", /noindex/);
+      expect((await page.goto(`${root}/products/${draftSlug}`))?.status()).toBe(404);
+      await expect(page.locator("#same-brand-heading")).toHaveCount(0);
+    });
     test("discovery entry image matches title URL and preserves detailed Search context", async ({ page }) => {
       const labels = storefrontLabels[locale];
       const query = expectedQuery("TEST ONLY", "Round Lab");

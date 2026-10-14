@@ -101,6 +101,8 @@ export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en",
   if (!product) notFound();
   const content = product.translations[locale];
   const labels = storefrontLabels[locale];
+  const brandQuery = catalogueQueryString({ query: "", brand: product.brand });
+  const related = catalogue.listPublished().filter(item => item.brand === product.brand && item.publicId !== product.publicId).slice(0, 3);
   return (
     <Container className="pb-20 pt-32 sm:pt-36">
       <Link href={`${storefrontHref("/products", routeLocale)}${catalogueQueryString(criteria)}`} className={linkStyle}>{labels.back}</Link>
@@ -112,7 +114,7 @@ export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en",
           </div>
         )}
         <div className="min-w-0">
-          <p className="text-sm text-hanapure-muted">{product.brand}</p>
+          <p className="text-sm text-hanapure-muted"><Link href={`${storefrontHref("/products", routeLocale)}${brandQuery}`} className={linkStyle}>{product.brand}</Link></p>
           <h1 id="main-content" tabIndex={-1} className="mt-3 break-words text-4xl font-light sm:text-5xl">{content?.name ?? labels.details}</h1>
           <p className="mt-6 whitespace-pre-line break-words leading-8 text-hanapure-muted">
             {content?.description ?? labels.missing}
@@ -132,6 +134,22 @@ export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en",
           <AddToCart key={product.publicId} publicId={product.publicId} locale={locale} routeLocale={routeLocale} />
         </div>
       </article>
+      {related.length > 0 && <section className="mt-12" aria-labelledby="same-brand-heading">
+        <h2 id="same-brand-heading" className="text-2xl font-light">{product.brand}</h2>
+        <ul className="mt-4 grid gap-3 sm:grid-cols-3">
+          {related.map(item => {
+            const translated = item.translations[locale];
+            return <li key={item.publicId} className="min-w-0">
+              <Link href={`${storefrontHref(`/products/${item.slug}`, routeLocale)}${brandQuery}`}
+                aria-label={translated ? undefined : `${labels.details}: ${item.brand} (${item.slug})`}
+                className="block min-h-11 break-words rounded-xl border border-hanapure-border bg-hanapure-white px-4 py-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text">
+                {translated?.name ?? labels.details}
+              </Link>
+              {!translated && <p className="mt-2 text-sm text-hanapure-muted">{labels.missing}</p>}
+            </li>;
+          })}
+        </ul>
+      </section>}
     </Container>
   );
 }

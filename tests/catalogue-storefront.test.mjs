@@ -63,6 +63,48 @@ const reader = (...records) => createLocalCatalogueReader(records);
 const { readCatalogueCriteria, catalogueQueryString } = await import("../lib/catalog/catalogue-discovery.ts");
 const { productMetadata } = await import("../lib/storefront/seo.ts");
 
+test("same-brand detail discovery limits only other published identities and preserves original Back criteria", () => {
+  for (const count of [0, 1, 2, 3, 4, 5]) for (const routeLocale of [null, "en", "hu", "ko"]) {
+    const locale = routeLocale ?? "en";
+    const current = product({ brand: "Dr. Althea" });
+    const others = Array.from({ length: count }, (_, index) => product({
+      publicId: `${String(index + 2).padStart(8, "0")}-abcd-1234-abcd-123456789abc`, slug: `same-brand-${index}`, brand: current.brand,
+    }));
+    const unrelated = product({ publicId: "82345678-abcd-1234-abcd-123456789abc", slug: "different-brand", brand: "Anua" });
+    const draft = product({ publicId: "92345678-abcd-1234-abcd-123456789abc", slug: "private-same-brand", brand: current.brand, state: "draft" });
+    const catalogue = reader(current, ...others, unrelated, draft);
+    const root = routeLocale ? `/${locale}/products` : "/products";
+    const criteria = { query: "Original & query", brand: "Round Lab" };
+    const nodes = elements(ProductDetail({ catalogue, slug: current.slug, locale, routeLocale, criteria }));
+    assert.ok(nodes.some(node => node.props?.href === root + catalogueQueryString(criteria)));
+    assert.ok(nodes.some(node => node.props?.href === `${root}?brand=Dr.+Althea`));
+    const section = nodes.find(node => node.type === "section" && node.props["aria-labelledby"] === "same-brand-heading");
+    assert.equal(Boolean(section), count > 0);
+    if (section) {
+      const links = elements(section).filter(node => node.props?.href);
+      assert.deepEqual(links.map(node => node.props.href), others.slice(0, 3).map(item => `${root}/${item.slug}?brand=Dr.+Althea`));
+      for (const link of links) assert.match(link.props.className, /focus-visible:outline-2/);
+      if (locale !== "en") {
+        assert.doesNotMatch(text(elements(section)), /Fictional fixture/);
+        assert.equal(new Set(links.map(node => node.props["aria-label"])).size, Math.min(count, 3));
+      }
+    }
+    assert.equal(catalogue.listPublished().length, count + 2);
+    assert.throws(() => ProductDetail({ catalogue, slug: draft.slug }), error => error.digest === "NEXT_HTTP_ERROR_FALLBACK;404");
+  }
+});
+
+test("related detail Back restores brand context without changing canonical SEO", () => {
+  const current = product();
+  const other = product({ publicId: "22345678-abcd-1234-abcd-123456789abc", slug: "same-brand-other" });
+  const catalogue = reader(current, other);
+  const params = readCatalogueCriteria({ brand: "beplain" });
+  const nodes = elements(ProductDetail({ catalogue, slug: other.slug, criteria: params }));
+  assert.ok(nodes.some(node => node.props?.href === "/products?brand=beplain"));
+  const metadata = productMetadata(other.slug, "en", { catalogue, origin: "https://hanapure.test" });
+  assert.equal(metadata.alternates.canonical, "/en/products/same-brand-other".replace(/^/, "https://hanapure.test"));
+});
+
 test("detail gallery receives exact ordered editorial media only for multiple images; zero/one stays unchanged", () => {
   for (const count of [0, 1, 2, 3]) {
     const record = product();
