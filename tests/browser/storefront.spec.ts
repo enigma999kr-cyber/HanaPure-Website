@@ -43,9 +43,10 @@ test("draft preview production isolation: no preview route or draft data in publ
   const slug = "test-only-private-draft-preview";
   const marker = "TEST ONLY PRIVATE DRAFT PREVIEW";
   for (const root of ["", "/en", "/hu", "/ko"]) {
-    for (const path of [`${root}/draft-preview`, `${root}/products/${slug}`]) {
+    for (const path of [`${root}/draft-preview`, `${root}/draft/0`, `${root}/products/${slug}`, `${root}/products/${slug}-0`, `${root}/products/${slug}-1`]) {
       const response = await page.goto(path); expect(response?.status()).toBe(404);
       expect(await response!.text()).not.toContain(`${marker} en`);
+      expect(await response!.text()).not.toMatch(/TEST ONLY PRIVATE DRAFT PREVIEW [01] (en|hu|ko)/);
     }
     for (const path of [`${root}/products?q=${encodeURIComponent(marker)}&brand=beplain&sort=name-asc`, `${root}/brands`, `${root}/cart`]) {
       const response = await page.goto(path); expect(response?.status()).toBe(200);

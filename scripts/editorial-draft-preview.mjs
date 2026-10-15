@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { validateEditorialCatalogue } from "../lib/catalog/editorial-catalogue.ts";
 import { storefrontLabels, storefrontLocales } from "../lib/storefront/localization.ts";
 
-// Deliberately outside the Next route/import graph. One supplied draft, read-only.
+// Deliberately outside the Next route/import graph. Supplied drafts, read-only.
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const inside = (root, path) => {
   const part = relative(root, path);
@@ -42,35 +42,68 @@ function imageFile(root, src) {
   } catch { return null; }
 }
 
-function render(draft, locale, assets) {
+function languageLinks(path, locale) {
+  return storefrontLocales.map(value => `<a href="${path}?locale=${value}" ${value === locale ? 'aria-current="page"' : ""}>${value.toUpperCase()}</a>`).join("");
+}
+
+function render(draft, locale, assets, index = null, count = 1) {
   const content = draft.translations[locale];
   const labels = storefrontLabels[locale];
+  const path = index === null ? "/" : `/draft/${index}`;
+  const mediaPath = index === null ? "" : `/draft/${index}`;
   const images = content?.images.map((image, index) => `<figure>${imageFile(assets, image.src)
-    ? `<img src="/media/${locale}/${index}" alt="${escape(image.alt)}">`
+    ? `<img src="${mediaPath}/media/${locale}/${index}" alt="${escape(image.alt)}">`
     : `<p role="img" aria-label="${escape(image.alt)}">${escape(image.alt)}</p>`}
     <figcaption>${escape(image.src)}</figcaption></figure>`).join("") ?? "";
+  const navigation = languageLinks(path, locale) + (index === null ? "" :
+    `<a href="/?locale=${locale}">Back to drafts</a>` +
+    (index > 0 ? `<a href="/draft/${index - 1}?locale=${locale}">Previous draft</a>` : "") +
+    (index + 1 < count ? `<a href="/draft/${index + 1}?locale=${locale}">Next draft</a>` : ""));
+  return page(locale, navigation, `<dl><dt>publicId</dt><dd>${escape(draft.publicId)}</dd><dt>slug</dt><dd>${escape(draft.slug)}</dd><dt>state</dt><dd>${escape(draft.state)}</dd></dl>
+    <p>${escape(draft.brand)}</p><h1>${escape(content?.name || labels.details)}</h1>
+    <p>${escape(content?.description ?? labels.missing)}</p><div class="images">${images}</div>
+    ${content?.usage !== null && content?.usage !== undefined ? `<h2>${escape(labels.usage)}</h2><p>${escape(content.usage)}</p>` : ""}
+    ${content?.caution !== null && content?.caution !== undefined ? `<h2>${escape(labels.caution)}</h2><p>${escape(content.caution)}</p>` : ""}`);
+}
+
+function renderList(records, locale) {
+  const labels = storefrontLabels[locale];
+  return page(locale, languageLinks("/", locale), `<h1>Drafts (${records.length})</h1><ol>${records.map((draft, index) => {
+    const content = draft.translations[locale];
+    return `<li><p>${escape(draft.brand)}</p><a href="/draft/${index}?locale=${locale}">${escape(content?.name || labels.details)}</a>
+      <p>${escape(draft.slug)}</p>${content === null ? `<p>${escape(labels.missing)}</p>` : ""}</li>`;
+  }).join("")}</ol>`);
+}
+
+function page(locale, navigation, body) {
+  const labels = storefrontLabels[locale];
   return `<!doctype html><html lang="${locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="robots" content="noindex,nofollow"><title>DRAFT — NOT PUBLIC</title>
     <style>*{box-sizing:border-box}body{margin:0;background:#fcfaf7;color:#1c1a18;font-family:Arial,Helvetica,sans-serif}
     main{max-width:960px;margin:auto;padding:24px}nav{display:flex;flex-wrap:wrap;gap:20px;margin:24px 0}a{color:inherit;min-height:44px;display:inline-flex;align-items:center}
-    a:focus-visible{outline:2px solid #1c1a18;outline-offset:4px}h1,p,dd,figcaption{overflow-wrap:anywhere;white-space:pre-wrap}
+    a:focus-visible{outline:2px solid #1c1a18;outline-offset:4px}h1,p,dd,figcaption,li a{overflow-wrap:anywhere;white-space:pre-wrap}
     .badge{background:#e4d4c2;padding:16px}.images{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:16px}
     figure{margin:0;min-width:0}img{width:100%;aspect-ratio:1;object-fit:contain;background:#fff}figcaption{color:#625e58}dd{margin:8px 0 20px}</style></head>
     <body><main><p class="badge">DRAFT — NOT PUBLIC</p><nav aria-label="${escape(labels.language)}">
-    ${storefrontLocales.map(value => `<a href="/?locale=${value}" ${value === locale ? 'aria-current="page"' : ""}>${value.toUpperCase()}</a>`).join("")}</nav>
-    <dl><dt>publicId</dt><dd>${escape(draft.publicId)}</dd><dt>slug</dt><dd>${escape(draft.slug)}</dd><dt>state</dt><dd>${escape(draft.state)}</dd></dl>
-    <p>${escape(draft.brand)}</p><h1>${escape(content?.name || labels.details)}</h1>
-    <p>${escape(content?.description ?? labels.missing)}</p><div class="images">${images}</div>
-    ${content?.usage !== null && content?.usage !== undefined ? `<h2>${escape(labels.usage)}</h2><p>${escape(content.usage)}</p>` : ""}
-    ${content?.caution !== null && content?.caution !== undefined ? `<h2>${escape(labels.caution)}</h2><p>${escape(content.caution)}</p>` : ""}
+    ${navigation}</nav>${body}
     </main></body></html>`;
 }
 
 export async function startDraftPreview({ draft, assetsDirectory, environment = process.env }) {
   requireLocal(environment);
-  const validation = validateEditorialCatalogue([draft]);
-  if (!validation.ok || validation.records[0].state !== "draft") throw new Error("Only one schema-valid draft may be previewed");
-  const record = validation.records[0];
+  const multi = Array.isArray(draft);
+  const input = multi ? draft : [draft];
+  if (input.length < 1 || input.length > 50) throw new Error("Preview accepts 1–50 drafts");
+  const validation = validateEditorialCatalogue(input);
+  if (!validation.ok || validation.records.some(record => record.state !== "draft")) throw new Error("Only one or more schema-valid drafts may be previewed");
+  const records = validation.records;
+  if (Buffer.byteLength(JSON.stringify(records), "utf8") > 1_000_000) throw new Error("Preview input exceeds 1MB");
+  let imageCount = 0;
+  for (const record of records) for (const content of Object.values(record.translations)) {
+    if (content && content.images.length > 10) throw new Error("Preview accepts at most 10 images per translation");
+    imageCount += content?.images.length ?? 0;
+  }
+  if (imageCount > 100) throw new Error("Preview accepts at most 100 images total");
   const assets = assetsDirectory ? outsideRepo(assetsDirectory) : null;
   if (assets && !statSync(assets).isDirectory()) throw new Error("Invalid local asset directory");
   const server = createServer({ maxHeaderSize: 8192 }, (request, response) => {
@@ -93,15 +126,28 @@ export async function startDraftPreview({ draft, assetsDirectory, environment = 
     let url;
     try { url = new URL(request.url, `http://${authority}`); } catch { return deny(400); }
     if (url.origin !== `http://${authority}`) return deny();
-    if (url.pathname === "/") {
+    // Validate the raw path, before URL dot-segment/percent normalization can hide traversal.
+    const rawPath = request.url.split("?")[0];
+    const detail = multi && /^\/draft\/(0|[1-9]\d*)$/.exec(rawPath);
+    const selected = detail ? Number(detail[1]) : null;
+    if (rawPath === "/" || detail) {
+      if (detail && (!Number.isSafeInteger(selected) || selected >= records.length)) return deny(404);
       const values = url.searchParams.getAll("locale");
       if ([...url.searchParams.keys()].some(key => key !== "locale") || values.length > 1 ||
         (values.length && !storefrontLocales.includes(values[0]))) return deny(400);
       response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      return response.end(request.method === "HEAD" ? undefined : render(record, values[0] ?? "en", assets));
+      const locale = values[0] ?? "en";
+      const html = multi && selected === null ? renderList(records, locale) :
+        render(records[selected ?? 0], locale, assets, selected, records.length);
+      return response.end(request.method === "HEAD" ? undefined : html);
     }
-    const media = /^\/media\/(en|hu|ko)\/(\d+)$/.exec(url.pathname);
-    const image = media && record.translations[media[1]]?.images[Number(media[2])];
+    const media = multi ? /^\/draft\/(0|[1-9]\d*)\/media\/(en|hu|ko)\/(0|[1-9]\d*)$/.exec(rawPath) :
+      /^\/media\/(en|hu|ko)\/(0|[1-9]\d*)$/.exec(rawPath);
+    const recordIndex = multi ? Number(media?.[1]) : 0;
+    const locale = media?.[multi ? 2 : 1];
+    const imageIndex = Number(media?.[multi ? 3 : 2]);
+    const image = media && Number.isSafeInteger(recordIndex) && Number.isSafeInteger(imageIndex) &&
+      records[recordIndex]?.translations[locale]?.images[imageIndex];
     const file = image && imageFile(assets, image.src);
     if (!file || url.search) return deny(404);
     try {
