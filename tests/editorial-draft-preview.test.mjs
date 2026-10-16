@@ -7,7 +7,7 @@ import { networkInterfaces, tmpdir } from "node:os";
 import { mkdtempSync, writeFileSync, rmSync, readFileSync, readdirSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { chromium } from "@playwright/test";
-import { startDraftPreview } from "../scripts/editorial-draft-preview.mjs";
+import { startDraftPreview, reviewCoverage, reviewCsvCell, reviewMatrixCsv } from "../scripts/editorial-draft-preview.mjs";
 import { createLocalCatalogueReader } from "../lib/catalog/editorial-catalogue.ts";
 import { localCatalogue } from "../lib/catalog/local-catalogue.ts";
 import { discoverCatalogue, publishedCatalogueBrands } from "../lib/catalog/catalogue-discovery.ts";
@@ -35,9 +35,9 @@ const drafts = count => Array.from({ length: count }, (_, index) => {
   for (const locale of ["en", "hu", "ko"]) item.translations[locale].name = `${marker} ${index} ${locale}`;
   return item;
 });
-function get(url, headers = {}) {
+function get(url, headers = {}, method = "GET") {
   return new Promise((accept, reject) => {
-    const req = request(url, { headers, timeout: 1500 }, res => {
+    const req = request(url, { headers, method, timeout: 1500 }, res => {
       const chunks = []; res.on("data", part => chunks.push(part));
       res.on("end", () => accept({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString() }));
     });
@@ -77,12 +77,92 @@ test("actual listener rejects NIC connections, spoofed Host/proxy/cross-site req
   for (const headers of [{ Host: "public.example.invalid" }, { Host: "localhost" }, { Forwarded: "for=127.0.0.1" },
     { "X-Forwarded-For": "127.0.0.1" }, { "X-Forwarded-Host": "127.0.0.1" }, { Via: "local-proxy" },
     { Origin: "https://example.invalid" }, { "Sec-Fetch-Site": "cross-site" }]) {
-    const result = await get(preview.url, headers); assert.equal(result.status, 403); assert.ok(!result.body.includes(marker));
+    for (const path of ["", "/review-matrix.csv"]) {
+      const result = await get(preview.url + path, headers); assert.equal(result.status, 403); assert.ok(!result.body.includes(marker));
+      assert.ok(!result.body.includes("publicId"));
+    }
   }
   assert.equal((await get(preview.url)).status, 200);
   current.NODE_ENV = "production";
   const refused = await get(preview.url); assert.equal(refused.status, 403); assert.ok(!refused.body.includes(marker));
+  assert.equal((await get(preview.url + "/review-matrix.csv")).status, 403);
   }
+});
+
+const coverageDrafts = () => {
+  const items = drafts(3);
+  items[1].translations.hu = null;
+  items[2].translations.en = { name: " \t", description: " ", images: [], usage: null, caution: "" };
+  items[2].translations.ko.images.push({ src: "/missing.png", alt: "  " });
+  return items;
+};
+const csvCells = text => [...text.slice(1).matchAll(/"((?:[^"]|"")*)"(?:,|\r\n)/g)].map(match => match[1].replaceAll('""', '"'));
+
+test("coverage distinguishes missing/blank/core/optional/image-alt facts without publication judgments", () => {
+  const items = coverageDrafts();
+  assert.deepEqual(reviewCoverage(null), { present: false, nameNonblank: false, descriptionNonblank: false,
+    imageCount: 0, altNonblankCount: 0, usageSupplied: false, cautionSupplied: false });
+  assert.deepEqual(reviewCoverage(items[2].translations.en), { present: true, nameNonblank: false, descriptionNonblank: false,
+    imageCount: 0, altNonblankCount: 0, usageSupplied: false, cautionSupplied: true });
+  assert.equal(reviewCoverage(items[2].translations.ko).imageCount, 2);
+  assert.equal(reviewCoverage(items[2].translations.ko).altNonblankCount, 1);
+  assert.equal(reviewCoverage(items[0].translations.hu).nameNonblank, true);
+  assert.ok(items.every(item => item.state === "draft"));
+});
+
+test("CSV is deterministic bounded coverage only with fixed headers, UTF-8 BOM, CRLF and formula-safe dynamic strings", () => {
+  const records = coverageDrafts();
+  const before = JSON.stringify(records);
+  const csv = reviewMatrixCsv(records);
+  assert.equal(csv, reviewMatrixCsv(records)); assert.equal(csv[0], "\uFEFF"); assert.ok(csv.endsWith("\r\n"));
+  const fields = ["present", "name_nonblank", "description_nonblank", "image_count", "alt_nonblank_count", "usage_supplied", "caution_supplied"];
+  const cells = csvCells(csv); const width = 24;
+  assert.equal(cells.length, width * 4);
+  assert.deepEqual(cells.slice(0, width), ["publicId", "slug", "brand", ...["en", "hu", "ko"].flatMap(locale => fields.map(field => `${locale}_${field}`))]);
+  for (let i = 0; i < records.length; i++) assert.deepEqual(cells.slice(width * (i + 1), width * (i + 1) + 3), [records[i].publicId, records[i].slug, records[i].brand]);
+  assert.deepEqual(cells.slice(width * 3 + 3, width * 3 + 10), ["true", "false", "false", "0", "0", "false", "true"]);
+  for (const privateText of [marker, "TEST ONLY usage", "TEST ONLY caution", "TEST ONLY image alt", "/fixture.png", "/missing.png", "window.previewLeak", '"translations"']) assert.ok(!csv.includes(privateText), privateText);
+  assert.equal(JSON.stringify(records), before);
+  for (const prefix of ["", " ", "\t", "\r\n", "\u0000\u001f", "\u0085", "\u200b\ufeff"]) for (const formula of ["=SUM(1,2)", "+1", "-2", "@CMD"]) {
+    const value = prefix + formula;
+    assert.equal(reviewCsvCell(value).slice(1, -1).replaceAll('""', '"'), "'" + value);
+  }
+  for (const value of ['English,"quoted"\r\nnext', "árvíztűrő 한국어", " safe text", "normal=1"]) {
+    assert.equal(reviewCsvCell(value), `"${value.replaceAll('"', '""')}"`);
+  }
+  const defensive = reviewMatrixCsv([{ ...records[0], publicId: " =1", slug: '+"quoted",\r\nvalue', brand: "\t@formula" }]);
+  assert.deepEqual(csvCells(defensive).slice(width, width + 3), ["' =1", '\'+"quoted",\r\nvalue', "'\t@formula"]);
+  for (const count of [1, 50]) {
+    const items = drafts(count); for (const item of items) for (const content of Object.values(item.translations)) content.images = [];
+    assert.equal(csvCells(reviewMatrixCsv(items)).length, width * (count + 1));
+  }
+});
+
+test("matrix filters use explicit predicates/counts, strict query allowlist, and all-draft read-only CSV/HEAD", async t => {
+  const root = fixture(t); const file = join(root, "source.json"); const items = coverageDrafts();
+  writeFileSync(file, JSON.stringify(items)); const bytes = readFileSync(file); const names = readdirSync(root);
+  const preview = await startDraftPreview({ draft: JSON.parse(bytes), environment }); t.after(preview.close);
+  for (const [locale, filter, count] of [["en", "all", 3], ["en", "needs-review", 2], ["en", "missing-locale", 1], ["hu", "missing-locale", 1], ["ko", "missing-locale", 0]]) {
+    const result = await get(`${preview.url}/?locale=${locale}&filter=${filter}`);
+    assert.equal(result.status, 200); assert.ok(result.body.includes(`Showing ${count} of 3 drafts`));
+    assert.equal((result.body.match(/scope="row"/g) ?? []).length, count);
+  }
+  const csv = await get(preview.url + "/review-matrix.csv");
+  assert.equal(csv.status, 200); assert.equal(csv.body, reviewMatrixCsv(items));
+  assert.equal(csv.headers["content-type"], "text/csv; charset=utf-8");
+  assert.equal(csv.headers["content-disposition"], 'attachment; filename="hanapure-draft-review-matrix.csv"');
+  assert.equal(csv.headers["cache-control"], "no-store"); assert.match(csv.headers["x-robots-tag"], /noindex/);
+  assert.equal(csv.headers["x-content-type-options"], "nosniff"); assert.match(csv.headers["content-security-policy"], /default-src 'none'/);
+  const head = await get(preview.url + "/review-matrix.csv", {}, "HEAD");
+  assert.equal(head.status, 200); assert.equal(head.body, ""); assert.equal(head.headers["content-disposition"], csv.headers["content-disposition"]);
+  for (const path of ["/?filter=bad", "/?filter=all&filter=all", "/draft/1?filter=all&filter=missing-locale", "/review-matrix.csv?locale=en", "/review-matrix.csv?filter=all", "/review-matrix.csv?file=/source.json"]) {
+    const result = await get(preview.url + path); assert.ok(result.status >= 400); assert.ok(!result.body.includes("publicId"));
+  }
+  assert.equal((await get(preview.url + "/review-matrix.csv", {}, "POST")).status, 405);
+  assert.deepEqual(readdirSync(root), names); assert.deepEqual(readFileSync(file), bytes);
+  const single = await startDraftPreview({ draft: draft(), environment }); t.after(single.close);
+  assert.equal((await get(single.url + "/review-matrix.csv")).status, 404);
+  assert.equal((await get(single.url + "/?filter=all")).status, 400);
 });
 
 test("local response has no-store/noindex/CSP, escapes content and does not serve arbitrary files or external images", async t => {
@@ -159,7 +239,8 @@ test("multi-draft strict routes bind media to one validated draft/locale and rej
   assert.equal((await get(preview.url + "/draft/1/media/en/0")).status, 200);
   for (const path of ["/draft/0/media/en/0", "/draft/1/media/ko/0", "/media/en/0", "/draft/1/media/en/1", "/draft/1/media/en/2", "/draft/0/media/hu/0",
     "/draft/2", "/draft/-1", "/draft/01", "/draft/1.0", "/draft/9007199254740992", "/draft/%31", "/draft/1/../0", "/draft/1/%2e%2e/0", "/%2e%2e/", "/draft/1%2fmedia/en/0",
-    "/draft/1?locale=en&locale=hu", "/draft/1?draft=0", "/?index=0", "/draft/0/media/en/0?draft=1", "/draft/1/media/en/0?locale=ko"]) {
+    "/draft/1?locale=en&locale=hu", "/draft/1?draft=0", "/?index=0", "/draft/0/media/en/0?draft=1", "/draft/1/media/en/0?locale=ko",
+    "/%72eview-matrix.csv", "/draft/0/../../review-matrix.csv", "/review-matrix.csv/", "/?filter=all&filter=needs-review"]) {
     // request.path preserves traversal; URL clients may normalize it before sending.
     const result = await new Promise((accept, reject) => {
       const req = request({ hostname: "127.0.0.1", port: new URL(preview.url).port, path }, response => {
@@ -173,6 +254,65 @@ test("multi-draft strict routes bind media to one validated draft/locale and rej
   for (const patch of [{ NODE_ENV: "production" }, { APP_ENV: "staging" }, { HANAPURE_DRAFT_PREVIEW_LOCAL: undefined }]) {
     await assert.rejects(startDraftPreview({ draft: items, environment: { ...environment, ...patch } }), /local development/);
   }
+});
+
+test("Chromium matrix: accessible 320px table/filter round trip and explicit all-draft CSV download without JS/storage", async t => {
+  const items = coverageDrafts();
+  const preview = await startDraftPreview({ draft: items, environment }); t.after(preview.close);
+  const browser = await chromium.launch(); t.after(() => browser.close());
+  const page = await browser.newPage({ viewport: { width: 320, height: 900 }, javaScriptEnabled: false });
+  let downloads = 0; page.on("download", () => { downloads++; });
+  const external = []; await page.route("**/*", route => {
+    if (new URL(route.request().url()).origin === preview.url) return route.continue();
+    external.push(route.request().url()); return route.abort();
+  });
+  const navigate = async action => {
+    await Promise.all([page.waitForEvent("framenavigated", { predicate: frame => frame === page.mainFrame() }), action()]);
+    await page.waitForLoadState("load");
+  };
+  await page.goto(preview.url);
+  assert.equal(downloads, 0);
+  assert.equal(await page.getByRole("columnheader").count(), 6); assert.equal(await page.getByRole("rowheader").count(), 3);
+  assert.equal(await page.locator("caption").textContent(), "Draft field coverage — structural presence only");
+  const region = page.getByRole("region", { name: "Draft field coverage — structural presence only", exact: true });
+  await region.focus(); await page.keyboard.press("ArrowRight");
+  await page.waitForFunction(() => document.querySelector(".matrix-scroll").scrollLeft > 0);
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= 320));
+  await navigate(() => page.getByRole("link", { name: "Needs content review", exact: true }).press("Enter"));
+  assert.equal(await page.getByRole("status").textContent(), "Showing 2 of 3 drafts");
+  await navigate(() => page.locator("tbody a").first().press("Enter"));
+  assert.equal(new URL(page.url()).pathname, "/draft/1"); assert.equal(new URL(page.url()).searchParams.get("filter"), "needs-review");
+  await navigate(() => page.getByRole("link", { name: "Next draft", exact: true }).press("Enter"));
+  assert.equal(new URL(page.url()).pathname, "/draft/2");
+  await navigate(() => page.getByRole("link", { name: "Previous draft", exact: true }).press("Enter"));
+  assert.equal(new URL(page.url()).pathname, "/draft/1");
+  await navigate(() => page.getByRole("link", { name: "HU", exact: true }).press("Enter"));
+  assert.ok(await page.getByText(storefrontLabels.hu.missing, { exact: true }).isVisible());
+  await navigate(() => page.getByRole("link", { name: "Back to drafts", exact: true }).press("Enter"));
+  assert.equal(new URL(page.url()).searchParams.get("locale"), "hu"); assert.equal(new URL(page.url()).searchParams.get("filter"), "needs-review");
+  await navigate(() => page.getByRole("link", { name: "Missing selected-locale content", exact: true }).press("Enter"));
+  assert.equal(await page.getByRole("status").textContent(), "Showing 1 of 3 drafts");
+  await navigate(() => page.getByRole("link", { name: "KO", exact: true }).press("Enter"));
+  assert.equal(await page.getByRole("status").textContent(), "Showing 0 of 3 drafts");
+  assert.ok(await page.getByText("No drafts match this review filter.", { exact: true }).isVisible());
+  assert.equal(await page.locator("tbody tr").count(), 0);
+  assert.ok(await page.getByText("Exports all drafts (not just filtered rows)", { exact: true }).isVisible());
+  assert.equal(downloads, 0);
+  const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("link", { name: "Download Review Matrix CSV", exact: true }).click()]);
+  assert.equal(download.suggestedFilename(), "hanapure-draft-review-matrix.csv");
+  const stream = await download.createReadStream(); const data = [];
+  for await (const chunk of stream) data.push(chunk);
+  assert.equal(Buffer.concat(data).toString("utf8"), reviewMatrixCsv(items)); assert.equal(downloads, 1);
+  assert.equal(await page.evaluate(() => localStorage.length), 0); assert.deepEqual(external, []);
+  // A locale change can remove a selected draft from the filtered list without
+  // changing its identity or redirecting to another product.
+  await page.goto(`${preview.url}/draft/2?locale=en&filter=missing-locale`);
+  await navigate(() => page.getByRole("link", { name: "KO", exact: true }).click());
+  assert.equal(new URL(page.url()).pathname, "/draft/2");
+  assert.equal(await page.getByRole("link", { name: "Next draft", exact: true }).count(), 0);
+  assert.equal(await page.getByRole("link", { name: "Previous draft", exact: true }).count(), 0);
+  await navigate(() => page.getByRole("link", { name: "Back to drafts", exact: true }).click());
+  assert.equal(await page.getByRole("status").textContent(), "Showing 0 of 3 drafts");
 });
 
 for (const locale of ["en", "hu", "ko"]) test(`Chromium multi ${locale}: list/detail/language/back/previous/next at 320px without scripts or cross-draft media`, async t => {
@@ -192,7 +332,10 @@ for (const locale of ["en", "hu", "ko"]) test(`Chromium multi ${locale}: list/de
   assert.equal(await page.locator("h1").textContent(), "Drafts (2)");
   assert.ok(await page.getByText("DRAFT — NOT PUBLIC", { exact: true }).isVisible());
   await page.getByRole("link", { name: "KO", exact: true }).focus(); await page.keyboard.press("Tab");
-  const first = page.locator("ol a").first();
+  assert.equal(await page.getByRole("link", { name: "All drafts", exact: true }).evaluate(node => node === document.activeElement), true);
+  await page.getByRole("region", { name: "Draft field coverage — structural presence only", exact: true }).focus();
+  await page.keyboard.press("Tab");
+  const first = page.locator("tbody a").first();
   assert.equal(await first.evaluate(node => node === document.activeElement), true);
   await navigate(() => page.keyboard.press("Enter"));
   assert.equal(new URL(page.url()).pathname, "/draft/0");
@@ -211,7 +354,7 @@ for (const locale of ["en", "hu", "ko"]) test(`Chromium multi ${locale}: list/de
   assert.equal(await page.locator("h1").textContent(), `${marker} 0 hu`);
   await navigate(() => page.getByRole("link", { name: "Back to drafts", exact: true }).click());
   assert.equal(new URL(page.url()).pathname, "/"); assert.equal(new URL(page.url()).searchParams.get("locale"), "hu");
-  assert.equal(await page.locator("ol li").count(), 2);
+  assert.equal(await page.locator("tbody tr").count(), 2);
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= 320));
   assert.equal(await page.locator("script,form,button,a[href*='/products'],a[href*='/cart']").count(), 0);
   assert.deepEqual(external, []);
