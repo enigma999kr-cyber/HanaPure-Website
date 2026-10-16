@@ -95,6 +95,7 @@ function render(draft, locale, assets, index = null, indexes = [0], filter = "al
     <figcaption>${escape(image.src)}</figcaption></figure>`).join("") ?? "";
   const position = indexes.indexOf(index);
   const navigation = languageLinks(path, locale, filter) + (index === null ? "" :
+    `<a href="${reviewHref(`${path}/compare`, locale, filter)}">Compare EN / HU / KO</a>` +
     `<a href="${reviewHref("/", locale, filter)}">Back to drafts</a>` +
     (position > 0 ? `<a href="${reviewHref(`/draft/${indexes[position - 1]}`, locale, filter)}">Previous draft</a>` : "") +
     (position >= 0 && position + 1 < indexes.length ? `<a href="${reviewHref(`/draft/${indexes[position + 1]}`, locale, filter)}">Next draft</a>` : ""));
@@ -103,6 +104,36 @@ function render(draft, locale, assets, index = null, indexes = [0], filter = "al
     <p>${escape(content?.description ?? labels.missing)}</p><div class="images">${images}</div>
     ${content?.usage !== null && content?.usage !== undefined ? `<h2>${escape(labels.usage)}</h2><p>${escape(content.usage)}</p>` : ""}
     ${content?.caution !== null && content?.caution !== undefined ? `<h2>${escape(labels.caution)}</h2><p>${escape(content.caution)}</p>` : ""}`);
+}
+
+// Explicit structural facts, never a translation fallback or editorial judgment.
+function comparisonText(value) {
+  if (value === null) return "<p>Not supplied (null)</p>";
+  if (value === "") return "<p>Empty string</p>";
+  if (!value.trim()) return `<p>Whitespace only</p><pre>${escape(value)}</pre>`;
+  return `<p>${escape(value)}</p>`;
+}
+
+function renderComparison(draft, locale, assets, index, indexes, filter) {
+  const path = `/draft/${index}`;
+  const position = indexes.indexOf(index);
+  const navigation = languageLinks(`${path}/compare`, locale, filter) +
+    `<a href="${reviewHref(path, locale, filter)}">Back to draft</a><a href="${reviewHref("/", locale, filter)}">Back to drafts</a>` +
+    (position > 0 ? `<a href="${reviewHref(`/draft/${indexes[position - 1]}/compare`, locale, filter)}">Previous draft</a>` : "") +
+    (position >= 0 && position + 1 < indexes.length ? `<a href="${reviewHref(`/draft/${indexes[position + 1]}/compare`, locale, filter)}">Next draft</a>` : "");
+  const fields = [["Name", "name"], ["Description", "description"], ["Images", "images"], ["Usage", "usage"], ["Caution", "caution"]];
+  return page(locale, navigation, `<h1>Compare EN / HU / KO</h1>
+    <dl><dt>publicId</dt><dd>${escape(draft.publicId)}</dd><dt>slug</dt><dd>${escape(draft.slug)}</dd><dt>brand</dt><dd>${escape(draft.brand)}</dd></dl>
+    <div class="matrix-scroll" role="region" aria-labelledby="comparison-caption" tabindex="0"><table class="comparison">
+    <caption id="comparison-caption">Same draft — supplied language content</caption><thead><tr><th scope="col">Field</th>${storefrontLocales.map(value => `<th scope="col" lang="${value}">${value.toUpperCase()}</th>`).join("")}</tr></thead>
+    <tbody>${fields.map(([label, field]) => `<tr><th scope="row">${label}</th>${storefrontLocales.map(value => {
+      const content = draft.translations[value];
+      if (content === null) return `<td lang="${value}"><p>Translation missing (null)</p></td>`;
+      const body = field !== "images" ? comparisonText(content[field]) : `<p>Images: ${content.images.length}</p>` + content.images.map((image, imageIndex) =>
+        `<figure>${imageFile(assets, image.src) ? `<img src="${path}/media/${value}/${imageIndex}" alt="${escape(image.alt)}">` : `<p>Image unavailable</p>`}
+        <figcaption>Supplied ALT:${comparisonText(image.alt)}</figcaption></figure>`).join("");
+      return `<td lang="${value}">${body}</td>`;
+    }).join("")}</tr>`).join("")}</tbody></table></div>`);
 }
 
 function renderList(records, locale, indexes, filter) {
@@ -144,7 +175,8 @@ function page(locale, navigation, body) {
     .badge{background:#e4d4c2;padding:16px}.images{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:16px}
     figure{margin:0;min-width:0}img{width:100%;aspect-ratio:1;object-fit:contain;background:#fff}figcaption{color:#625e58}dd{margin:8px 0 20px}
     .matrix-scroll{max-width:100%;overflow-x:auto;margin-top:24px}.matrix-scroll:focus-visible{outline:2px solid #1c1a18;outline-offset:4px}
-    table{border-collapse:collapse;min-width:1100px;width:100%}th,td{padding:16px;border:1px solid #e5ddd3;text-align:left;vertical-align:top;max-width:260px;overflow-wrap:anywhere}caption{padding:12px;text-align:left}</style></head>
+    table{border-collapse:collapse;min-width:1100px;width:100%}th,td{padding:16px;border:1px solid #e5ddd3;text-align:left;vertical-align:top;max-width:260px;overflow-wrap:anywhere}caption{padding:12px;text-align:left}
+    .comparison{table-layout:fixed;min-width:760px}.comparison th:first-child{width:100px}.comparison p,.comparison pre{white-space:pre-wrap;overflow-wrap:anywhere}.comparison figure+figure{margin-top:16px}</style></head>
     <body><main><p class="badge">DRAFT — NOT PUBLIC</p><nav aria-label="${escape(labels.language)}">
     ${navigation}</nav>${body}
     </main></body></html>`;
@@ -195,7 +227,7 @@ export async function startDraftPreview({ draft, assetsDirectory, environment = 
         "Content-Disposition": 'attachment; filename="hanapure-draft-review-matrix.csv"' });
       return response.end(request.method === "HEAD" ? undefined : reviewMatrixCsv(records));
     }
-    const detail = multi && /^\/draft\/(0|[1-9]\d*)$/.exec(rawPath);
+    const detail = multi && /^\/draft\/(0|[1-9]\d*)(\/compare)?$/.exec(rawPath);
     const selected = detail ? Number(detail[1]) : null;
     if (rawPath === "/" || detail) {
       if (detail && (!Number.isSafeInteger(selected) || selected >= records.length)) return deny(404);
@@ -209,6 +241,7 @@ export async function startDraftPreview({ draft, assetsDirectory, environment = 
       const filter = filters[0] ?? "all";
       const indexes = records.flatMap((record, index) => matchesReview(record, locale, filter) ? [index] : []);
       const html = multi && selected === null ? renderList(records, locale, indexes, filter) :
+        detail?.[2] ? renderComparison(records[selected], locale, assets, selected, indexes, filter) :
         render(records[selected ?? 0], locale, assets, selected, indexes, filter);
       return response.end(request.method === "HEAD" ? undefined : html);
     }

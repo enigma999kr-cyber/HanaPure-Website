@@ -6,7 +6,7 @@ import { spawnSync } from "node:child_process";
 import { networkInterfaces, tmpdir } from "node:os";
 import { mkdtempSync, writeFileSync, rmSync, readFileSync, readdirSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
-import { chromium } from "@playwright/test";
+import { chromium, expect } from "@playwright/test";
 import { startDraftPreview, reviewCoverage, reviewCsvCell, reviewMatrixCsv } from "../scripts/editorial-draft-preview.mjs";
 import { createLocalCatalogueReader } from "../lib/catalog/editorial-catalogue.ts";
 import { localCatalogue } from "../lib/catalog/local-catalogue.ts";
@@ -77,7 +77,7 @@ test("actual listener rejects NIC connections, spoofed Host/proxy/cross-site req
   for (const headers of [{ Host: "public.example.invalid" }, { Host: "localhost" }, { Forwarded: "for=127.0.0.1" },
     { "X-Forwarded-For": "127.0.0.1" }, { "X-Forwarded-Host": "127.0.0.1" }, { Via: "local-proxy" },
     { Origin: "https://example.invalid" }, { "Sec-Fetch-Site": "cross-site" }]) {
-    for (const path of ["", "/review-matrix.csv"]) {
+    for (const path of ["", "/review-matrix.csv", "/draft/0/compare"]) {
       const result = await get(preview.url + path, headers); assert.equal(result.status, 403); assert.ok(!result.body.includes(marker));
       assert.ok(!result.body.includes("publicId"));
     }
@@ -86,6 +86,7 @@ test("actual listener rejects NIC connections, spoofed Host/proxy/cross-site req
   current.NODE_ENV = "production";
   const refused = await get(preview.url); assert.equal(refused.status, 403); assert.ok(!refused.body.includes(marker));
   assert.equal((await get(preview.url + "/review-matrix.csv")).status, 403);
+  assert.equal((await get(preview.url + "/draft/0/compare")).status, 403);
   }
 });
 
@@ -163,6 +164,7 @@ test("matrix filters use explicit predicates/counts, strict query allowlist, and
   const single = await startDraftPreview({ draft: draft(), environment }); t.after(single.close);
   assert.equal((await get(single.url + "/review-matrix.csv")).status, 404);
   assert.equal((await get(single.url + "/?filter=all")).status, 400);
+  assert.equal((await get(single.url + "/draft/0/compare")).status, 404);
 });
 
 test("local response has no-store/noindex/CSP, escapes content and does not serve arbitrary files or external images", async t => {
@@ -240,7 +242,11 @@ test("multi-draft strict routes bind media to one validated draft/locale and rej
   for (const path of ["/draft/0/media/en/0", "/draft/1/media/ko/0", "/media/en/0", "/draft/1/media/en/1", "/draft/1/media/en/2", "/draft/0/media/hu/0",
     "/draft/2", "/draft/-1", "/draft/01", "/draft/1.0", "/draft/9007199254740992", "/draft/%31", "/draft/1/../0", "/draft/1/%2e%2e/0", "/%2e%2e/", "/draft/1%2fmedia/en/0",
     "/draft/1?locale=en&locale=hu", "/draft/1?draft=0", "/?index=0", "/draft/0/media/en/0?draft=1", "/draft/1/media/en/0?locale=ko",
-    "/%72eview-matrix.csv", "/draft/0/../../review-matrix.csv", "/review-matrix.csv/", "/?filter=all&filter=needs-review"]) {
+    "/%72eview-matrix.csv", "/draft/0/../../review-matrix.csv", "/review-matrix.csv/", "/?filter=all&filter=needs-review",
+    "/draft/-1/compare", "/draft/2/compare", "/draft/01/compare", "/draft/%31/compare", "/draft/9007199254740992/compare",
+    "/draft/1/../0/compare", "/draft/1/%2e%2e/0/compare", "/draft/1%2fcompare", "/draft/1/compare/",
+    "/draft/1/compare?locale=en&locale=ko", "/draft/1/compare?locale=fr", "/draft/1/compare?filter=bad",
+    "/draft/1/compare?filter=all&filter=all", "/draft/1/compare?q=x", "/draft/1/compare?draft=0"]) {
     // request.path preserves traversal; URL clients may normalize it before sending.
     const result = await new Promise((accept, reject) => {
       const req = request({ hostname: "127.0.0.1", port: new URL(preview.url).port, path }, response => {
@@ -254,6 +260,123 @@ test("multi-draft strict routes bind media to one validated draft/locale and rej
   for (const patch of [{ NODE_ENV: "production" }, { APP_ENV: "staging" }, { HANAPURE_DRAFT_PREVIEW_LOCAL: undefined }]) {
     await assert.rejects(startDraftPreview({ draft: items, environment: { ...environment, ...patch } }), /local development/);
   }
+});
+
+const comparisonDrafts = () => {
+  const items = drafts(3);
+  for (const [index, item] of items.entries()) for (const [locale, content] of Object.entries(item.translations)) {
+    content.name = `Overlapping name ${locale}`;
+    content.description = `Draft ${index} ${locale} <script>window.previewLeak=1</script> & "quoted"`;
+    content.usage = `Draft ${index} ${locale} usage`;
+    content.caution = `Draft ${index} ${locale} caution`;
+  }
+  items[1].translations.en.images = [];
+  items[1].translations.hu.images.push({ src: "https://example.invalid/private.png", alt: 'HU "remote" <alt>' });
+  items[1].translations.en.usage = "";
+  items[1].translations.hu.usage = " \t";
+  items[1].translations.ko.usage = null;
+  items[2].translations.hu = null;
+  return items;
+};
+
+test("comparison is same immutable draft, escaped field-aligned content, strict HEAD/methods and unchanged CSV bytes", async t => {
+  const items = comparisonDrafts(); const original = JSON.stringify(items);
+  const preview = await startDraftPreview({ draft: items, environment, assetsDirectory: fixture(t) }); t.after(preview.close);
+  const csvBefore = (await get(preview.url + "/review-matrix.csv")).body;
+  items[1].translations.ko.description = "MUTATED";
+  const result = await get(preview.url + "/draft/1/compare?locale=hu&filter=needs-review");
+  assert.equal(result.status, 200);
+  for (const locale of ["en", "hu", "ko"]) {
+    assert.ok(result.body.includes(`Draft 1 ${locale} &lt;script&gt;`));
+    assert.ok(!result.body.includes(`Draft 0 ${locale}`)); assert.ok(!result.body.includes(`Draft 2 ${locale}`));
+  }
+  for (const text of ["Empty string", "Whitespace only", "Not supplied (null)", "Images: 0", "Images: 1", "Images: 2", "Supplied ALT:", "HU &quot;remote&quot; &lt;alt&gt;"])
+    assert.ok(result.body.includes(text), text);
+  assert.ok(!result.body.includes("<script>")); assert.ok(!result.body.includes("MUTATED"));
+  assert.ok(!result.body.includes("https://example.invalid")); assert.ok(!result.body.includes("/fixture.png"));
+  assert.ok(result.body.includes(items[1].publicId)); assert.ok(result.body.includes(items[1].slug));
+  assert.ok(result.body.includes('/draft/1/media/hu/0')); assert.ok(!result.body.includes('/draft/0/media/'));
+  assert.equal(result.headers["cache-control"], "no-store"); assert.match(result.headers["x-robots-tag"], /noindex/);
+  assert.match(result.headers["content-security-policy"], /default-src 'none'/); assert.equal(result.headers["x-content-type-options"], "nosniff");
+  const head = await get(preview.url + "/draft/1/compare", {}, "HEAD"); assert.equal(head.status, 200); assert.equal(head.body, "");
+  for (const method of ["POST", "PUT", "DELETE"]) assert.equal((await get(preview.url + "/draft/1/compare", {}, method)).status, 405);
+  const missing = await get(preview.url + "/draft/2/compare");
+  assert.equal((missing.body.match(/Translation missing \(null\)/g) ?? []).length, 5);
+  assert.ok(!missing.body.includes("Draft 2 hu"));
+  assert.equal((await get(preview.url + "/review-matrix.csv")).body, csvBefore);
+  assert.equal(csvBefore, reviewMatrixCsv(JSON.parse(original)));
+  const blank = drafts(1); blank[0].translations.en = { name: "", description: " \t", images: [], usage: null, caution: "" };
+  blank[0].translations.ko.caution = " \t";
+  const emptyPreview = await startDraftPreview({ draft: blank, environment }); t.after(emptyPreview.close);
+  const empty = await get(emptyPreview.url + "/draft/0/compare");
+  assert.match(empty.body, /<th scope="row">Name<\/th><td lang="en"><p>Empty string<\/p>/);
+  assert.match(empty.body, /<th scope="row">Description<\/th><td lang="en"><p>Whitespace only<\/p>/);
+  assert.match(empty.body, /<th scope="row">Caution<\/th><td lang="en"><p>Empty string<\/p>/);
+  assert.ok(!empty.body.includes(storefrontLabels.en.details));
+});
+
+for (const width of [320, 1280]) test(`Chromium comparison ${width}px: native no-JS aligned fields, scoped media and filtered identity round trips`, async t => {
+  const items = comparisonDrafts();
+  const preview = await startDraftPreview({ draft: items, environment, assetsDirectory: fixture(t) }); t.after(preview.close);
+  const browser = await chromium.launch(); t.after(() => browser.close());
+  const page = await browser.newPage({ viewport: { width, height: 900 }, javaScriptEnabled: false });
+  const external = []; await page.route("**/*", route => {
+    if (new URL(route.request().url()).origin === preview.url) return route.continue();
+    external.push(route.request().url()); return route.abort();
+  });
+  const navigate = async action => {
+    await Promise.all([page.waitForEvent("framenavigated", { predicate: frame => frame === page.mainFrame() }), action()]);
+    await page.waitForLoadState("load");
+  };
+  await page.goto(`${preview.url}/draft/1?locale=hu&filter=needs-review`);
+  const compare = page.getByRole("link", { name: "Compare EN / HU / KO", exact: true });
+  await compare.focus(); assert.equal(await compare.evaluate(node => getComputedStyle(node).outlineStyle), "solid");
+  assert.ok((await compare.boundingBox()).height >= 44);
+  await navigate(() => page.keyboard.press("Enter"));
+  assert.equal(new URL(page.url()).pathname, "/draft/1/compare");
+  assert.equal(await page.getByRole("columnheader").allTextContents().then(values => values.join(",")), "Field,EN,HU,KO");
+  assert.deepEqual(await page.getByRole("rowheader").allTextContents(), ["Name", "Description", "Images", "Usage", "Caution"]);
+  for (const [index, locale] of ["en", "hu", "ko"].entries()) {
+    const cell = page.locator("tbody tr").nth(1).locator("td").nth(index);
+    assert.equal(await cell.getAttribute("lang"), locale);
+    assert.equal(await cell.textContent(), items[1].translations[locale].description);
+    assert.equal(await page.locator("tbody tr").nth(0).locator("td").nth(index).textContent(), items[1].translations[locale].name);
+    assert.equal(await page.locator("tbody tr").nth(4).locator("td").nth(index).textContent(), items[1].translations[locale].caution);
+    const images = page.locator("tbody tr").nth(2).locator("td").nth(index);
+    assert.ok((await images.textContent()).includes(`Images: ${items[1].translations[locale].images.length}`));
+    for (const image of items[1].translations[locale].images) assert.ok((await images.textContent()).includes(image.alt));
+  }
+  assert.deepEqual(await page.locator("tbody tr").nth(3).locator("td p").allTextContents(), ["Empty string", "Whitespace only", "Not supplied (null)"]);
+  for (const image of await page.locator("img").all()) {
+    assert.ok((await image.getAttribute("src")).startsWith("/draft/1/media/"));
+    assert.equal(await image.evaluate(async node => { await node.decode(); return node.naturalWidth; }), 1);
+  }
+  assert.ok(await page.getByText('HU "remote" <alt>', { exact: true }).isVisible());
+  const region = page.getByRole("region", { name: "Same draft — supplied language content", exact: true });
+  await region.focus(); assert.equal(await region.evaluate(node => getComputedStyle(node).outlineStyle), "solid");
+  // Poll from the test process: page-side polling does not run with JavaScript disabled.
+  if (width === 320) { await page.keyboard.press("ArrowRight"); await expect.poll(() => region.evaluate(node => node.scrollLeft)).toBeGreaterThan(0); }
+  else assert.equal(await region.evaluate(node => node.scrollWidth <= node.clientWidth), true);
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  await navigate(() => page.getByRole("link", { name: "Next draft", exact: true }).press("Enter"));
+  assert.equal(new URL(page.url()).pathname, "/draft/2/compare");
+  assert.equal(await page.getByText("Translation missing (null)", { exact: true }).count(), 5);
+  for (const [index, locale] of [[0, "en"], [2, "ko"]])
+    assert.equal(await page.locator("tbody tr").nth(3).locator("td").nth(index).textContent(), items[2].translations[locale].usage);
+  await navigate(() => page.getByRole("link", { name: "Previous draft", exact: true }).press("Enter"));
+  assert.equal(new URL(page.url()).pathname, "/draft/1/compare");
+  await navigate(() => page.getByRole("link", { name: "Back to draft", exact: true }).press("Enter"));
+  assert.equal(new URL(page.url()).pathname, "/draft/1"); assert.equal(new URL(page.url()).searchParams.get("filter"), "needs-review");
+  await page.goto(`${preview.url}/draft/2/compare?locale=hu&filter=missing-locale`);
+  await navigate(() => page.getByRole("link", { name: "KO", exact: true }).press("Enter"));
+  assert.equal(new URL(page.url()).pathname, "/draft/2/compare");
+  assert.equal(await page.getByRole("link", { name: "Previous draft", exact: true }).count(), 0);
+  assert.equal(await page.getByRole("link", { name: "Next draft", exact: true }).count(), 0);
+  await navigate(() => page.getByRole("link", { name: "Back to drafts", exact: true }).press("Enter"));
+  assert.equal(await page.getByRole("status").textContent(), "Showing 0 of 3 drafts");
+  assert.equal(new URL(page.url()).searchParams.get("locale"), "ko");
+  assert.equal(await page.locator("script,form,button").count(), 0); assert.deepEqual(external, []);
+  assert.equal(await page.evaluate(() => localStorage.length), 0);
 });
 
 test("Chromium matrix: accessible 320px table/filter round trip and explicit all-draft CSV download without JS/storage", async t => {
@@ -276,7 +399,7 @@ test("Chromium matrix: accessible 320px table/filter round trip and explicit all
   assert.equal(await page.locator("caption").textContent(), "Draft field coverage — structural presence only");
   const region = page.getByRole("region", { name: "Draft field coverage — structural presence only", exact: true });
   await region.focus(); await page.keyboard.press("ArrowRight");
-  await page.waitForFunction(() => document.querySelector(".matrix-scroll").scrollLeft > 0);
+  await expect.poll(() => region.evaluate(node => node.scrollLeft)).toBeGreaterThan(0);
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= 320));
   await navigate(() => page.getByRole("link", { name: "Needs content review", exact: true }).press("Enter"));
   assert.equal(await page.getByRole("status").textContent(), "Showing 2 of 3 drafts");
