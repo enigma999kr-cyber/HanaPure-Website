@@ -218,16 +218,109 @@ function createPrivate(input, record) {
   } finally { if (fd !== undefined) fs.closeSync(fd); }
 }
 
+const inventoryMarker = "LOCAL DRAFT CHANGE INVENTORY ONLY / NOT LP APPROVED / NOT PUBLICATION READY";
+const maximumInventoryBytes = 32_768;
+const textState = value => value === null ? "null" : value === "" ? "empty" : value.trim() === "" ? "whitespace_only" : "nonblank";
+
+function compareValidated(before, after) {
+  // Both sides are independently validated even when one fails; never emit a
+  // partial inventory. Fixed before/after order and the existing diagnostic cap.
+  const diagnostics = [];
+  let suppressed = false;
+  for (const [side, result] of [["before", before], ["after", after]]) if (!result.ok) {
+    for (const diagnostic of result.diagnostics) {
+      if (diagnostics.length < maximumDiagnostics) diagnostics.push({ side, ...diagnostic }); else suppressed = true;
+    }
+    suppressed ||= result.more_suppressed;
+  }
+  if (diagnostics.length) return { ok: false, diagnostics, more_suppressed: suppressed };
+  const left = new Map(before.records.map(record => [record.publicId.toLowerCase(), record]));
+  const right = new Map(after.records.map(record => [record.publicId.toLowerCase(), record]));
+  const result = { ok: true, code: "draft_change_inventory", before_total: left.size, after_total: right.size,
+    added: 0, removed: 0, unchanged: 0, changed: 0, field_changes_total: 0, entries_total: 0,
+    image_comparison: "ordered_positions_not_image_identity", entries: [], more_suppressed: false, marker: inventoryMarker };
+  const inventory = [];
+  // Sort immutable UUID keys, not content, locale collation or input array index.
+  for (const id of [...new Set([...left.keys(), ...right.keys()])].sort()) {
+    const a = left.get(id), b = right.get(id);
+    if (!a || !b) {
+      const status = a ? "removed" : "added"; result[status]++;
+      inventory.push({ publicId: (a ?? b).publicId, status }); continue;
+    }
+    const changes = [];
+    const scalar = (field, previous, current) => {
+      if (previous !== current) changes.push({ field, before: textState(previous), after: textState(current) });
+    };
+    scalar("brand", a.brand, b.brand); scalar("slug", a.slug, b.slug);
+    for (const locale of locales) {
+      const previous = a.translations[locale], current = b.translations[locale], field = `translations.${locale}`;
+      if (previous === null || current === null) {
+        if (previous !== current) changes.push({ field, before: previous === null ? "null" : "provided", after: current === null ? "null" : "provided" });
+        continue;
+      }
+      scalar(`${field}.name`, previous.name, current.name); scalar(`${field}.description`, previous.description, current.description);
+      const imageChanges = [];
+      for (let ordinal = 0; ordinal < Math.max(previous.images.length, current.images.length); ordinal++) {
+        const old = previous.images[ordinal], next = current.images[ordinal];
+        const srcChanged = old?.src !== next?.src, altChanged = old?.alt !== next?.alt;
+        if (srcChanged || altChanged) imageChanges.push({ field: `${field}.images[${ordinal}]`,
+          before: old ? { src: textState(old.src), alt: textState(old.alt) } : "absent",
+          after: next ? { src: textState(next.src), alt: textState(next.alt) } : "absent",
+          src_changed: srcChanged, alt_changed: altChanged });
+      }
+      if (imageChanges.length) changes.push({ field: `${field}.images`, before: previous.images.length, after: current.images.length }, ...imageChanges);
+      scalar(`${field}.usage`, previous.usage, current.usage); scalar(`${field}.caution`, previous.caution, current.caution);
+    }
+    if (!changes.length) { result.unchanged++; continue; }
+    result.changed++; result.field_changes_total += changes.length;
+    inventory.push({ publicId: a.publicId, status: "changed", field_changes_total: changes.length, changes });
+  }
+  result.entries_total = inventory.length;
+  // Counts above cover ALL records/fields. Only the display payload is limited.
+  let fieldBudget = 128;
+  for (const item of inventory) {
+    if (result.entries.length >= 50) { result.more_suppressed = true; continue; }
+    const entry = item.status === "changed" ? { ...item, changes: item.changes.slice(0, fieldBudget), more_suppressed: false } : item;
+    const fits = () => Buffer.byteLength(JSON.stringify({ ...result, entries: [...result.entries, entry] }), "utf8") < maximumInventoryBytes;
+    while (!fits() && entry.changes?.length) entry.changes.pop();
+    if (!fits()) { result.more_suppressed = true; continue; }
+    if (entry.changes) {
+      entry.more_suppressed = entry.changes.length < item.changes.length;
+      result.more_suppressed ||= entry.more_suppressed; fieldBudget -= entry.changes.length;
+    }
+    result.entries.push(entry);
+  }
+  // One byte reserved above covers false/true representation changes. Newline
+  // written by the CLI is included in this final bound.
+  if (Buffer.byteLength(JSON.stringify(result) + "\n", "utf8") > maximumInventoryBytes) fail("comparison_unavailable");
+  return result;
+}
+
+export function compareSnapshots(before, after) {
+  return compareValidated(diagnoseDraft(before), diagnoseDraft(after));
+}
+
 export function runIntake(args, environment = process.env) {
   try {
     localOnly(environment);
     const [command, ...rest] = args;
-    const names = command === "starter" ? ["--public-id", "--brand", "--slug", "--output"] : command === "validate" ? ["--file"] : [];
+    const names = command === "starter" ? ["--public-id", "--brand", "--slug", "--output"] :
+      command === "validate" ? ["--file"] : command === "compare" ? ["--before", "--after"] : [];
     const values = new Map();
     if (!names.length || rest.length !== names.length * 2) fail("invalid_arguments");
     for (let index = 0; index < rest.length; index += 2) {
       if (!names.includes(rest[index]) || values.has(rest[index]) || typeof rest[index + 1] !== "string" || !rest[index + 1] || rest[index + 1].startsWith("--")) fail("invalid_arguments");
       values.set(rest[index], rest[index + 1]);
+    }
+    if (command === "compare") {
+      // Same physical file is allowed: independently read and validate twice.
+      // This inventories the observed snapshots, not an atomic filesystem pair.
+      const snapshots = ["before", "after"].map(side => {
+        try { return diagnoseDraft(readPrivate(values.get(`--${side}`))); }
+        catch (error) { return { ok: false, diagnostics: [{ draft_index: null, locale: null, field: "$",
+          code: error instanceof IntakeFailure ? error.message : "input_unavailable" }], more_suppressed: false }; }
+      });
+      return compareValidated(...snapshots);
     }
     const input = command === "validate" ? readPrivate(values.get("--file")) : {
       publicId: values.get("--public-id"), brand: values.get("--brand"), slug: values.get("--slug"), state: "draft", translations: { en: null, hu: null, ko: null } };
