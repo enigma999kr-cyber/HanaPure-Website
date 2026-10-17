@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { readFileSync, realpathSync, statSync } from "node:fs";
+import { closeSync, openSync, readSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { validateEditorialCatalogue } from "../lib/catalog/editorial-catalogue.ts";
@@ -31,15 +31,46 @@ function outsideRepo(path) {
   return real;
 }
 
-function imageFile(root, src) {
-  if (!root || !src.startsWith("/") || src.startsWith("//")) return null;
+// Bounded header signatures only, not decoding, integrity, rights or approval checks.
+function matchesImageHeader(file, mime) {
+  const fd = openSync(file, "r");
   try {
+    const header = Buffer.alloc(32); const length = readSync(fd, header, 0, header.length, 0);
+    const bytes = header.subarray(0, length);
+    if (mime === "image/png") return bytes.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex"));
+    if (mime === "image/jpeg") return bytes.subarray(0, 3).equals(Buffer.from("ffd8ff", "hex"));
+    if (mime === "image/gif") return ["GIF87a", "GIF89a"].includes(bytes.toString("ascii", 0, 6));
+    if (mime === "image/webp") return bytes.toString("ascii", 0, 4) === "RIFF" && bytes.toString("ascii", 8, 12) === "WEBP";
+    if (mime === "image/avif") return bytes.toString("ascii", 4, 8) === "ftyp" &&
+      [8, 16, 20, 24, 28].some(offset => ["avif", "avis"].includes(bytes.toString("ascii", offset, offset + 4)));
+    return false;
+  } finally { closeSync(fd); }
+}
+
+function inspectImage(root, src) {
+  const result = (diagnostic, file = null) => ({ diagnostic, file });
+  if (/^https:/i.test(src)) return result("External — Not Checked (HTTPS)");
+  if (!src.startsWith("/") || src.startsWith("//")) return result("Local — Path Restricted");
+  try {
+    // Reject dot segments before URL normalization; decoded Windows separators/ADS too.
+    const raw = decodeURIComponent(src.split(/[?#]/)[0]);
+    if (/[\\:\u0000-\u001f\u007f]/.test(raw) || raw.split("/").some(part => part === "." || part === "..")) return result("Local — Path Restricted");
+    if (!root) return result("Local — Assets Not Configured");
     const pathname = decodeURIComponent(new URL(src, "http://127.0.0.1").pathname);
     const file = realpathSync(resolve(root, `.${pathname}`));
+    if (!inside(root, file) || inside(repo, file)) return result("Local — Path Restricted");
+    const stat = statSync(file);
+    if (!stat.isFile()) return result("Local — Missing / Inaccessible");
     const mime = mimeTypes[extname(file).toLowerCase()];
-    if (!inside(root, file) || inside(repo, file) || !mime || !statSync(file).isFile() || statSync(file).size > 8_000_000) return null;
-    return { file, mime };
-  } catch { return null; }
+    if (!mime) return result("Local — Unsupported Format or Format Mismatch");
+    if (stat.size > 8_000_000) return result("Local — Exceeds 8MB Limit");
+    if (!matchesImageHeader(file, mime)) return result("Local — Unsupported Format or Format Mismatch");
+    return result("Local — Available", { file, mime });
+  } catch { return result("Local — Missing / Inaccessible"); }
+}
+
+function imageFile(root, src) {
+  return inspectImage(root, src).file;
 }
 
 const reviewFilters = ["all", "needs-review", "missing-locale"];
@@ -80,6 +111,27 @@ export function reviewMatrixCsv(records) {
   return "\uFEFF" + [header, ...rows].map(row => row.map(reviewCsvCell).join(",")).join("\r\n") + "\r\n";
 }
 
+export function draftMediaRows(records, assets) {
+  return records.flatMap((draft, index) => storefrontLocales.flatMap(locale => {
+    const content = draft.translations[locale];
+    const identity = { draftIndex: index, publicId: draft.publicId, slug: draft.slug, locale };
+    if (!content || !content.images.length) return [{ ...identity, ordinal: "", source: "", altSupplied: "",
+      availability: "Not applicable", diagnostic: content ? "No images supplied" : "Translation missing (null)" }];
+    return content.images.map((image, imageIndex) => {
+      const { diagnostic } = inspectImage(assets, image.src);
+      return { ...identity, ordinal: imageIndex + 1, source: image.src, altSupplied: Boolean(image.alt.trim()),
+        availability: diagnostic === "Local — Available" ? "Available" : diagnostic.startsWith("External") ? "Not checked" : "Unavailable", diagnostic };
+    });
+  }));
+}
+
+export function draftMediaCsv(rows) {
+  const header = ["draft_index", "publicId", "slug", "locale", "image_ordinal", "source", "alt_supplied", "local_availability", "diagnostic"];
+  return "\uFEFF" + [header, ...rows.map(row => [row.draftIndex, row.publicId, row.slug, row.locale,
+    row.ordinal, row.source, row.altSupplied, row.availability, row.diagnostic])]
+    .map(row => row.map(reviewCsvCell).join(",")).join("\r\n") + "\r\n";
+}
+
 function languageLinks(path, locale, filter = "all") {
   return storefrontLocales.map(value => `<a href="${reviewHref(path, value, filter)}" ${value === locale ? 'aria-current="page"' : ""}>${value.toUpperCase()}</a>`).join("");
 }
@@ -94,7 +146,7 @@ function render(draft, locale, assets, index = null, indexes = [0], filter = "al
     : `<p role="img" aria-label="${escape(image.alt)}">${escape(image.alt)}</p>`}
     <figcaption>${escape(image.src)}</figcaption></figure>`).join("") ?? "";
   const position = indexes.indexOf(index);
-  const navigation = languageLinks(path, locale, filter) + (index === null ? "" :
+  const navigation = languageLinks(path, locale, filter) + `<a href="${reviewHref(`${mediaPath}/media-audit`, locale, filter)}">Draft media audit</a>` + (index === null ? "" :
     `<a href="${reviewHref(`${path}/compare`, locale, filter)}">Compare EN / HU / KO</a>` +
     `<a href="${reviewHref("/", locale, filter)}">Back to drafts</a>` +
     (position > 0 ? `<a href="${reviewHref(`/draft/${indexes[position - 1]}`, locale, filter)}">Previous draft</a>` : "") +
@@ -118,6 +170,7 @@ function renderComparison(draft, locale, assets, index, indexes, filter) {
   const path = `/draft/${index}`;
   const position = indexes.indexOf(index);
   const navigation = languageLinks(`${path}/compare`, locale, filter) +
+    `<a href="${reviewHref(`${path}/media-audit`, locale, filter)}">Draft media audit</a>` +
     `<a href="${reviewHref(path, locale, filter)}">Back to draft</a><a href="${reviewHref("/", locale, filter)}">Back to drafts</a>` +
     (position > 0 ? `<a href="${reviewHref(`/draft/${indexes[position - 1]}/compare`, locale, filter)}">Previous draft</a>` : "") +
     (position >= 0 && position + 1 < indexes.length ? `<a href="${reviewHref(`/draft/${indexes[position + 1]}/compare`, locale, filter)}">Next draft</a>` : "");
@@ -146,6 +199,7 @@ function renderList(records, locale, indexes, filter) {
     <nav aria-label="Content review filters">${reviewFilters.map((value, index) => `<a href="${reviewHref("/", locale, value)}" ${value === filter ? 'aria-current="page"' : ""}>${filterNames[index]}</a>`).join("")}</nav>
     <p role="status">Showing ${indexes.length} of ${records.length} drafts</p>
     <a href="/review-matrix.csv" download>Download Review Matrix CSV</a><p>Exports all drafts (not just filtered rows)</p>
+    <a href="${reviewHref("/media-audit", locale, filter)}">Draft media audit</a>
     ${indexes.length === 0 ? "<p>No drafts match this review filter.</p>" : ""}
     <div class="matrix-scroll" role="region" aria-labelledby="coverage-caption" tabindex="0"><table>
     <caption id="coverage-caption">Draft field coverage — structural presence only</caption>
@@ -163,6 +217,22 @@ function renderList(records, locale, indexes, filter) {
           <dt>Usage supplied</dt><dd>${yes(coverage.usageSupplied)}</dd><dt>Caution supplied</dt><dd>${yes(coverage.cautionSupplied)}</dd></dl></td>`;
       }).join("")}</tr>`;
   }).join("")}</tbody></table></div>`);
+}
+
+function renderMediaAudit(records, assets, locale, filter, selected, multi) {
+  const path = selected === null ? "/media-audit" : `/draft/${selected}/media-audit`;
+  const detail = selected === null ? "/" : `/draft/${selected}`;
+  const navigation = languageLinks(path, locale, filter) +
+    `<a href="${reviewHref("/", locale, filter)}">${multi ? "Back to drafts" : "Back to draft"}</a>` +
+    (selected === null ? "" : `<a href="${reviewHref(detail, locale, filter)}">Back to draft</a><a href="${reviewHref(`${detail}/compare`, locale, filter)}">Compare EN / HU / KO</a>`);
+  return page(locale, navigation, `<h1>Draft media audit</h1><p>Local Media Audit Only / NOT LP Approved / NOT Publication Ready</p>
+    <p>All drafts and languages, not just filtered rows. ALT is supplied only when nonblank. Local checks use extension/MIME and bounded header signatures, not full image decoding or integrity validation. External HTTPS images are never requested.</p>
+    <a href="/media-audit.csv" download>Download Media Audit CSV</a>
+    <div class="matrix-scroll" role="region" aria-labelledby="media-caption" tabindex="0"><table>
+    <caption id="media-caption">Draft media checks — all drafts and languages</caption><thead><tr>${["Draft / publicId", "Language", "Image ordinal", "Supplied source", "ALT", "Local availability", "Diagnostic"].map(label => `<th scope="col">${label}</th>`).join("")}</tr></thead>
+    <tbody>${draftMediaRows(records, assets).map(row => `<tr><th scope="row"><a href="${reviewHref(multi ? `/draft/${row.draftIndex}` : "/", locale, filter)}">${escape(row.slug)}</a><p>${escape(row.publicId)}</p></th>
+      <td>${row.locale.toUpperCase()}</td><td>${row.ordinal || "—"}</td><td>${escape(row.source) || "—"}</td><td>${row.altSupplied === "" ? "Not applicable" : row.altSupplied ? "Supplied" : "Missing (blank or whitespace)"}</td>
+      <td>${row.availability}</td><td>${row.diagnostic}</td></tr>`).join("")}</tbody></table></div>`);
 }
 
 function page(locale, navigation, body) {
@@ -227,9 +297,14 @@ export async function startDraftPreview({ draft, assetsDirectory, environment = 
         "Content-Disposition": 'attachment; filename="hanapure-draft-review-matrix.csv"' });
       return response.end(request.method === "HEAD" ? undefined : reviewMatrixCsv(records));
     }
-    const detail = multi && /^\/draft\/(0|[1-9]\d*)(\/compare)?$/.exec(rawPath);
+    if (rawPath === "/media-audit.csv") {
+      if (url.search) return deny(404);
+      response.writeHead(200, { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": 'attachment; filename="hanapure-draft-media-audit.csv"' });
+      return response.end(request.method === "HEAD" ? undefined : draftMediaCsv(draftMediaRows(records, assets)));
+    }
+    const detail = multi && /^\/draft\/(0|[1-9]\d*)(\/compare|\/media-audit)?$/.exec(rawPath);
     const selected = detail ? Number(detail[1]) : null;
-    if (rawPath === "/" || detail) {
+    if (rawPath === "/" || rawPath === "/media-audit" || detail) {
       if (detail && (!Number.isSafeInteger(selected) || selected >= records.length)) return deny(404);
       const values = url.searchParams.getAll("locale");
       const filters = url.searchParams.getAll("filter");
@@ -240,8 +315,9 @@ export async function startDraftPreview({ draft, assetsDirectory, environment = 
       const locale = values[0] ?? "en";
       const filter = filters[0] ?? "all";
       const indexes = records.flatMap((record, index) => matchesReview(record, locale, filter) ? [index] : []);
-      const html = multi && selected === null ? renderList(records, locale, indexes, filter) :
-        detail?.[2] ? renderComparison(records[selected], locale, assets, selected, indexes, filter) :
+      const html = rawPath === "/media-audit" || detail?.[2] === "/media-audit" ? renderMediaAudit(records, assets, locale, filter, selected, multi) :
+        multi && selected === null ? renderList(records, locale, indexes, filter) :
+        detail?.[2] === "/compare" ? renderComparison(records[selected], locale, assets, selected, indexes, filter) :
         render(records[selected ?? 0], locale, assets, selected, indexes, filter);
       return response.end(request.method === "HEAD" ? undefined : html);
     }

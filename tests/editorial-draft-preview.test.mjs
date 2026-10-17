@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { request } from "node:http";
-import { registerHooks } from "node:module";
+import { registerHooks, syncBuiltinESMExports } from "node:module";
 import { spawnSync } from "node:child_process";
 import { networkInterfaces, tmpdir } from "node:os";
-import { mkdtempSync, writeFileSync, rmSync, readFileSync, readdirSync } from "node:fs";
+import fs, { mkdtempSync, mkdirSync, symlinkSync, writeFileSync, rmSync, readFileSync, readdirSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { chromium, expect } from "@playwright/test";
-import { startDraftPreview, reviewCoverage, reviewCsvCell, reviewMatrixCsv } from "../scripts/editorial-draft-preview.mjs";
+import { startDraftPreview, reviewCoverage, reviewCsvCell, reviewMatrixCsv, draftMediaRows, draftMediaCsv } from "../scripts/editorial-draft-preview.mjs";
 import { createLocalCatalogueReader } from "../lib/catalog/editorial-catalogue.ts";
 import { localCatalogue } from "../lib/catalog/local-catalogue.ts";
 import { discoverCatalogue, publishedCatalogueBrands } from "../lib/catalog/catalogue-discovery.ts";
@@ -77,7 +77,7 @@ test("actual listener rejects NIC connections, spoofed Host/proxy/cross-site req
   for (const headers of [{ Host: "public.example.invalid" }, { Host: "localhost" }, { Forwarded: "for=127.0.0.1" },
     { "X-Forwarded-For": "127.0.0.1" }, { "X-Forwarded-Host": "127.0.0.1" }, { Via: "local-proxy" },
     { Origin: "https://example.invalid" }, { "Sec-Fetch-Site": "cross-site" }]) {
-    for (const path of ["", "/review-matrix.csv", "/draft/0/compare"]) {
+    for (const path of ["", "/review-matrix.csv", "/draft/0/compare", "/media-audit", "/draft/0/media-audit", "/media-audit.csv"]) {
       const result = await get(preview.url + path, headers); assert.equal(result.status, 403); assert.ok(!result.body.includes(marker));
       assert.ok(!result.body.includes("publicId"));
     }
@@ -87,6 +87,8 @@ test("actual listener rejects NIC connections, spoofed Host/proxy/cross-site req
   const refused = await get(preview.url); assert.equal(refused.status, 403); assert.ok(!refused.body.includes(marker));
   assert.equal((await get(preview.url + "/review-matrix.csv")).status, 403);
   assert.equal((await get(preview.url + "/draft/0/compare")).status, 403);
+  assert.equal((await get(preview.url + "/media-audit")).status, 403);
+  assert.equal((await get(preview.url + "/media-audit.csv")).status, 403);
   }
 });
 
@@ -98,6 +100,118 @@ const coverageDrafts = () => {
   return items;
 };
 const csvCells = text => [...text.slice(1).matchAll(/"((?:[^"]|"")*)"(?:,|\r\n)/g)].map(match => match[1].replaceAll('""', '"'));
+
+function mediaFixtures(t) {
+  const root = fixture(t), outside = fixture(t);
+  writeFileSync(join(root, "wrong.jpg"), readFileSync(join(root, "fixture.png")));
+  writeFileSync(join(root, "bad.png"), "TEST ONLY not a PNG");
+  writeFileSync(join(root, "vector.svg"), "<svg/>");
+  writeFileSync(join(root, "large.png"), Buffer.alloc(8_000_001));
+  writeFileSync(join(root, "boundary.png"), Buffer.concat([readFileSync(join(root, "fixture.png")), Buffer.alloc(8_000_000 - statFixtureBytes(root))]));
+  mkdirSync(join(root, "directory.png"));
+  symlinkSync(outside, join(root, "escape"), "junction");
+  const items = drafts(2); items[1].translations.ko = null; items[1].translations.hu.images = [];
+  items[1].translations.en.images.push({ src: 'https://example.invalid/"<script>window.mediaLeak=1</script>&value=1', alt: "" });
+  items[0].translations.en.images = ["/fixture.png", "/missing.png", "/directory.png", "/vector.svg", "/wrong.jpg", "/large.png", "/../private.png", "/escape/fixture.png", "https://example.invalid/image.png", "/bad.png"]
+    .map((src, index) => ({ src, alt: index % 2 ? " \t" : "TEST ONLY alt" }));
+  items[0].translations.hu.images = [{ src: "/boundary.png", alt: "" }];
+  return { root, outside, items };
+}
+const statFixtureBytes = root => readFileSync(join(root, "fixture.png")).length;
+
+test("media audit classifies bounded local assets without external probing, path disclosure or serving disagreement", async t => {
+  const { root, outside, items } = mediaFixtures(t);
+  const before = JSON.stringify(items); const rows = draftMediaRows(items, root);
+  assert.deepEqual(rows.slice(0, 10).map(row => row.diagnostic), ["Local — Available", "Local — Missing / Inaccessible", "Local — Missing / Inaccessible",
+    "Local — Unsupported Format or Format Mismatch", "Local — Unsupported Format or Format Mismatch", "Local — Exceeds 8MB Limit",
+    "Local — Path Restricted", "Local — Path Restricted", "External — Not Checked (HTTPS)", "Local — Unsupported Format or Format Mismatch"]);
+  assert.equal(rows[10].diagnostic, "Local — Available"); assert.equal(rows[10].altSupplied, false);
+  assert.equal(rows.at(-1).diagnostic, "Translation missing (null)"); assert.equal(rows.at(-2).diagnostic, "No images supplied");
+  assert.equal(draftMediaRows(items, null)[0].diagnostic, "Local — Assets Not Configured");
+  assert.equal(draftMediaRows(items, null)[8].diagnostic, "External — Not Checked (HTTPS)");
+  assert.equal(JSON.stringify(items), before);
+  const preview = await startDraftPreview({ draft: items, assetsDirectory: root, environment }); t.after(preview.close);
+  const html = (await get(preview.url + "/draft/0/media-audit?locale=hu&filter=needs-review")).body;
+  assert.ok(html.includes("Local Media Audit Only / NOT LP Approved / NOT Publication Ready"));
+  assert.ok(html.includes('&quot;&lt;script&gt;window.mediaLeak=1&lt;/script&gt;&amp;value=1'));
+  assert.ok(!html.includes("<script>"));
+  for (const privatePath of [root, outside, basename(root), basename(outside)]) assert.ok(!html.includes(privatePath), privatePath);
+  assert.equal((await get(preview.url + "/draft/0/media/en/0")).status, 200);
+  for (let index = 1; index < 10; index++) assert.equal((await get(preview.url + `/draft/0/media/en/${index}`)).status, 404);
+  assert.equal((await get(preview.url + "/draft/0/media/hu/0")).status, 200);
+  assert.equal((await get(preview.url + "/draft/1/media/ko/0")).status, 404);
+  assert.equal((await get(preview.url + "/draft/1/media/hu/0")).status, 404);
+});
+
+test("media audit handles EACCES without exposing exceptions; signature allowlist is header-only and fail-closed", async t => {
+  const root = fixture(t); const items = drafts(1);
+  const signatures = { "tiny.jpg": "ffd8ff", "tiny.jpeg": "ffd8ff", "tiny.gif": "474946383961",
+    "tiny.webp": "524946460400000057454250", "tiny.avif": "00000020667479706176696600000000" };
+  for (const [name, bytes] of Object.entries(signatures)) writeFileSync(join(root, name), Buffer.from(bytes, "hex"));
+  items[0].translations.en.images = Object.keys(signatures).map(name => ({ src: `/${name}`, alt: "TEST ONLY signature" }));
+  assert.ok(draftMediaRows(items, root).every(row => row.diagnostic === "Local — Available"));
+  // Synthetic headers deliberately are not full images: no decode/rights claim.
+  const original = fs.openSync;
+  const stub = t.mock.method(fs, "openSync", (file, ...args) => {
+    if (file === join(root, "fixture.png")) throw Object.assign(new Error(`EACCES PRIVATE ${root}`), { code: "EACCES" });
+    return original(file, ...args);
+  });
+  syncBuiltinESMExports();
+  try {
+    const preview = await startDraftPreview({ draft: draft(), assetsDirectory: root, environment });
+    try {
+      const result = await get(preview.url + "/media-audit");
+      assert.ok(result.body.includes("Local — Missing / Inaccessible"));
+      assert.ok(!result.body.includes(root)); assert.ok(!result.body.includes("EACCES PRIVATE"));
+      assert.equal((await get(preview.url + "/media/en/0")).status, 404);
+    } finally { await preview.close(); }
+  } finally { stub.mock.restore(); syncBuiltinESMExports(); }
+  for (const name of Object.keys(signatures)) {
+    writeFileSync(join(root, name), Buffer.from("no image header"));
+  }
+  assert.ok(draftMediaRows(items, root).slice(0, 5).every(row => row.diagnostic === "Local — Unsupported Format or Format Mismatch"));
+});
+
+test("media CSV is deterministic nine-column factual output with formula defense, exact rows, strict routes and HEAD", async t => {
+  const { root, items } = mediaFixtures(t);
+  const preview = await startDraftPreview({ draft: items, environment, assetsDirectory: root }); t.after(preview.close);
+  const rows = draftMediaRows(items, root), expected = draftMediaCsv(rows);
+  const csv = await get(preview.url + "/media-audit.csv");
+  assert.equal(csv.status, 200); assert.equal(csv.body, expected); assert.ok(expected.startsWith("\uFEFF")); assert.ok(expected.endsWith("\r\n"));
+  const cells = csvCells(expected);
+  assert.deepEqual(cells.slice(0, 9), ["draft_index", "publicId", "slug", "locale", "image_ordinal", "source", "alt_supplied", "local_availability", "diagnostic"]);
+  assert.equal(cells.length, (rows.length + 1) * 9);
+  assert.deepEqual(cells.slice(9, 18), ["0", items[0].publicId, items[0].slug, "en", "1", "/fixture.png", "true", "Available", "Local — Available"]);
+  assert.deepEqual(rows.map(row => `${row.draftIndex}/${row.locale}/${row.ordinal}`),
+    [...Array.from({ length: 10 }, (_, i) => `0/en/${i + 1}`), "0/hu/1", "0/ko/1", "1/en/1", "1/en/2", "1/hu/", "1/ko/"]);
+  assert.equal(csv.headers["content-disposition"], 'attachment; filename="hanapure-draft-media-audit.csv"');
+  assert.equal(csv.headers["cache-control"], "no-store"); assert.match(csv.headers["x-robots-tag"], /noindex/);
+  assert.ok(!expected.includes(root)); assert.ok(!expected.includes("TEST ONLY alt"));
+  for (const value of [' =SUM(1,2)', '\t@x', '+"quoted"\r\nvalue', "-1", "\u200b=1"]) {
+    const defensive = draftMediaCsv([{ ...rows[0], source: value }]);
+    assert.equal(csvCells(defensive)[9 + 5], "'" + value);
+  }
+  for (const path of ["/media-audit.csv", "/media-audit", "/draft/0/media-audit"]) {
+    const head = await get(preview.url + path, {}, "HEAD"); assert.equal(head.status, 200); assert.equal(head.body, "");
+    assert.equal((await get(preview.url + path, {}, "POST")).status, 405);
+  }
+  for (const path of ["/media-audit?locale=fr", "/media-audit?locale=en&locale=ko", "/media-audit?filter=all&filter=all", "/media-audit?filter=no", "/media-audit?file=/secret", "/media-audit.csv?locale=en", "/media-audit.csv?filter=all", "/draft/2/media-audit", "/draft/01/media-audit", "/draft/0/media-audit?q=x"]) {
+    const result = await get(preview.url + path); assert.ok(result.status >= 400, path); assert.ok(!result.body.includes(items[0].publicId));
+  }
+  for (const path of ["/%6dedia-audit", "/draft/0/../../media-audit", "/draft/%30/media-audit", "/draft/0/%2e%2e/0/media-audit", "/media-audit/", "/%6dedia-audit.csv"]) {
+    const status = await new Promise((accept, reject) => {
+      const req = request({ hostname: "127.0.0.1", port: new URL(preview.url).port, path }, res => { res.resume(); res.on("end", () => accept(res.statusCode)); }); req.on("error", reject); req.end();
+    }); assert.ok(status >= 400, path);
+  }
+  assert.equal((await get(preview.url + "/review-matrix.csv")).body, reviewMatrixCsv(items));
+  for (const count of [1, 50]) {
+    const bounded = drafts(count); for (const item of bounded) for (const value of Object.values(item.translations)) value.images = [];
+    if (count === 50) for (let i = 0; i < 50; i++) bounded[i].translations.en.images = Array(2).fill({ src: "/fixture.png", alt: "" });
+    const session = await startDraftPreview({ draft: bounded, assetsDirectory: root, environment });
+    try { assert.equal((await get(session.url + "/media-audit.csv")).body, draftMediaCsv(draftMediaRows(bounded, root))); }
+    finally { await session.close(); }
+  }
+});
 
 test("coverage distinguishes missing/blank/core/optional/image-alt facts without publication judgments", () => {
   const items = coverageDrafts();
@@ -379,6 +493,66 @@ for (const width of [320, 1280]) test(`Chromium comparison ${width}px: native no
   assert.equal(await page.evaluate(() => localStorage.length), 0);
 });
 
+for (const [locale, width] of [["en", 320], ["hu", 320], ["ko", 320], ["hu", 1280]]) test(`Chromium media audit ${locale} ${width}px: private native keyboard journey/CSV and single-object compatibility`, async t => {
+  const { root, items } = mediaFixtures(t);
+  const browser = await chromium.launch(); t.after(() => browser.close());
+  for (const multi of [true, false]) {
+    const session = await startDraftPreview({ draft: multi ? items : items[0], environment, assetsDirectory: root });
+    const page = await browser.newPage({ viewport: { width, height: 900 }, javaScriptEnabled: false });
+    const external = []; let downloads = 0;
+    page.on("download", () => downloads++);
+    await page.route("**/*", route => {
+      if (new URL(route.request().url()).origin === session.url) return route.continue();
+      external.push(route.request().url()); return route.abort();
+    });
+    const navigate = async action => {
+      await Promise.all([page.waitForEvent("framenavigated", { predicate: frame => frame === page.mainFrame() }), action()]);
+      await page.waitForLoadState("load");
+    };
+    try {
+      await page.goto(`${session.url}/?locale=${locale}${multi ? "&filter=needs-review" : ""}`);
+      const audit = page.getByRole("link", { name: "Draft media audit", exact: true });
+      await audit.focus(); assert.equal(await audit.evaluate(node => getComputedStyle(node).outlineStyle), "solid");
+      assert.ok((await audit.boundingBox()).height >= 44);
+      await navigate(() => page.keyboard.press("Enter"));
+      assert.equal(await page.locator("html").getAttribute("lang"), locale);
+      assert.ok(await page.getByText("Local Media Audit Only / NOT LP Approved / NOT Publication Ready", { exact: true }).isVisible());
+      const expectedRows = draftMediaRows(multi ? items : [items[0]], root);
+      assert.equal(await page.locator("tbody tr").count(), expectedRows.length);
+      assert.equal(await page.getByRole("columnheader").count(), 7);
+      if (multi) assert.ok((await page.locator("tbody").textContent()).includes("Translation missing (null)"));
+      const body = await page.locator("body").textContent(); assert.ok(!body.includes(root)); assert.ok(!body.includes(basename(root)));
+      assert.ok(body.includes("Missing (blank or whitespace)")); assert.ok(body.includes("External — Not Checked (HTTPS)"));
+      const region = page.getByRole("region", { name: "Draft media checks — all drafts and languages", exact: true });
+      await region.focus(); await page.keyboard.press("ArrowRight");
+      await expect.poll(() => region.evaluate(node => node.scrollLeft)).toBeGreaterThan(0);
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+      assert.equal(downloads, 0);
+      const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("link", { name: "Download Media Audit CSV", exact: true }).click()]);
+      assert.equal(download.suggestedFilename(), "hanapure-draft-media-audit.csv");
+      const stream = await download.createReadStream(), parts = []; for await (const part of stream) parts.push(part);
+      assert.equal(Buffer.concat(parts).toString("utf8"), draftMediaCsv(expectedRows)); assert.equal(downloads, 1);
+      await navigate(() => page.locator("tbody a").first().press("Enter"));
+      assert.equal(new URL(page.url()).pathname, multi ? "/draft/0" : "/");
+      assert.equal(new URL(page.url()).searchParams.get("locale"), locale);
+      if (multi) {
+        assert.equal(new URL(page.url()).searchParams.get("filter"), "needs-review");
+        await navigate(() => page.getByRole("link", { name: "Compare EN / HU / KO", exact: true }).press("Enter"));
+        await navigate(() => page.getByRole("link", { name: "Draft media audit", exact: true }).press("Enter"));
+        assert.equal(new URL(page.url()).pathname, "/draft/0/media-audit");
+        await navigate(() => page.getByRole("link", { name: "KO", exact: true }).press("Enter"));
+        assert.equal(new URL(page.url()).pathname, "/draft/0/media-audit");
+        await navigate(() => page.getByRole("link", { name: "Back to draft", exact: true }).press("Enter"));
+        assert.equal(new URL(page.url()).pathname, "/draft/0"); assert.equal(new URL(page.url()).searchParams.get("locale"), "ko");
+        await navigate(() => page.getByRole("link", { name: "Back to drafts", exact: true }).press("Enter"));
+        assert.equal(new URL(page.url()).searchParams.get("filter"), "needs-review");
+      }
+      assert.deepEqual(external, []); assert.equal(await page.locator("form,script,button").count(), 0);
+      assert.equal(await page.evaluate(() => localStorage.length), 0);
+    } finally { await page.close(); await session.close(); }
+  }
+});
+
 test("Chromium matrix: accessible 320px table/filter round trip and explicit all-draft CSV download without JS/storage", async t => {
   const items = coverageDrafts();
   const preview = await startDraftPreview({ draft: items, environment }); t.after(preview.close);
@@ -527,6 +701,8 @@ test("production build assets contain neither private preview fixture nor the lo
         assert.ok(!text.includes(marker), `Draft marker in ${path}`);
         assert.ok(!text.includes(slug), `Draft slug in ${path}`);
         assert.ok(!text.includes("DRAFT — NOT PUBLIC"), `Local preview UI in ${path}`);
+        assert.ok(!text.includes("Local Media Audit Only"), `Private media audit UI in ${path}`);
+        assert.ok(!text.includes("hanapure-draft-media-audit.csv"), `Private media export in ${path}`);
       }
     }
   }
