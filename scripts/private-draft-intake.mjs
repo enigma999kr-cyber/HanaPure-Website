@@ -61,13 +61,14 @@ function privatePermissions(paths, ancestors = paths) {
   if (check.status !== 0 || check.stdout !== "PRIVATE") fail("private_path_required");
 }
 
-function privatePath(input) {
+function privatePath(input, extension = "json") {
   if (typeof input !== "string" || input.length > 1024 || !isAbsolute(input) ||
     /[\u0000-\u001f\u007f]/.test(input) || input.startsWith("\\\\") || input.startsWith("//")) fail("private_path_required");
   const path = resolve(input), parent = dirname(path), home = resolve(homedir());
   const parts = input.slice(parse(input).root.length).split(/[\\/]/);
   const forbidden = /^(?:public|www|wwwroot|htdocs|public_html|inetpub|shared|shares|onedrive(?:[ -].*)?|dropbox|google drive|googledrive|icloud(?:drive)?|box|desktop|downloads)$/i;
-  if (!within(home, path) || within(repo, path) || !/\.json$/i.test(path) || parts.length > 64 ||
+  const suffix = extension === "json" ? /\.json$/i : extension === "csv" ? /\.csv$/i : null;
+  if (!within(home, path) || within(repo, path) || !suffix?.test(path) || parts.length > 64 ||
     parts.some(part => !part || part === "." || part === ".." || /[:<>"|?*]/.test(part) || /[. ]$/.test(part) ||
       /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part) || forbidden.test(part))) fail("private_path_required");
   const chain = [];
@@ -175,7 +176,7 @@ export function diagnoseDraft(input) {
   } catch { add(null, null, "$", "invalid_record"); return rejected(); }
 }
 
-function readPrivate(input) {
+function readPrivate(input, attestations = null) {
   let fd;
   try {
     const target = privatePath(input), stat = fs.lstatSync(target.path, { bigint: true });
@@ -193,19 +194,25 @@ function readPrivate(input) {
     const data = bytes.subarray(0, size);
     if (data.includes(0) || data.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf]))) fail("invalid_encoding");
     let text; try { text = new TextDecoder("utf-8", { fatal: true }).decode(data); } catch { fail("invalid_encoding"); }
-    try { return JSON.parse(text); } catch { fail("invalid_json"); }
+    let parsed; try { parsed = JSON.parse(text); } catch { fail("invalid_json"); }
+    if (attestations) { attestations.push({ fd, target, stat: after, bytes: Buffer.from(data) }); fd = undefined; }
+    return parsed;
   } finally { if (fd !== undefined) fs.closeSync(fd); }
 }
 
 function createPrivate(input, record) {
-  const target = privatePath(input); let fd, owned;
+  return writePrivate(input, JSON.stringify(record, null, 2) + "\n");
+}
+
+function writePrivate(input, bytes, extension = "json", attest = () => {}) {
+  const target = privatePath(input, extension); let fd, owned;
   try {
-    unchangedParent(target);
+    unchangedParent(target); attest(); unchangedParent(target);
     fd = fs.openSync(target.path, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | (fs.constants.O_NOFOLLOW ?? 0), 0o600);
     owned = fs.fstatSync(fd, { bigint: true }); unchangedParent(target);
     if (!sameFile(owned, fs.lstatSync(target.path, { bigint: true }))) fail("output_unavailable");
     privatePermissions([target.path], [...target.chain.map(entry => entry.path), target.path]);
-    fs.writeFileSync(fd, JSON.stringify(record, null, 2) + "\n", "utf8"); fs.fsyncSync(fd);
+    attest(); fs.writeFileSync(fd, bytes, "utf8"); fs.fsyncSync(fd); attest();
     unchangedParent(target);
     if (!sameFile(owned, fs.lstatSync(target.path, { bigint: true }))) fail("output_unavailable");
   } catch (error) {
@@ -222,7 +229,7 @@ const inventoryMarker = "LOCAL DRAFT CHANGE INVENTORY ONLY / NOT LP APPROVED / N
 const maximumInventoryBytes = 32_768;
 const textState = value => value === null ? "null" : value === "" ? "empty" : value.trim() === "" ? "whitespace_only" : "nonblank";
 
-function compareValidated(before, after) {
+function fullInventory(before, after) {
   // Both sides are independently validated even when one fails; never emit a
   // partial inventory. Fixed before/after order and the existing diagnostic cap.
   const diagnostics = [];
@@ -276,6 +283,13 @@ function compareValidated(before, after) {
     inventory.push({ publicId: a.publicId, status: "changed", field_changes_total: changes.length, changes });
   }
   result.entries_total = inventory.length;
+  return { result, inventory };
+}
+
+function compareValidated(before, after) {
+  const core = fullInventory(before, after);
+  if (!core.result) return core;
+  const { result, inventory } = core;
   // Counts above cover ALL records/fields. Only the display payload is limited.
   let fieldBudget = 128;
   for (const item of inventory) {
@@ -300,27 +314,95 @@ export function compareSnapshots(before, after) {
   return compareValidated(diagnoseDraft(before), diagnoseDraft(after));
 }
 
+// Same established formula-prefix treatment as the private review CSVs. Kept
+// local to this standalone CLI rather than importing an HTTP preview module.
+export function changeCsvCell(value) {
+  const text = String(value);
+  const safe = /^[\s\p{Cc}\p{Cf}]*[=+\-@]/u.test(text) ? `'${text}` : text;
+  return `"${safe.replaceAll('"', '""')}"`;
+}
+
+export function serializeChangeCsv(rows) {
+  if (!Array.isArray(rows) || rows.length > 5000) fail("csv_limit_exceeded");
+  const columns = ["publicId", "change_type", "locale", "field", "before_state", "after_state", "src_changed", "alt_changed"];
+  const lines = ["\uFEFF" + columns.map(changeCsvCell).join(",") + "\r\n"];
+  let bytes = Buffer.byteLength(lines[0], "utf8");
+  for (const row of rows) {
+    if (!Array.isArray(row) || row.length !== columns.length || row.some(value =>
+      typeof value !== "string" && typeof value !== "boolean" && !(Number.isSafeInteger(value) && value >= 0))) fail("invalid_csv_metadata");
+    const line = row.map(changeCsvCell).join(",") + "\r\n";
+    bytes += Buffer.byteLength(line, "utf8");
+    if (bytes > 2_000_000) fail("csv_limit_exceeded");
+    lines.push(line);
+  }
+  return Buffer.from(lines.join(""), "utf8");
+}
+
+function csvRows(inventory) {
+  const state = value => typeof value === "object" ? ({ empty: "provided_alt_empty", whitespace_only: "provided_alt_whitespace_only", nonblank: "provided_alt_nonblank" })[value.alt] : value;
+  return inventory.flatMap(item => item.status !== "changed" ? [[item.publicId.toLowerCase(), item.status, "", "product", "", "", "", ""]] :
+    item.changes.map(change => [item.publicId.toLowerCase(), "changed", /^translations\.(en|hu|ko)(?:\.|$)/.exec(change.field)?.[1] ?? "", change.field,
+      state(change.before), state(change.after), change.src_changed ?? "", change.alt_changed ?? ""]));
+}
+
+function attestInputs(attestations) {
+  for (const proof of attestations) {
+    try {
+      const { fd, target, stat, bytes } = proof;
+      const matches = current => current.isFile() && !current.isSymbolicLink() && sameFile(current, stat) &&
+        current.size === stat.size && current.mtimeNs === stat.mtimeNs && current.ctimeNs === stat.ctimeNs;
+      unchangedParent(target);
+      if (!matches(fs.lstatSync(target.path, { bigint: true })) || !matches(fs.fstatSync(fd, { bigint: true }))) fail("input_changed");
+      const current = Buffer.alloc(bytes.length + 1); let size = 0, count;
+      do { count = fs.readSync(fd, current, size, current.length - size, size); size += count; } while (count && size < current.length);
+      if (!current.subarray(0, size).equals(bytes) || !matches(fs.fstatSync(fd, { bigint: true })) || !matches(fs.lstatSync(target.path, { bigint: true }))) fail("input_changed");
+      unchangedParent(target);
+    } catch { fail("input_changed"); }
+  }
+}
+
+function readPair(values, attestations = null) {
+  return ["before", "after"].map(side => {
+    try { return diagnoseDraft(readPrivate(values.get(`--${side}`), attestations)); }
+    catch (error) { return { ok: false, diagnostics: [{ draft_index: null, locale: null, field: "$",
+      code: error instanceof IntakeFailure ? error.message : "input_unavailable" }], more_suppressed: false }; }
+  });
+}
+
+function exportChangeCsv(values) {
+  const attestations = [];
+  try {
+    const core = fullInventory(...readPair(values, attestations));
+    if (!core.result) return core;
+    const rows = csvRows(core.inventory), bytes = serializeChangeCsv(rows);
+    // Validation, exhaustive comparison, serialization and limits all precede
+    // output creation. Keep readable input descriptors until the writer finishes.
+    writePrivate(values.get("--output"), bytes, "csv", () => attestInputs(attestations));
+    const result = core.result;
+    return { ok: true, code: "csv_created", before_total: result.before_total, after_total: result.after_total,
+      added: result.added, removed: result.removed, unchanged: result.unchanged, changed: result.changed,
+      field_changes_total: result.field_changes_total, csv_data_rows: rows.length, csv_bytes: bytes.length, marker: inventoryMarker };
+  } finally { for (const proof of attestations) fs.closeSync(proof.fd); }
+}
+
 export function runIntake(args, environment = process.env) {
   try {
     localOnly(environment);
     const [command, ...rest] = args;
     const names = command === "starter" ? ["--public-id", "--brand", "--slug", "--output"] :
-      command === "validate" ? ["--file"] : command === "compare" ? ["--before", "--after"] : [];
+      command === "validate" ? ["--file"] : command === "compare" ? ["--before", "--after"] :
+        command === "compare-csv" ? ["--before", "--after", "--output"] : [];
     const values = new Map();
     if (!names.length || rest.length !== names.length * 2) fail("invalid_arguments");
     for (let index = 0; index < rest.length; index += 2) {
       if (!names.includes(rest[index]) || values.has(rest[index]) || typeof rest[index + 1] !== "string" || !rest[index + 1] || rest[index + 1].startsWith("--")) fail("invalid_arguments");
       values.set(rest[index], rest[index + 1]);
     }
+    if (command === "compare-csv") return exportChangeCsv(values);
     if (command === "compare") {
       // Same physical file is allowed: independently read and validate twice.
       // This inventories the observed snapshots, not an atomic filesystem pair.
-      const snapshots = ["before", "after"].map(side => {
-        try { return diagnoseDraft(readPrivate(values.get(`--${side}`))); }
-        catch (error) { return { ok: false, diagnostics: [{ draft_index: null, locale: null, field: "$",
-          code: error instanceof IntakeFailure ? error.message : "input_unavailable" }], more_suppressed: false }; }
-      });
-      return compareValidated(...snapshots);
+      return compareValidated(...readPair(values));
     }
     const input = command === "validate" ? readPrivate(values.get("--file")) : {
       publicId: values.get("--public-id"), brand: values.get("--brand"), slug: values.get("--slug"), state: "draft", translations: { en: null, hu: null, ko: null } };

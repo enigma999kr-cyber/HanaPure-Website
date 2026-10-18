@@ -6,8 +6,9 @@ import net from "node:net";
 import childProcess, { spawn, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { runInNewContext } from "node:vm";
 import { chromium } from "@playwright/test";
-import { diagnoseDraft, runIntake, compareSnapshots } from "../scripts/private-draft-intake.mjs";
+import { diagnoseDraft, runIntake, compareSnapshots, changeCsvCell, serializeChangeCsv } from "../scripts/private-draft-intake.mjs";
 import { validateEditorialCatalogue } from "../lib/catalog/editorial-catalogue.ts";
 import { localCatalogue } from "../lib/catalog/local-catalogue.ts";
 import { startDraftPreview } from "../scripts/editorial-draft-preview.mjs";
@@ -406,9 +407,278 @@ test("production catalogue and build graph remain empty and free of intake CLI/e
       if (entry.isDirectory()) inspect(path);
       else if (/\.(?:js|json|html|rsc)$/.test(entry.name)) {
         const text = readFileSync(path, "utf8");
-        for (const term of [marker, "test-only-private-intake", "private-draft-intake", "starter_created", "LOCAL DRAFT CHANGE INVENTORY ONLY"]) assert.ok(!text.includes(term), term);
+        for (const term of [marker, "test-only-private-intake", "private-draft-intake", "starter_created", "LOCAL DRAFT CHANGE INVENTORY ONLY", "csv_created", "csv_data_rows", "compare-csv"]) assert.ok(!text.includes(term), term);
       }
     }
   };
   inspect(resolve(".next/server")); inspect(resolve(".next/static"));
+});
+
+const csvArgs = (before, after, output) => ["compare-csv", "--before", before, "--after", after, "--output", output];
+const csvColumns = ["publicId", "change_type", "locale", "field", "before_state", "after_state", "src_changed", "alt_changed"];
+// Independent RFC4180 parser, including embedded CRLF and doubled quotes.
+function parseCsv(bytes) {
+  assert.deepEqual([...bytes.subarray(0, 3)], [239, 187, 191]);
+  const text = bytes.subarray(3).toString("utf8"), rows = []; let index = 0;
+  while (index < text.length) {
+    const row = [];
+    for (;;) {
+      assert.equal(text[index++], '"'); let cell = "";
+      for (;;) {
+        assert.ok(index < text.length);
+        const char = text[index++];
+        if (char !== '"') { cell += char; continue; }
+        if (text[index] === '"') { cell += '"'; index++; continue; }
+        break;
+      }
+      row.push(cell);
+      if (text[index] === ",") { index++; continue; }
+      assert.equal(text.slice(index, index + 2), "\r\n"); index += 2; break;
+    }
+    assert.equal(row.length, 8); rows.push(row);
+  }
+  assert.deepEqual(rows[0], csvColumns); return rows.slice(1);
+}
+function exportFixture(t, before, after) {
+  const root = privateDirectory(t), a = jsonFile(root, before, "before.json"), b = jsonFile(root, after, "after.json"), output = join(root, "changes.csv");
+  const original = [readFileSync(a), readFileSync(b)];
+  const result = runIntake(csvArgs(a, b, output), environment); assert.equal(result.ok, true, JSON.stringify(result));
+  const bytes = readFileSync(output), rows = parseCsv(bytes);
+  assert.deepEqual([readFileSync(a), readFileSync(b)], original);
+  assert.equal(result.csv_data_rows, rows.length); assert.equal(result.csv_bytes, bytes.length);
+  assert.equal(result.marker, "LOCAL DRAFT CHANGE INVENTORY ONLY / NOT LP APPROVED / NOT PUBLICATION READY");
+  assert.equal(Object.hasOwn(result, "more_suppressed"), false);
+  for (const forbidden of [root, marker, "example.invalid", "Round Lab", "test-only-private-intake", "[object Object]"]) {
+    assert.ok(!bytes.toString().includes(forbidden)); assert.ok(!JSON.stringify(result).includes(forbidden));
+  }
+  return { root, a, b, output, result, bytes, rows };
+}
+
+test("compare-csv exact metadata events, states, positional image flags and zero-change header-only output", t => {
+  const before = translatedDraft(0), after = structuredClone(before);
+  after.brand = "Anua"; after.slug = "test-only-changed";
+  after.translations.en.name += "!"; after.translations.en.description = "";
+  after.translations.en.usage = ""; after.translations.en.caution = " \t";
+  after.translations.hu = null;
+  after.translations.ko.images = [{ src: "/changed.png", alt: "" }, { src: "/second.png", alt: " \t" }];
+  const output = exportFixture(t, before, after), json = compareSnapshots(before, after);
+  assert.equal(output.result.field_changes_total, 10); assert.equal(output.rows.length, 10);
+  assert.deepEqual(output.rows.map(row => row[3]), json.entries[0].changes.map(change => change.field));
+  assert.deepEqual(output.rows[4].slice(2), ["en", "translations.en.usage", "null", "empty", "", ""]);
+  assert.deepEqual(output.rows[5].slice(2), ["en", "translations.en.caution", "empty", "whitespace_only", "", ""]);
+  assert.deepEqual(output.rows[6].slice(2), ["hu", "translations.hu", "provided", "null", "", ""]);
+  assert.deepEqual(output.rows[7].slice(2), ["ko", "translations.ko.images", "1", "2", "", ""]);
+  assert.deepEqual(output.rows[8].slice(4), ["provided_alt_nonblank", "provided_alt_empty", "true", "true"]);
+  assert.deepEqual(output.rows[9].slice(4), ["absent", "provided_alt_whitespace_only", "true", "true"]);
+  const reversed = exportFixture(t, after, before);
+  assert.deepEqual(reversed.rows.at(-1).slice(4), ["provided_alt_whitespace_only", "absent", "true", "true"]);
+  const zero = exportFixture(t, draft(0), [draft(0)]);
+  assert.equal(zero.result.unchanged, 1); assert.deepEqual(zero.rows, []);
+  assert.deepEqual(zero.bytes, serializeChangeCsv([]));
+  // Same state but different actual private text remains an actual change.
+  const white = translatedDraft(0), tab = structuredClone(white);
+  white.translations.en.name = " "; tab.translations.en.name = "\t";
+  assert.deepEqual(exportFixture(t, white, tab).rows[0].slice(4), ["whitespace_only", "whitespace_only", "", ""]);
+  const order = translatedDraft(0), swapped = structuredClone(order);
+  order.translations.en.images.push({ src: "/second.png", alt: "" });
+  swapped.translations.en.images = [...order.translations.en.images].reverse();
+  assert.equal(exportFixture(t, order, swapped).rows.length, 3);
+});
+
+test("CSV is exhaustive past JSON display caps, UUID sorted/case normalized and stable under product reorder", t => {
+  const before = Array.from({ length: 50 }, (_, i) => translatedDraft(i)), after = structuredClone(before);
+  for (const item of before) for (const value of Object.values(item.translations)) value.images = [];
+  for (const item of after) for (const value of Object.values(item.translations)) {
+    value.images = []; value.name += "!"; value.description += "!"; value.usage = ""; value.caution = null;
+  }
+  const full = exportFixture(t, before, after), json = compareSnapshots(before, after);
+  assert.equal(json.entries.reduce((count, item) => count + item.changes.length, 0), 128);
+  assert.equal(json.more_suppressed, true); assert.equal(full.rows.length, 600);
+  assert.equal(full.result.field_changes_total, 600); assert.equal(full.result.changed, 50);
+  const reordered = structuredClone(after).reverse(); for (const item of reordered) item.publicId = item.publicId.toLowerCase();
+  assert.deepEqual(exportFixture(t, [...before].reverse(), reordered).bytes, full.bytes);
+  for (let i = 0; i < 4; i++) for (const [locale, count] of [["en", 10], ["hu", 10], ["ko", 5]])
+    after[i].translations[locale].images = Array(count).fill({ src: "/not-probed.png", alt: " \t" });
+  assert.equal(exportFixture(t, before, after).rows.length, 712);
+  const different = exportFixture(t, before, Array.from({ length: 50 }, (_, i) => draft(i + 50)));
+  assert.deepEqual([different.result.added, different.result.removed, different.result.csv_data_rows, different.result.field_changes_total], [50, 50, 100, 0]);
+  assert.equal(compareSnapshots(before, Array.from({ length: 50 }, (_, i) => draft(i + 50))).entries.length, 50);
+  assert.ok(different.rows.every(row => row[2] === "" && row[3] === "product" && row.slice(4).every(value => value === "")));
+});
+
+test("trusted baseline JSON golden equality: exact shape/bytes, counters and all suppression branches", () => {
+  // Read ONLY this tracked baseline source, never execute a private input file.
+  const baseline = spawnSync("git", ["show", "ab2d242fd1d3bc7d80557952e280d21c62c868b1:scripts/private-draft-intake.mjs"], { encoding: "utf8", windowsHide: true });
+  assert.equal(baseline.status, 0);
+  const start = baseline.stdout.indexOf("function compareValidated("), end = baseline.stdout.indexOf("export function compareSnapshots(");
+  assert.ok(start > 0 && end > start);
+  const golden = runInNewContext(`${baseline.stdout.slice(start, end)}; compareValidated`, {
+    Buffer, locales: ["en", "hu", "ko"], maximumDiagnostics: 12, maximumInventoryBytes: 32768,
+    inventoryMarker: "LOCAL DRAFT CHANGE INVENTORY ONLY / NOT LP APPROVED / NOT PUBLICATION READY",
+    textState: value => value === null ? "null" : value === "" ? "empty" : value.trim() === "" ? "whitespace_only" : "nonblank",
+    fail: code => { throw new Error(code); },
+  });
+  const many = Array.from({ length: 50 }, (_, i) => translatedDraft(i));
+  for (const item of many) for (const value of Object.values(item.translations)) value.images = [];
+  const edited = structuredClone(many);
+  for (const item of edited) for (const value of Object.values(item.translations)) {
+    value.name += "!"; value.description += "!"; value.usage = ""; value.caution = null;
+  }
+  const images = structuredClone(edited);
+  for (let i = 0; i < 4; i++) for (const [locale, count] of [["en", 10], ["hu", 10], ["ko", 5]])
+    images[i].translations[locale].images = Array(count).fill({ src: "/never-probed.png", alt: " \t" });
+  const lower = draft(0); lower.publicId = lower.publicId.toLowerCase();
+  for (const [before, after] of [[draft(0), [lower]], [many, [...many].reverse()], [many, edited], [many, images],
+    [many, Array.from({ length: 50 }, (_, i) => draft(i + 50))], [draft(0), translatedDraft(0)], [{}, {}], [Array(50).fill({}), draft(0)]]) {
+    assert.equal(JSON.stringify(compareSnapshots(before, after)), JSON.stringify(golden(diagnoseDraft(before), diagnoseDraft(after))));
+  }
+});
+
+test("CSV serializer inclusive byte/row boundaries, UTF8/BOM/CRLF, quotes/newlines and formula prefixes", () => {
+  const row = ["id", "changed", "en", "field", "", "", "", ""];
+  assert.equal(parseCsv(serializeChangeCsv(Array.from({ length: 5000 }, () => row))).length, 5000);
+  assert.throws(() => serializeChangeCsv(Array.from({ length: 5001 }, () => row)), /csv_limit_exceeded/);
+  const overhead = serializeChangeCsv([row]).length;
+  const exact = [...row]; exact[4] = "한".repeat(Math.floor((2_000_000 - overhead) / 3)) + "x".repeat((2_000_000 - overhead) % 3);
+  assert.equal(serializeChangeCsv([exact]).length, 2_000_000);
+  assert.equal(parseCsv(serializeChangeCsv([exact]))[0][4], exact[4]);
+  exact[4] += "x"; assert.throws(() => serializeChangeCsv([exact]), /csv_limit_exceeded/);
+  for (const prefix of ["", " ", "\t", "\r\n", "\u200B", "\uFEFF", "\u0001"]) for (const formula of ["=1+1", "+1", "-1", "@SUM(A1)"]) {
+    const value = prefix + formula, item = [...row]; item[4] = value;
+    assert.equal(parseCsv(serializeChangeCsv([item]))[0][4], "'" + value);
+    assert.equal(changeCsvCell(value)[1], "'");
+  }
+  for (const value of ['árvíz 한글 "quoted",\r\nnext', "ordinary", "", "safe=1"]) {
+    const item = [...row]; item[4] = value; assert.equal(parseCsv(serializeChangeCsv([item]))[0][4], value);
+  }
+  for (const bad of [null, {}, [1], [...row.slice(0, 7), {}], [...row.slice(0, 7), -1]])
+    assert.throws(() => serializeChangeCsv([bad]), /invalid_csv_metadata/);
+});
+
+test("compare-csv validates both inputs independently and never creates partial output on invalid input/encoding/args", t => {
+  const root = privateDirectory(t), a = jsonFile(root, {}, "before.json"), b = jsonFile(root, {}, "after.json"), output = join(root, "changes.csv");
+  const both = runIntake(csvArgs(a, b, output), environment);
+  assert.deepEqual(both.diagnostics.map(item => item.side), Array(5).fill("before").concat(Array(5).fill("after")));
+  const invalids = [[], Array.from({ length: 51 }, (_, i) => draft(i)), { ...draft(0), state: "published" }, [draft(0), draft(0)],
+    { ...draft(0), brand: marker }, { ...draft(0), translations: { en: null, ko: null } }];
+  for (const invalid of invalids) for (const side of ["before", "after"]) {
+    jsonFile(root, side === "before" ? invalid : draft(0), "before.json"); jsonFile(root, side === "after" ? invalid : draft(0), "after.json");
+    const result = runIntake(csvArgs(a, b, output), environment);
+    assert.equal(result.ok, false); assert.ok(result.diagnostics.every(item => item.side === side));
+    assert.equal(Object.hasOwn(result, "before_total"), false); assert.equal(existsSync(output), false);
+  }
+  jsonFile(root, draft(0), "after.json");
+  for (const [bytes, code] of [[Buffer.from([239, 187, 191, 123, 125]), "invalid_encoding"], [Buffer.from([195, 40]), "invalid_encoding"],
+    [Buffer.from("{}", "utf16le"), "invalid_encoding"], [Buffer.from("{" + marker), "invalid_json"], [Buffer.alloc(1_000_001, 32), "input_too_large"]]) {
+    writeFileSync(a, bytes); const result = runIntake(csvArgs(a, b, output), environment);
+    assert.deepEqual(codes(result), [code]); assert.equal(existsSync(output), false); assert.deepEqual(readFileSync(a), bytes);
+  }
+  for (const args of [["compare-csv"], csvArgs(a, b, output).slice(0, -1), [...csvArgs(a, b, output), "--extra", marker],
+    ["compare-csv", "--before", a, "--before", b, "--output", output]]) assert.deepEqual(codes(runIntake(args, environment)), ["invalid_arguments"]);
+  const actual = cli(csvArgs(a, b, output)); assert.equal(actual.status, 1);
+  for (const secret of [root, marker, a, b, output]) assert.ok(!(actual.stdout + actual.stderr).includes(secret));
+});
+
+test("CSV output keeps private/exclusive rules, hardlink aliases, same-source reads and concurrent creation", async t => {
+  const root = privateDirectory(t), other = privateDirectory(t), a = jsonFile(root, draft(0)), alias = join(root, "alias.json"); linkSync(a, alias);
+  for (const b of [a, alias]) {
+    const output = join(root, b === a ? "same.csv" : "alias.csv");
+    assert.equal(runIntake(csvArgs(a, b, output), environment).unchanged, 1); assert.deepEqual(parseCsv(readFileSync(output)), []);
+  }
+  const output = join(root, "existing.csv"); linkSync(a, output); const bytes = readFileSync(a);
+  assert.deepEqual(codes(runIntake(csvArgs(a, alias, output), environment)), ["output_exists"]);
+  assert.deepEqual(readFileSync(a), bytes); assert.deepEqual(readFileSync(output), bytes);
+  mkdirSync(join(root, "public")); mkdirSync(join(root, "repository")); mkdirSync(join(root, "repository", ".git"));
+  symlinkSync(other, join(root, "junction"), "junction");
+  for (const target of ["relative.csv", resolve("data/forbidden.csv"), a, join(root, "wrong.json"), join(root, "public", "new.csv"),
+    join(root, "repository", "new.csv"), join(root, "junction", "new.csv"), join(root, "Downloads", "new.csv"),
+    join(root, "Desktop", "new.csv"), join(root, "OneDrive", "new.csv"), join(root, "shared", "new.csv"), "\\\\server\\share\\new.csv"])
+    assert.equal(runIntake(csvArgs(a, alias, target), environment).ok, false);
+  const race = join(root, "race.csv");
+  const run = () => new Promise((accept, reject) => {
+    const child = spawn(process.execPath, ["--conditions=react-server", "--import", "./tests/server-only-loader.mjs", "scripts/private-draft-intake.mjs", ...csvArgs(a, alias, race)],
+      { env: { ...process.env, ...environment }, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+    const chunks = []; child.stdout.on("data", chunk => chunks.push(chunk)); child.stderr.resume(); child.on("error", reject);
+    child.on("close", status => accept({ status, result: JSON.parse(Buffer.concat(chunks).toString()) }));
+  });
+  const results = await Promise.all([run(), run()]); assert.deepEqual(results.map(item => item.status).sort(), [0, 1]);
+  assert.deepEqual(codes(results.find(item => !item.result.ok).result), ["output_exists"]);
+  assert.deepEqual(parseCsv(readFileSync(race)), []); assert.deepEqual(readFileSync(a), bytes); assert.deepEqual(readdirSync(other), []);
+});
+
+test("CSV attestation detects mutation before output open, changed bytes with spoofed stats and late mutation cleanup", t => {
+  const root = privateDirectory(t), a = jsonFile(root, draft(0), "before.json"), b = jsonFile(root, draft(0), "after.json");
+  for (const timing of ["before-open", "same-stat", "after-open"]) {
+    jsonFile(root, draft(0), "before.json"); const output = join(root, `${timing}.csv`);
+    const originalLstat = fs.lstatSync, originalFstat = fs.fstatSync, originalOpen = fs.openSync, originalRead = fs.readSync;
+    const patches = []; let changed = false, outputOpened = false;
+    const originalStat = originalLstat(a, { bigint: true });
+    if (timing !== "after-open") patches.push(t.mock.method(fs, "lstatSync", (path, ...args) => {
+      // CSV privatePath must inspect its parents after both inputs validate.
+      if (path === root && !changed && patches[1]?.mock.calls.length >= 2) {
+        changed = true; writeFileSync(a, JSON.stringify({ ...draft(0), brand: "medicube" }));
+      }
+      const stat = originalLstat(path, ...args);
+      return timing === "same-stat" && changed && path === a ? originalStat : stat;
+    }));
+    const inputFds = [];
+    patches.push(t.mock.method(fs, "openSync", (path, ...args) => {
+      if (path === output) {
+        outputOpened = true;
+        if (timing === "after-open") { changed = true; writeFileSync(a, JSON.stringify({ ...draft(0), brand: "medicube" })); }
+      }
+      const fd = originalOpen(path, ...args); if (path === a) inputFds.push(fd); return fd;
+    }));
+    if (timing === "same-stat") patches.push(t.mock.method(fs, "fstatSync", (fd, ...args) => changed && inputFds.includes(fd) ? originalStat : originalFstat(fd, ...args)));
+    // Count completed initial reads rather than filesystem side-effects of fixture mutation.
+    let reattested = false;
+    patches.push(t.mock.method(fs, "readSync", (fd, buffer, offset, length, position) => {
+      if (position !== null) reattested = true; return originalRead(fd, buffer, offset, length, position);
+    })); syncBuiltinESMExports();
+    try {
+      const result = runIntake(csvArgs(a, b, output), environment);
+      assert.deepEqual(codes(result), ["input_changed"], timing); assert.equal(existsSync(output), false);
+      assert.equal(changed, true); assert.equal(outputOpened, timing === "after-open");
+      if (timing === "same-stat") assert.equal(reattested, true);
+      assert.ok(!JSON.stringify(result).includes(root));
+    } finally { for (const patch of patches) patch.mock.restore(); syncBuiltinESMExports(); }
+  }
+});
+
+test("CSV write/ACL/parent failures remove only owned files, with safe diagnostics and original inputs preserved", t => {
+  const root = privateDirectory(t), a = jsonFile(root, draft(0)), bytes = readFileSync(a);
+  const output = join(root, "partial.csv");
+  const failWrite = t.mock.method(fs, "writeFileSync", () => { throw new Error(`${marker} ${root}`); }); syncBuiltinESMExports();
+  try { const result = runIntake(csvArgs(a, a, output), environment); assert.deepEqual(codes(result), ["output_unavailable"]); assert.equal(existsSync(output), false); assert.ok(!JSON.stringify(result).includes(root)); }
+  finally { failWrite.mock.restore(); syncBuiltinESMExports(); }
+  if (process.platform === "win32") {
+    const acl = t.mock.method(childProcess, "spawnSync", () => ({ status: 1, stdout: "DENIED" })); syncBuiltinESMExports();
+    try { assert.deepEqual(codes(runIntake(csvArgs(a, a, output), environment)), ["private_path_required", "private_path_required"]); assert.equal(existsSync(output), false); }
+    finally { acl.mock.restore(); syncBuiltinESMExports(); }
+  }
+  const originalOpen = fs.openSync, originalLstat = fs.lstatSync; let created = false;
+  const open = t.mock.method(fs, "openSync", (path, ...args) => { const fd = originalOpen(path, ...args); if (path === output) created = true; return fd; });
+  const changed = t.mock.method(fs, "lstatSync", (path, ...args) => { const stat = originalLstat(path, ...args); if (created && path === root) stat.ino += 1n; return stat; }); syncBuiltinESMExports();
+  try { assert.deepEqual(codes(runIntake(csvArgs(a, a, output), environment)), ["private_path_required"]); }
+  finally { open.mock.restore(); changed.mock.restore(); syncBuiltinESMExports(); }
+  assert.equal(readFileSync(output).length, 0); // Uncertain parent: do NOT delete an unverified path.
+  assert.deepEqual(readFileSync(a), bytes);
+});
+
+test("CSV never writes source/probes media/opens network, uses exclusive private output and rejects deployed environments", t => {
+  const root = privateDirectory(t), a = jsonFile(root, translatedDraft(0), "before.json"), b = jsonFile(root, draft(0), "after.json"), output = join(root, "metadata.csv");
+  const originalOpen = fs.openSync, patches = []; let forbidden = 0;
+  const deny = () => { forbidden++; throw new Error(marker); };
+  patches.push(t.mock.method(fs, "openSync", (path, flags, mode) => {
+    if (path === output) { assert.ok(flags & fs.constants.O_EXCL); assert.ok(flags & fs.constants.O_CREAT); assert.equal(mode, 0o600); }
+    else { assert.ok(path === a || path === b); assert.equal(flags & (fs.constants.O_CREAT | fs.constants.O_WRONLY | fs.constants.O_RDWR), 0); }
+    return originalOpen(path, flags, mode);
+  }));
+  for (const method of ["renameSync", "mkdirSync"]) patches.push(t.mock.method(fs, method, deny));
+  patches.push(t.mock.method(net.Server.prototype, "listen", deny), t.mock.method(net.Socket.prototype, "connect", deny), t.mock.method(globalThis, "fetch", deny)); syncBuiltinESMExports();
+  try { assert.equal(runIntake(csvArgs(a, b, output), environment).ok, true); assert.equal(forbidden, 0); }
+  finally { for (const patch of patches) patch.mock.restore(); syncBuiltinESMExports(); }
+  for (const patch of [{ NODE_ENV: "production" }, { NODE_ENV: "staging" }, { HANAPURE_DRAFT_PREVIEW_LOCAL: "0" }, { APP_ENV: "staging" }, { VERCEL: "1" }, { CF_PAGES: "1" }, { NETLIFY: "1" }, { DEPLOYMENT_ENV: "local" }])
+    assert.deepEqual(codes(runIntake(csvArgs(a, b, join(root, "not-created.csv")), { ...environment, ...patch })), ["local_development_required"]);
+  assert.equal(existsSync(join(root, "not-created.csv")), false);
 });
