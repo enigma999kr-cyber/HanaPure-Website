@@ -51,5 +51,7 @@ export function addCartLine(lines: readonly CartLine[], publicId: string, quanti
     : [...lines, { publicId, quantity }];
 }
 export function updateCartLine(lines: readonly CartLine[], publicId: string, quantity: number): readonly CartLine[] {
-  return validQuantity(quantity) ? lines.map(line => line.publicId === publicId ? { publicId, quantity } : line) : lines;
+  if (!validCartId(publicId) || !validQuantity(quantity)) return lines;
+  return lines.map(line => line.publicId.toLowerCase() === publicId.toLowerCase()
+    ? { publicId: line.publicId, quantity } : line);
 }

@@ -65,6 +65,33 @@ test("add aggregates quantity, update replaces it, and unsafe arithmetic leaves 
   const max = [{ publicId: id, quantity: Number.MAX_SAFE_INTEGER }];
   assert.strictEqual(addCartLine(max, id, 1), max);
 });
+test("update matches UUID casing aliases while preserving stored identities and unrelated selections", () => {
+  const otherId = "22345678-abcd-1234-abcd-123456789abc";
+  const missingId = "32345678-abcd-1234-abcd-123456789abc";
+  for (const [storedId, targetId] of [[id.toUpperCase(), id], [id, id.toUpperCase()]]) {
+    const lines = Object.freeze([
+      Object.freeze({ publicId: otherId, quantity: 3 }),
+      Object.freeze({ publicId: storedId, quantity: 2 }),
+    ]);
+    const updated = updateCartLine(lines, targetId, 4);
+    assert.deepEqual(updated, [lines[0], { publicId: storedId, quantity: 4 }]);
+    assert.strictEqual(updated[0], lines[0]);
+    assert.deepEqual(updateCartLine(lines, storedId, 5), [lines[0], { publicId: storedId, quantity: 5 }]);
+    assert.deepEqual(updateCartLine(lines, targetId, Number.MAX_SAFE_INTEGER),
+      [lines[0], { publicId: storedId, quantity: Number.MAX_SAFE_INTEGER }]);
+    for (const quantity of [0, -1, 1.5, NaN, Infinity, -Infinity, "2", null, undefined, Number.MAX_SAFE_INTEGER + 1]) {
+      assert.strictEqual(updateCartLine(lines, targetId, quantity), lines);
+    }
+    for (const invalidId of ["", "not-a-uuid", `${id}x`, null, undefined, 7, {}, []]) {
+      assert.strictEqual(updateCartLine(lines, invalidId, 4), lines);
+    }
+    const unmatched = updateCartLine(lines, missingId, 4);
+    assert.deepEqual(unmatched, lines);
+    assert.strictEqual(unmatched[0], lines[0]);
+    assert.strictEqual(unmatched[1], lines[1]);
+    assert.deepEqual(lines, [{ publicId: otherId, quantity: 3 }, { publicId: storedId, quantity: 2 }]);
+  }
+});
 test("cart language switching keeps the cart route in EN/HU/KO and legacy English", () => {
   for (const source of ["/cart", "/en/cart", "/hu/cart", "/ko/cart"]) for (const target of ["en", "hu", "ko"]) {
     assert.equal(switchLocalePath(source, target), `/${target}/cart`);
