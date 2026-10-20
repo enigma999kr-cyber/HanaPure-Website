@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { CART_STORAGE_KEY, inspectStoredCart, serializeCart, type CartLine } from "./cart-state";
+import { canUndoCart, createCartUndoPlan, sameCartSelection, type CartUndoPlan } from "./cart-undo";
 
 type Snapshot = Readonly<{ lines: readonly CartLine[]; ready: boolean; persistent: boolean; invalid: boolean }>;
 const serverSnapshot: Snapshot = { lines: [], ready: false, persistent: true, invalid: false };
@@ -37,6 +38,26 @@ export function changeBrowserCart(change: (lines: readonly CartLine[]) => readon
   return saveSelection(change(snapshot.lines));
 }
 export function resetBrowserCart() { saveSelection([]); }
+/** No atomic cross-tab CAS is available: keep the final read and write synchronous and adjacent. */
+export function restoreBrowserCart(plan: CartUndoPlan): "restored" | "changed" | "unavailable" {
+  if (!snapshot.ready || snapshot.invalid || !snapshot.persistent || !createCartUndoPlan(plan.before, plan.after)) return "unavailable";
+  if (!canUndoCart(plan, snapshot.lines)) return "changed";
+  try {
+    const raw = window.localStorage.getItem(CART_STORAGE_KEY);
+    if (raw === null) return "unavailable";
+    const stored = inspectStoredCart(raw);
+    if (stored.invalid) return "unavailable";
+    if (!sameCartSelection(stored.lines, plan.after)) return "changed";
+    window.localStorage.setItem(CART_STORAGE_KEY, serializeCart(plan.before));
+  } catch {
+    snapshot = { ...snapshot, persistent: false };
+    emit();
+    return "unavailable";
+  }
+  snapshot = { lines: plan.before, ready: true, persistent: true, invalid: false };
+  emit();
+  return "restored";
+}
 function saveSelection(lines: readonly CartLine[]) {
   // Storage can be blocked; keep the current tab usable without promising persistence.
   let persistent = true;

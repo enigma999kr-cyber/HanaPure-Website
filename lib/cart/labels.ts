@@ -1,5 +1,8 @@
 export const cartLabels = {
   en: {
+    undo: "Undo", removed: "Item removed from cart.", cleared: "Cart emptied.", restored: "Previous cart selection restored.",
+    undoChanged: "Undo is no longer available because the cart changed.",
+    undoStorage: "Undo could not be saved safely. Check browser storage or reload the cart.",
     invalidStorage: "Your saved cart could not be read safely. Open the cart and reset it before adding items. Resetting clears the saved selection.",
     reset: "Reset saved cart",
     selectedQuantity: "Selected quantity",
@@ -11,6 +14,9 @@ export const cartLabels = {
     invalid: "Enter a positive whole-number quantity.", loading: "Loading cart", updated: "Cart updated",
   },
   hu: {
+    undo: "Visszavonás", removed: "A terméket eltávolítottuk a kosárból.", cleared: "A kosarat kiürítettük.", restored: "A korábbi kosártartalom visszaállítva.",
+    undoChanged: "A kosár megváltozott, ezért a művelet már nem vonható vissza.",
+    undoStorage: "A visszavonás nem menthető biztonságosan. Ellenőrizze a böngésző tárhelyét, vagy töltse újra a kosarat.",
     invalidStorage: "A mentett kosár nem olvasható biztonságosan. Nyissa meg a kosarat, és állítsa alaphelyzetbe, mielőtt terméket ad hozzá. Ez törli a mentett kiválasztást.",
     reset: "Mentett kosár alaphelyzetbe állítása",
     selectedQuantity: "Kiválasztott mennyiség",
@@ -22,6 +28,9 @@ export const cartLabels = {
     invalid: "Adjon meg pozitív egész mennyiséget.", loading: "Kosár betöltése", updated: "Kosár frissítve",
   },
   ko: {
+    undo: "실행 취소", removed: "장바구니에서 상품을 삭제했습니다.", cleared: "장바구니를 비웠습니다.", restored: "이전 장바구니 선택을 복원했습니다.",
+    undoChanged: "장바구니가 변경되어 실행을 취소할 수 없습니다.",
+    undoStorage: "실행 취소를 안전하게 저장할 수 없습니다. 브라우저 저장소를 확인하거나 장바구니를 새로고침해 주세요.",
     invalidStorage: "저장된 장바구니를 안전하게 읽을 수 없습니다. 상품을 추가하기 전에 장바구니를 열어 초기화해 주세요. 초기화하면 저장된 선택 항목이 삭제됩니다.",
     reset: "저장된 장바구니 초기화",
     selectedQuantity: "선택 수량",

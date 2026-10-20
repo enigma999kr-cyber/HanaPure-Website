@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
 import { storefrontHref, storefrontLabels } from "@/lib/storefront/localization";
 import { cartLabels } from "@/lib/cart/labels";
 import { reconcileCart, updateCartLine, validQuantity } from "@/lib/cart/cart-state";
-import { changeBrowserCart, resetBrowserCart, useBrowserCart } from "@/lib/cart/browser-cart";
+import type { CartLine } from "@/lib/cart/cart-state";
+import { changeBrowserCart, resetBrowserCart, restoreBrowserCart, useBrowserCart } from "@/lib/cart/browser-cart";
+import { canUndoCart, createCartUndoPlan, type CartUndoPlan } from "@/lib/cart/cart-undo";
 import { cartControl } from "./AddToCart";
 
 export type CartProduct = Readonly<{ publicId: string; slug: string; brand: string;
@@ -38,16 +40,36 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
   const cart = useBrowserCart();
   const labels = cartLabels[locale];
   const [message, setMessage] = useState("");
+  const [undo, setUndo] = useState<CartUndoPlan | null>(null);
   const browseRef = useRef<HTMLAnchorElement>(null);
   const removeRefs = useRef(new Map<string, HTMLButtonElement>());
+  const restoredFocus = useRef<string | null>(null);
   const items = reconcileCart(cart.lines, products);
+  const undoAvailable = undo && cart.ready && cart.persistent && !cart.invalid && canUndoCart(undo, cart.lines);
+  useEffect(() => {
+    if (restoredFocus.current) {
+      (removeRefs.current.get(restoredFocus.current) ?? browseRef.current)?.focus();
+      restoredFocus.current = null;
+    }
+  }, [cart.lines]);
+  function removeSelection(change: (lines: readonly CartLine[]) => readonly CartLine[], success: string) {
+    let plan: CartUndoPlan | null = null;
+    const result = changeBrowserCart(lines => {
+      const after = change(lines);
+      if (cart.ready && cart.persistent && !cart.invalid) plan = createCartUndoPlan(lines, after);
+      // The stored post-action array is also the reference witness for this single Undo.
+      return plan?.after ?? after;
+    });
+    setUndo(result?.persistent ? plan : null);
+    setMessage(!result ? labels.undoChanged : !result.persistent ? labels.storage : plan ? success : labels.updated);
+  }
   return <>
     <p className="mt-5 leading-7 text-hanapure-muted">{labels.notice}</p>
     {!cart.persistent && <p role="status" className="mt-4">{labels.storage}</p>}
     {cart.invalid && <div className="mt-4">
       <p role="status">{labels.invalidStorage}</p>
       <button type="button" className={`${cartControl} mt-3`} onClick={() => {
-        browseRef.current?.focus(); resetBrowserCart(); setMessage(labels.updated);
+        browseRef.current?.focus(); setUndo(null); resetBrowserCart(); setMessage(labels.updated);
       }}>{labels.reset}</button>
     </div>}
     {!cart.ready ? <p className="mt-8">{labels.loading}</p> : cart.lines.length === 0 ? <p className="mt-8 text-xl">{labels.empty}</p> : <>
@@ -60,7 +82,7 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
               <Link href={storefrontHref(`/products/${product.slug}`, routeLocale)} className={`${cartControl} mt-2 block max-w-full break-words text-xl`}>{name}</Link>
               {!product.names[locale] && <p className="mt-3">{storefrontLabels[locale].missing}</p>}
             </> : <p>{labels.unavailable}</p>}
-            {product ? <QuantityForm {...line} name={name} locale={locale} announce={setMessage} />
+            {product ? <QuantityForm {...line} name={name} locale={locale} announce={value => { setUndo(null); setMessage(value); }} />
               : <p className="mt-4">{labels.quantity}: {line.quantity}</p>}
             <button ref={button => {
               if (button) removeRefs.current.set(line.publicId, button);
@@ -69,14 +91,21 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
               const neighbour = cart.lines[index + 1] ?? cart.lines[index - 1];
               if (neighbour) removeRefs.current.get(neighbour.publicId)?.focus();
               else browseRef.current?.focus();
-              changeBrowserCart(lines => lines.filter(item => item.publicId !== line.publicId)); setMessage(labels.updated);
+              removeSelection(lines => lines.filter(item => item.publicId !== line.publicId), labels.removed);
             }}>{labels.remove}</button>
           </li>;
         })}
       </ul>
-      <button type="button" className={`${cartControl} mt-6`} onClick={() => { browseRef.current?.focus(); changeBrowserCart(() => []); setMessage(labels.updated); }}>{labels.clear}</button>
+      <button type="button" className={`${cartControl} mt-6`} onClick={() => { browseRef.current?.focus(); removeSelection(() => [], labels.cleared); }}>{labels.clear}</button>
     </>}
-    <p role="status" className="mt-4">{message}</p>
+    {undoAvailable && <button type="button" className={`${cartControl} mt-4`} onClick={() => {
+      setUndo(null);
+      restoredFocus.current = undo.before[0].publicId;
+      const result = restoreBrowserCart(undo);
+      setMessage(result === "restored" ? labels.restored : result === "changed" ? labels.undoChanged : labels.undoStorage);
+      if (result !== "restored") { restoredFocus.current = null; browseRef.current?.focus(); }
+    }}>{labels.undo}</button>}
+    <p role="status" className="mt-4">{undo && !undoAvailable ? labels.undoChanged : message}</p>
     <Link ref={browseRef} href={storefrontHref("/products", routeLocale)} className={`${cartControl} mt-6 inline-flex items-center`}>{labels.browse}</Link>
   </>;
 }
