@@ -9,6 +9,8 @@ import AddToCart from "@/components/cart/AddToCart";
 import QuickAdd from "@/components/cart/QuickAdd";
 import SaveProductButton from "./SaveProductButton";
 import SavedProductsBar from "./SavedProductsBar";
+import ProductComparison from "./ProductComparison";
+import type { ComparisonProduct } from "@/lib/comparison/compare-selection";
 import { cartLabels } from "@/lib/cart/labels";
 import { localCatalogue } from "@/lib/catalog/local-catalogue";
 import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
@@ -17,6 +19,14 @@ import { brandNames } from "@/data/brands";
 import { catalogueQueryString, discoverCatalogue, publishedCatalogueBrands, type CatalogueCriteria } from "@/lib/catalog/catalogue-discovery";
 
 type CatalogueReader = typeof localCatalogue;
+function comparisonProjection(catalogue: CatalogueReader, locale: EditorialLocale): readonly ComparisonProduct[] {
+  return catalogue.listPublished().map(product => {
+    const content = product.translations[locale];
+    return { publicId: product.publicId, slug: product.slug, brand: product.brand,
+      name: content?.name ?? null, description: content?.description ?? null,
+      usage: content?.usage ?? null, caution: content?.caution ?? null };
+  });
+}
 const linkStyle = "inline-flex min-h-11 items-center text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-hanapure-text";
 
 /** Missing selected-locale content stays explicit. null retains legacy English URLs. */
@@ -26,6 +36,7 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
   criteria?: CatalogueCriteria;
 } = {}) {
   const products = discoverCatalogue(catalogue, locale, criteria);
+  const comparison = comparisonProjection(catalogue, locale);
   const active = Boolean(criteria.query || criteria.brand);
   const unknownBrand = criteria.brand && !brandNames.some((brand) => brand === criteria.brand);
   const publishedBrands = publishedCatalogueBrands(catalogue);
@@ -108,6 +119,7 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
           })}
         </ul>
       )}
+      {comparison.length >= 2 && <ProductComparison key={locale} products={comparison} locale={locale} routeLocale={routeLocale} />}
     </Container>
   );
 }
@@ -124,6 +136,7 @@ export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en",
   const labels = storefrontLabels[locale];
   const brandQuery = catalogueQueryString({ query: "", brand: product.brand });
   const related = catalogue.listPublished().filter(item => item.brand === product.brand && item.publicId !== product.publicId).slice(0, 3);
+  const comparison = comparisonProjection(catalogue, locale);
   return (
     <Container className="pb-20 pt-32 sm:pt-36">
       <Link href={`${storefrontHref("/products", routeLocale)}${catalogueQueryString(criteria)}`} className={linkStyle}>{labels.back}</Link>
@@ -173,6 +186,8 @@ export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en",
           })}
         </ul>
       </section>}
+      {comparison.length >= 2 && <ProductComparison key={`${product.publicId}-${locale}`} products={comparison}
+        locale={locale} routeLocale={routeLocale} initialPublicId={product.publicId} />}
     </Container>
   );
 }

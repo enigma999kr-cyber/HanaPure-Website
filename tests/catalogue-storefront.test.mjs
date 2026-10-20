@@ -47,6 +47,7 @@ const { default: AddToCart } = await import("../components/cart/AddToCart.tsx");
 const { default: QuickAdd } = await import("../components/cart/QuickAdd.tsx");
 const { default: SaveProductButton } = await import("../components/catalogue/SaveProductButton.tsx");
 const { default: SavedProductsBar } = await import("../components/catalogue/SavedProductsBar.tsx");
+const { default: ProductComparison } = await import("../components/catalogue/ProductComparison.tsx");
 // Expand the actual pure server views, preserving host-element attributes/text.
 function elements(node) {
   if (node == null || typeof node === "boolean") return [];
@@ -54,7 +55,7 @@ function elements(node) {
   if (typeof node !== "object") return [node];
   // Client hooks are exercised in the hydrated browser, not called as server functions.
   if (node.type === ProductImage || node.type === ProductMediaGallery || node.type === AddToCart || node.type === QuickAdd ||
-    node.type === SaveProductButton || node.type === SavedProductsBar) return [node];
+    node.type === SaveProductButton || node.type === SavedProductsBar || node.type === ProductComparison) return [node];
   if (typeof node.type === "function") return elements(node.type(node.props));
   return [node, ...elements(node.props?.children)];
 }
@@ -66,6 +67,50 @@ const product = (patch = {}) => ({ publicId: "12345678-abcd-1234-abcd-123456789a
 const reader = (...records) => createLocalCatalogueReader(records);
 const { readCatalogueCriteria, catalogueQueryString } = await import("../lib/catalog/catalogue-discovery.ts");
 const { productMetadata } = await import("../lib/storefront/seo.ts");
+
+test("comparison is published-only, independent of filtered results, localized and preselects the detail identity", () => {
+  const first = product();
+  const second = product({ publicId: "22345678-abcd-1234-abcd-123456789abc", slug: "second-fixture", brand: "Anua",
+    translations: { en: { ...content(), usage: null, caution: null }, hu: null, ko: null } });
+  const draft = product({ publicId: "32345678-abcd-1234-abcd-123456789abc", slug: "private-draft", state: "draft" });
+  for (const routeLocale of [null, "en", "hu", "ko"]) {
+    const locale = routeLocale ?? "en";
+    const catalogue = reader(first, second, draft);
+    const nodes = elements(ProductListing({ catalogue, locale, routeLocale,
+      criteria: { query: "", brand: "beplain", sort: "name-desc" } }));
+    const board = nodes.find(node => node.type === ProductComparison);
+    assert.equal(nodes.filter(node => node.type === ProductComparison).length, 1);
+    assert.deepEqual(Object.keys(board.props).sort(), ["locale", "products", "routeLocale"]);
+    assert.equal(board.props.locale, locale);
+    assert.equal(board.props.routeLocale, routeLocale);
+    assert.equal(board.props.products.length, 2);
+    assert.deepEqual(board.props.products.map(item => item.publicId), [first.publicId, second.publicId]);
+    assert.equal(nodes.filter(node => node.type === QuickAdd).length, 1);
+    for (const [index, item] of board.props.products.entries()) {
+      assert.deepEqual(Object.keys(item).sort(), ["brand", "caution", "description", "name", "publicId", "slug", "usage"]);
+      assert.equal(item.slug, [first, second][index].slug);
+      if (locale === "en") {
+        assert.equal(item.name, content().name);
+        assert.equal(item.description, content().description);
+      } else for (const field of ["name", "description", "usage", "caution"]) assert.equal(item[field], null);
+    }
+    assert.equal(board.props.products[1].usage, null);
+    assert.equal(board.props.products[1].caution, null);
+    const detail = elements(ProductDetail({ catalogue, slug: second.slug, locale, routeLocale,
+      criteria: { query: "original", brand: "Round Lab" } }));
+    const detailBoard = detail.find(node => node.type === ProductComparison);
+    assert.equal(detailBoard.props.initialPublicId, second.publicId);
+    assert.deepEqual(detailBoard.props.products, board.props.products);
+    assert.equal(detailBoard.props.routeLocale, routeLocale);
+    for (const count of [0, 1]) {
+      const small = reader(...[first].slice(0, count), draft);
+      assert.equal(elements(ProductListing({ catalogue: small, locale, routeLocale })).some(node => node.type === ProductComparison), false);
+      if (count) assert.equal(elements(ProductDetail({ catalogue: small, slug: first.slug, locale, routeLocale })).some(node => node.type === ProductComparison), false);
+    }
+    for (const slug of [draft.slug, "unknown"]) assert.throws(() => ProductDetail({ catalogue, slug, locale, routeLocale }));
+  }
+  assert.equal(elements(ProductListing()).some(node => node.type === ProductComparison), false);
+});
 
 test("Saved controls use only published identity and the full minimal locale projection, independent of search/sort", () => {
   const published = product();
