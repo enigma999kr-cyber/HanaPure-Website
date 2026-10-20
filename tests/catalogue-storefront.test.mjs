@@ -45,13 +45,16 @@ const { default: ProductImage } = await import("../components/catalogue/ProductI
 const { default: ProductMediaGallery } = await import("../components/catalogue/ProductMediaGallery.tsx");
 const { default: AddToCart } = await import("../components/cart/AddToCart.tsx");
 const { default: QuickAdd } = await import("../components/cart/QuickAdd.tsx");
+const { default: SaveProductButton } = await import("../components/catalogue/SaveProductButton.tsx");
+const { default: SavedProductsBar } = await import("../components/catalogue/SavedProductsBar.tsx");
 // Expand the actual pure server views, preserving host-element attributes/text.
 function elements(node) {
   if (node == null || typeof node === "boolean") return [];
   if (Array.isArray(node)) return node.flatMap(elements);
   if (typeof node !== "object") return [node];
   // Client hooks are exercised in the hydrated browser, not called as server functions.
-  if (node.type === ProductImage || node.type === ProductMediaGallery || node.type === AddToCart || node.type === QuickAdd) return [node];
+  if (node.type === ProductImage || node.type === ProductMediaGallery || node.type === AddToCart || node.type === QuickAdd ||
+    node.type === SaveProductButton || node.type === SavedProductsBar) return [node];
   if (typeof node.type === "function") return elements(node.type(node.props));
   return [node, ...elements(node.props?.children)];
 }
@@ -63,6 +66,41 @@ const product = (patch = {}) => ({ publicId: "12345678-abcd-1234-abcd-123456789a
 const reader = (...records) => createLocalCatalogueReader(records);
 const { readCatalogueCriteria, catalogueQueryString } = await import("../lib/catalog/catalogue-discovery.ts");
 const { productMetadata } = await import("../lib/storefront/seo.ts");
+
+test("Saved controls use only published identity and the full minimal locale projection, independent of search/sort", () => {
+  const published = product();
+  const second = product({ publicId: "22345678-abcd-1234-abcd-123456789abc", slug: "other-fixture", brand: "Anua" });
+  const draft = product({ publicId: "32345678-abcd-1234-abcd-123456789abc", slug: "draft-fixture", state: "draft" });
+  for (const routeLocale of [null, "en", "hu", "ko"]) {
+    const locale = routeLocale ?? "en";
+    const catalogue = reader(published, second, draft);
+    const nodes = elements(ProductListing({ catalogue, locale, routeLocale,
+      criteria: { query: "", brand: "beplain", sort: "name-desc" } }));
+    const bar = nodes.find(node => node.type === SavedProductsBar);
+    assert.equal(nodes.filter(node => node.type === SavedProductsBar).length, 1);
+    assert.deepEqual(Object.keys(bar.props).sort(), ["locale", "products", "routeLocale"]);
+    assert.equal(bar.props.routeLocale, routeLocale);
+    assert.equal(bar.props.locale, locale);
+    assert.deepEqual(bar.props.products.map(item => item.publicId), [published.publicId, second.publicId]);
+    for (const item of bar.props.products) {
+      assert.deepEqual(Object.keys(item).sort(), ["name", "publicId", "slug"]);
+      assert.ok(locale === "en" ? item.name === "Fictional fixture" : item.name.includes(item.slug));
+      if (locale !== "en") assert.ok(!item.name.includes("Fictional fixture"));
+    }
+    const buttons = nodes.filter(node => node.type === SaveProductButton);
+    assert.equal(buttons.length, 1);
+    assert.deepEqual(Object.keys(buttons[0].props).sort(), ["locale", "name", "publicId"]);
+    assert.equal(buttons[0].props.publicId, published.publicId);
+    const detail = elements(ProductDetail({ catalogue, slug: second.slug, locale, routeLocale }));
+    assert.equal(detail.filter(node => node.type === SaveProductButton).length, 1);
+    assert.equal(detail.find(node => node.type === SaveProductButton).props.publicId, second.publicId);
+    assert.throws(() => ProductDetail({ catalogue, slug: draft.slug, locale, routeLocale }));
+    assert.throws(() => ProductDetail({ catalogue, slug: "unknown", locale, routeLocale }));
+  }
+  const empty = elements(ProductListing());
+  assert.equal(empty.filter(node => node.type === SaveProductButton).length, 0);
+  assert.deepEqual(empty.find(node => node.type === SavedProductsBar).props.products, []);
+});
 
 test("Quick Add receives published editorial identity only and respects missing-locale content", () => {
   const published = product();

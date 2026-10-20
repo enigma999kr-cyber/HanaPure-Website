@@ -7,6 +7,8 @@ import ProductImage from "./ProductImage";
 import ProductMediaGallery from "./ProductMediaGallery";
 import AddToCart from "@/components/cart/AddToCart";
 import QuickAdd from "@/components/cart/QuickAdd";
+import SaveProductButton from "./SaveProductButton";
+import SavedProductsBar from "./SavedProductsBar";
 import { cartLabels } from "@/lib/cart/labels";
 import { localCatalogue } from "@/lib/catalog/local-catalogue";
 import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
@@ -33,6 +35,10 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
   return (
     <Container className="pb-20 pt-32 sm:pt-36">
       <h1 id="main-content" tabIndex={-1} className="text-4xl font-light text-hanapure-text sm:text-5xl">{labels.heading}</h1>
+      <SavedProductsBar locale={locale} routeLocale={routeLocale} products={catalogue.listPublished().map(product => ({
+        publicId: product.publicId, slug: product.slug,
+        name: product.translations[locale]?.name ?? `${labels.details}: ${product.brand} (${product.slug})`,
+      }))} />
       <form key={JSON.stringify([locale, criteria.query, criteria.brand, criteria.sort])}
         action={listingHref} method="get" autoComplete="off" role="search" aria-label={labels.searchProducts}
         className="mt-8 grid gap-4 rounded-2xl border border-hanapure-border bg-hanapure-white p-5 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
@@ -95,6 +101,8 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
                 </p>
                 <QuickAdd publicId={product.publicId} locale={locale}
                   name={content?.name ?? `${labels.details}: ${product.brand} (${product.slug})`} />
+                <SaveProductButton publicId={product.publicId} locale={locale}
+                  name={content?.name ?? `${labels.details}: ${product.brand} (${product.slug})`} />
               </li>
             );
           })}
@@ -145,6 +153,8 @@ export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en",
             </section>
           )}
           <AddToCart key={product.publicId} publicId={product.publicId} locale={locale} routeLocale={routeLocale} />
+          <SaveProductButton publicId={product.publicId} locale={locale}
+            name={content?.name ?? `${labels.details}: ${product.brand} (${product.slug})`} />
         </div>
       </article>
       {related.length > 0 && <section className="mt-12" aria-labelledby="same-brand-heading">
