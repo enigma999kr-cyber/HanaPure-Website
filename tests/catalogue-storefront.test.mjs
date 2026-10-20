@@ -49,6 +49,7 @@ const { default: SaveProductButton } = await import("../components/catalogue/Sav
 const { default: SavedProductsBar } = await import("../components/catalogue/SavedProductsBar.tsx");
 const { default: ProductComparison } = await import("../components/catalogue/ProductComparison.tsx");
 const { default: SearchSuggestions } = await import("../components/catalogue/SearchSuggestions.tsx");
+const { default: RecentlyViewedProducts, ProductVisitTracker, recentlyViewedLabels } = await import("../components/catalogue/RecentlyViewedProducts.tsx");
 // Expand the actual pure server views, preserving host-element attributes/text.
 function elements(node) {
   if (node == null || typeof node === "boolean") return [];
@@ -58,7 +59,8 @@ function elements(node) {
   // This island also carries the actual server-rendered native input as its child.
   if (node.type === SearchSuggestions) return [node, ...elements(node.props.children)];
   if (node.type === ProductImage || node.type === ProductMediaGallery || node.type === AddToCart || node.type === QuickAdd ||
-    node.type === SaveProductButton || node.type === SavedProductsBar || node.type === ProductComparison) return [node];
+    node.type === SaveProductButton || node.type === SavedProductsBar || node.type === ProductComparison ||
+    node.type === RecentlyViewedProducts || node.type === ProductVisitTracker) return [node];
   if (typeof node.type === "function") return elements(node.type(node.props));
   return [node, ...elements(node.props?.children)];
 }
@@ -70,6 +72,47 @@ const product = (patch = {}) => ({ publicId: "12345678-abcd-1234-abcd-123456789a
 const reader = (...records) => createLocalCatalogueReader(records);
 const { readCatalogueCriteria, catalogueQueryString } = await import("../lib/catalog/catalogue-discovery.ts");
 const { productMetadata } = await import("../lib/storefront/seo.ts");
+
+test("recent quick return reuses only the full public locale projection and records only resolved public details", () => {
+  const first = product({ translations: { en: content(), hu: { ...content(), name: "Szintetikus teszttermék" },
+    ko: { ...content(), name: "가상 테스트 상품" } } });
+  const second = product({ publicId: "22345678-abcd-1234-abcd-123456789abc", slug: "other-fixture", brand: "Anua" });
+  const draft = product({ publicId: "32345678-abcd-1234-abcd-123456789abc", slug: "private-draft", state: "draft" });
+  for (const routeLocale of [null, "en", "hu", "ko"]) {
+    const locale = routeLocale ?? "en";
+    const catalogue = reader(first, second, draft);
+    const nodes = elements(ProductListing({ catalogue, locale, routeLocale, criteria: { query: "no-match", brand: "beplain" } }));
+    const bar = nodes.find(node => node.type === RecentlyViewedProducts);
+    assert.equal(nodes.filter(node => node.type === RecentlyViewedProducts).length, 1);
+    assert.deepEqual(Object.keys(bar.props).sort(), ["locale", "products", "routeLocale"]);
+    assert.equal(bar.props.locale, locale);
+    assert.equal(bar.props.routeLocale, routeLocale);
+    assert.strictEqual(bar.props.products, nodes.find(node => node.type === SavedProductsBar).props.products);
+    assert.deepEqual(bar.props.products.map(item => item.publicId), [first.publicId, second.publicId]);
+    assert.deepEqual(bar.props.products.map(item => Object.keys(item).sort()), [
+      ["name", "publicId", "slug"], ["name", "publicId", "slug"],
+    ]);
+    assert.equal(bar.props.products[0].name, first.translations[locale].name);
+    if (locale !== "en") {
+      assert.ok(bar.props.products[1].name.includes(second.slug));
+      assert.ok(!bar.props.products[1].name.includes(content().name));
+    }
+    assert.equal(nodes.some(node => node.type === ProductVisitTracker), false);
+    for (const record of [first, second]) {
+      const detail = elements(ProductDetail({ catalogue, slug: record.slug, locale, routeLocale }));
+      const trackers = detail.filter(node => node.type === ProductVisitTracker);
+      assert.equal(trackers.length, 1);
+      assert.deepEqual(trackers[0].props, { publicId: record.publicId });
+    }
+    const single = reader(first);
+    assert.equal(elements(ProductListing({ catalogue: single, locale, routeLocale })).find(node => node.type === RecentlyViewedProducts).props.products.length, 1);
+    assert.equal(elements(ProductDetail({ catalogue: single, slug: first.slug, locale, routeLocale })).filter(node => node.type === ProductVisitTracker).length, 1);
+    for (const slug of [draft.slug, "unknown"]) assert.throws(() => ProductDetail({ catalogue, slug, locale, routeLocale }));
+    assert.deepEqual(elements(ProductListing({ locale, routeLocale })).find(node => node.type === RecentlyViewedProducts).props.products, []);
+    for (const value of Object.values(recentlyViewedLabels[locale])) assert.ok(value.trim());
+    assert.deepEqual(Object.keys(recentlyViewedLabels[locale]), Object.keys(recentlyViewedLabels.en));
+  }
+});
 
 test("instant suggestions receive full published selected-locale projection while the actual native GET input remains intact", () => {
   const first = product();

@@ -11,6 +11,7 @@ import SaveProductButton from "./SaveProductButton";
 import SavedProductsBar from "./SavedProductsBar";
 import ProductComparison from "./ProductComparison";
 import SearchSuggestions from "./SearchSuggestions";
+import RecentlyViewedProducts, { ProductVisitTracker } from "./RecentlyViewedProducts";
 import type { ComparisonProduct } from "@/lib/comparison/compare-selection";
 import { cartLabels } from "@/lib/cart/labels";
 import { localCatalogue } from "@/lib/catalog/local-catalogue";
@@ -47,15 +48,17 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
   const unknownBrand = criteria.brand && !brandNames.some((brand) => brand === criteria.brand);
   const publishedBrands = publishedCatalogueBrands(catalogue);
   const labels = storefrontLabels[locale];
+  const quickProducts = catalogue.listPublished().map(product => ({
+    publicId: product.publicId, slug: product.slug,
+    name: product.translations[locale]?.name ?? `${labels.details}: ${product.brand} (${product.slug})`,
+  }));
   const listingHref = storefrontHref("/products", routeLocale);
   const controlStyle = "min-h-11 w-full rounded-xl border border-hanapure-border bg-hanapure-warm-white px-3 py-3 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text";
   return (
     <Container className="pb-20 pt-32 sm:pt-36">
       <h1 id="main-content" tabIndex={-1} className="text-4xl font-light text-hanapure-text sm:text-5xl">{labels.heading}</h1>
-      <SavedProductsBar locale={locale} routeLocale={routeLocale} products={catalogue.listPublished().map(product => ({
-        publicId: product.publicId, slug: product.slug,
-        name: product.translations[locale]?.name ?? `${labels.details}: ${product.brand} (${product.slug})`,
-      }))} />
+      <SavedProductsBar locale={locale} routeLocale={routeLocale} products={quickProducts} />
+      <RecentlyViewedProducts locale={locale} routeLocale={routeLocale} products={quickProducts} />
       <form key={JSON.stringify([locale, criteria.query, criteria.brand, criteria.sort])}
         action={listingHref} method="get" autoComplete="off" role="search" aria-label={labels.searchProducts}
         className="mt-8 grid gap-4 rounded-2xl border border-hanapure-border bg-hanapure-white p-5 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
@@ -147,6 +150,7 @@ export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en",
   const comparison = comparisonProjection(catalogue, locale);
   return (
     <Container className="pb-20 pt-32 sm:pt-36">
+      <ProductVisitTracker key={product.publicId} publicId={product.publicId} />
       <Link href={`${storefrontHref("/products", routeLocale)}${catalogueQueryString(criteria)}`} className={linkStyle}>{labels.back}</Link>
       <article className="mt-6 grid min-w-0 gap-8 lg:grid-cols-2 lg:gap-12">
         {content && content.images.length > 0 && (
