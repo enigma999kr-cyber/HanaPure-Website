@@ -10,6 +10,7 @@ import QuickAdd from "@/components/cart/QuickAdd";
 import SaveProductButton from "./SaveProductButton";
 import SavedProductsBar from "./SavedProductsBar";
 import ProductComparison from "./ProductComparison";
+import SearchSuggestions from "./SearchSuggestions";
 import type { ComparisonProduct } from "@/lib/comparison/compare-selection";
 import { cartLabels } from "@/lib/cart/labels";
 import { localCatalogue } from "@/lib/catalog/local-catalogue";
@@ -36,6 +37,11 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
   criteria?: CatalogueCriteria;
 } = {}) {
   const products = discoverCatalogue(catalogue, locale, criteria);
+  const suggestions = catalogue.listPublished().map(product => ({
+    publicId: product.publicId, slug: product.slug, brand: product.brand,
+    name: product.translations[locale]?.name ?? null,
+    description: product.translations[locale]?.description ?? null,
+  }));
   const comparison = comparisonProjection(catalogue, locale);
   const active = Boolean(criteria.query || criteria.brand);
   const unknownBrand = criteria.brand && !brandNames.some((brand) => brand === criteria.brand);
@@ -55,8 +61,10 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
         className="mt-8 grid gap-4 rounded-2xl border border-hanapure-border bg-hanapure-white p-5 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
         <div className="min-w-0">
           <label htmlFor="catalogue-search" className="mb-2 block text-sm font-medium">{labels.searchProducts}</label>
-          <input id="catalogue-search" name="q" type="search" defaultValue={criteria.query} autoComplete="off"
-            placeholder={labels.searchHint} className={`${controlStyle} scroll-mt-24`} />
+          <SearchSuggestions products={suggestions} initialQuery={criteria.query} locale={locale} routeLocale={routeLocale}>
+            <input id="catalogue-search" name="q" type="search" defaultValue={criteria.query} autoComplete="off"
+              placeholder={labels.searchHint} className={`${controlStyle} scroll-mt-24`} />
+          </SearchSuggestions>
         </div>
         <div className="min-w-0">
           <label htmlFor="catalogue-brand" className="mb-2 block text-sm font-medium">{labels.filterBrand}</label>

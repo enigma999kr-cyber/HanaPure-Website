@@ -48,12 +48,15 @@ const { default: QuickAdd } = await import("../components/cart/QuickAdd.tsx");
 const { default: SaveProductButton } = await import("../components/catalogue/SaveProductButton.tsx");
 const { default: SavedProductsBar } = await import("../components/catalogue/SavedProductsBar.tsx");
 const { default: ProductComparison } = await import("../components/catalogue/ProductComparison.tsx");
+const { default: SearchSuggestions } = await import("../components/catalogue/SearchSuggestions.tsx");
 // Expand the actual pure server views, preserving host-element attributes/text.
 function elements(node) {
   if (node == null || typeof node === "boolean") return [];
   if (Array.isArray(node)) return node.flatMap(elements);
   if (typeof node !== "object") return [node];
   // Client hooks are exercised in the hydrated browser, not called as server functions.
+  // This island also carries the actual server-rendered native input as its child.
+  if (node.type === SearchSuggestions) return [node, ...elements(node.props.children)];
   if (node.type === ProductImage || node.type === ProductMediaGallery || node.type === AddToCart || node.type === QuickAdd ||
     node.type === SaveProductButton || node.type === SavedProductsBar || node.type === ProductComparison) return [node];
   if (typeof node.type === "function") return elements(node.type(node.props));
@@ -67,6 +70,47 @@ const product = (patch = {}) => ({ publicId: "12345678-abcd-1234-abcd-123456789a
 const reader = (...records) => createLocalCatalogueReader(records);
 const { readCatalogueCriteria, catalogueQueryString } = await import("../lib/catalog/catalogue-discovery.ts");
 const { productMetadata } = await import("../lib/storefront/seo.ts");
+
+test("instant suggestions receive full published selected-locale projection while the actual native GET input remains intact", () => {
+  const first = product();
+  const second = product({ publicId: "22345678-abcd-1234-abcd-123456789abc", slug: "another-fixture", brand: "Anua" });
+  const draft = product({ publicId: "32345678-abcd-1234-abcd-123456789abc", slug: "private-draft", state: "draft" });
+  for (const routeLocale of [null, "en", "hu", "ko"]) {
+    const locale = routeLocale ?? "en";
+    const criteria = { query: "prefilled & text", brand: "beplain", sort: "name-desc" };
+    const nodes = elements(ProductListing({ catalogue: reader(first, second, draft), locale, routeLocale, criteria }));
+    const island = nodes.find(node => node.type === SearchSuggestions);
+    assert.equal(nodes.filter(node => node.type === SearchSuggestions).length, 1);
+    assert.deepEqual(Object.keys(island.props).sort(), ["children", "initialQuery", "locale", "products", "routeLocale"]);
+    assert.equal(island.props.initialQuery, criteria.query);
+    assert.equal(island.props.locale, locale);
+    assert.equal(island.props.routeLocale, routeLocale);
+    assert.deepEqual(island.props.products.map(item => item.publicId), [first.publicId, second.publicId]);
+    for (const item of island.props.products) {
+      assert.deepEqual(Object.keys(item).sort(), ["brand", "description", "name", "publicId", "slug"]);
+      assert.equal(item.name, locale === "en" ? content().name : null);
+      assert.equal(item.description, locale === "en" ? content().description : null);
+    }
+    const forms = nodes.filter(node => node.type === "form");
+    assert.equal(forms.length, 1);
+    assert.equal(forms[0].props.method, "get");
+    assert.equal(forms[0].props.action, routeLocale ? `/${locale}/products` : "/products");
+    assert.equal(forms[0].props.role, "search");
+    const input = island.props.children;
+    assert.equal(input.type, "input");
+    assert.equal(input.props.id, "catalogue-search");
+    assert.equal(input.props.name, "q");
+    assert.equal(input.props.type, "search");
+    assert.equal(input.props.defaultValue, criteria.query);
+    assert.ok(nodes.some(node => node.type === "label" && node.props.htmlFor === input.props.id));
+    assert.equal(nodes.find(node => node.type === "select" && node.props.name === "brand").props.defaultValue, criteria.brand);
+    assert.equal(nodes.find(node => node.type === "select" && node.props.name === "sort").props.defaultValue, criteria.sort);
+    assert.equal(nodes.filter(node => node.type === "button" && node.props.type === "submit").length, 1);
+    const empty = elements(ProductListing({ locale, routeLocale }));
+    assert.deepEqual(empty.find(node => node.type === SearchSuggestions).props.products, []);
+    assert.equal(empty.filter(node => node.type === "input").length, 1);
+  }
+});
 
 test("comparison is published-only, independent of filtered results, localized and preselects the detail identity", () => {
   const first = product();
