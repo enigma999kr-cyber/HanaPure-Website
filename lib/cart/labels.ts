@@ -1,5 +1,7 @@
 export const cartLabels = {
   en: {
+    draftQuantity: "Draft quantity", decreaseDraft: "Decrease draft quantity", increaseDraft: "Increase draft quantity",
+    cartNavigation: "Cart list navigation", cartRows: "Cart items", jumpToActions: "Go to selected item actions", backToRows: "Back to cart items",
     selectDisplayed: "Select all displayed cart items", clearSelection: "Clear cart selection",
     draftPresets: "Add quantity presets", presetQuantity: "Choose draft add quantity",
     selectionOverview: "Browser cart selection overview", selectedUnits: "Selected units", selectedUnavailable: "Selected lines not in the published catalogue",
@@ -39,6 +41,8 @@ export const cartLabels = {
     invalid: "Enter a positive whole-number quantity.", loading: "Loading cart", updated: "Cart updated",
   },
   hu: {
+    draftQuantity: "Tervezett mennyiség", decreaseDraft: "Tervezett mennyiség csökkentése", increaseDraft: "Tervezett mennyiség növelése",
+    cartNavigation: "Kosárlista navigáció", cartRows: "Kosártételek", jumpToActions: "Ugrás a kiválasztott tételek műveleteihez", backToRows: "Vissza a kosártételekhez",
     selectDisplayed: "Minden megjelenített kosártétel kiválasztása", clearSelection: "Kosárkiválasztás törlése",
     draftPresets: "Hozzáadandó mennyiség gyorsválasztása", presetQuantity: "Hozzáadandó mennyiség kiválasztása",
     selectionOverview: "A böngésző kosarában kiválasztott tételek áttekintése", selectedUnits: "Kiválasztott darabszám", selectedUnavailable: "Kiválasztott, a közzétett katalógusban nem szereplő tételek",
@@ -78,6 +82,8 @@ export const cartLabels = {
     invalid: "Adjon meg pozitív egész mennyiséget.", loading: "Kosár betöltése", updated: "Kosár frissítve",
   },
   ko: {
+    draftQuantity: "입력 중인 수량", decreaseDraft: "입력 수량 줄이기", increaseDraft: "입력 수량 늘리기",
+    cartNavigation: "장바구니 목록 바로가기", cartRows: "장바구니 항목", jumpToActions: "선택 항목 작업으로 이동", backToRows: "장바구니 항목으로 돌아가기",
     selectDisplayed: "표시된 장바구니 항목 모두 선택", clearSelection: "장바구니 선택 해제",
     draftPresets: "추가할 수량 빠른 선택", presetQuantity: "추가할 수량 입력값 선택",
     selectionOverview: "브라우저 장바구니 선택 요약", selectedUnits: "선택한 총 수량", selectedUnavailable: "공개 카탈로그에 없는 선택 항목 수",

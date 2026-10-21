@@ -7,6 +7,7 @@ import { changeBrowserCart, useBrowserCart } from "@/lib/cart/browser-cart";
 import { cartLabels } from "@/lib/cart/labels";
 import { parseQuickAddQuantity } from "@/lib/cart/quick-add-quantity";
 import { cartControl } from "./AddToCart";
+import { stepQuantityDraft } from "@/lib/cart/quantity-draft-controls";
 
 export default function QuickAdd({ publicId, locale, name }: {
   publicId: string; locale: EditorialLocale; name: string;
@@ -32,8 +33,20 @@ export default function QuickAdd({ publicId, locale, name }: {
       }}>
       <div className="min-w-0 max-w-full">
         <label htmlFor={id} className="mb-2 block break-words text-sm font-medium">{labels.quantity}: {name}</label>
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
+          <button type="button" aria-label={`${labels.decreaseDraft}: ${name}`}
+            disabled={!cart.ready || cart.invalid || !cart.persistent || stepQuantityDraft(quantity, -1) === null}
+            className={`${cartControl} min-w-11 disabled:opacity-50`} onClick={() => {
+              const value = stepQuantityDraft(quantity, -1); if (cart.ready && !cart.invalid && cart.persistent && value !== null) setQuantity(value);
+            }}>−</button>
         <input id={id} type="number" min="1" step="1" required value={quantity}
           onChange={event => setQuantity(event.target.value)} className={`${cartControl} w-28 max-w-full`} />
+          <button type="button" aria-label={`${labels.increaseDraft}: ${name}`}
+            disabled={!cart.ready || cart.invalid || !cart.persistent || stepQuantityDraft(quantity, 1) === null}
+            className={`${cartControl} min-w-11 disabled:opacity-50`} onClick={() => {
+              const value = stepQuantityDraft(quantity, 1); if (cart.ready && !cart.invalid && cart.persistent && value !== null) setQuantity(value);
+            }}>+</button>
+        </div>
       </div>
       <button type="submit" aria-label={`${labels.add}: ${name}`}
         disabled={!cart.ready || cart.invalid || !cart.persistent}

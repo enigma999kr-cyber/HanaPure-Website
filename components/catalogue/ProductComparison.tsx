@@ -47,12 +47,17 @@ export default function ProductComparison({ products, locale, routeLocale, initi
         </select>
       </div>)}
     </div>
+    <nav aria-label={labels.panelNavigation} className="mt-4 flex min-w-0 flex-wrap gap-3">
+      {[labels.jumpFirst, labels.jumpSecond].map((label, slot) => <a key={slot} href={`#${id}-panel-${slot}`}
+        className="inline-flex min-h-11 min-w-0 max-w-full items-center break-words rounded-xl border border-hanapure-border px-4 py-3 text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text">{label}</a>)}
+    </nav>
     <button type="button" className="mt-4 min-h-11 max-w-full break-words rounded-xl border border-hanapure-border px-4 py-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text"
       onClick={() => setSelection([pair[1].publicId, pair[0].publicId])}>{labels.swap}</button>
     <p className="mt-4 break-words text-sm leading-6 text-hanapure-muted">{cartLabels[locale].notice}</p>
     <div className="mt-5 grid min-w-0 gap-4 md:grid-cols-2">
-      {pair.map(product => <article key={product.publicId} className="min-w-0 rounded-xl border border-hanapure-border bg-hanapure-white p-4">
-        <h3 className="break-words text-xl font-medium">{displayName(product)}</h3>
+      {pair.map((product, slot) => <article key={product.publicId} id={`${id}-panel-${slot}`} tabIndex={-1} aria-labelledby={`${id}-panel-${slot}-heading`}
+        className="min-w-0 scroll-mt-24 rounded-xl border border-hanapure-border bg-hanapure-white p-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-hanapure-text">
+        <h3 id={`${id}-panel-${slot}-heading`} className="break-words text-xl font-medium">{displayName(product)}</h3>
         {browserCartOverlap(cart, product.publicId) !== null && <p className="mt-3 break-words text-sm">{labels.inBrowserCart}: {browserCartOverlap(cart, product.publicId)}</p>}
         {savedProductOverlap(favorites, product.publicId) && <p className="mt-2 break-words text-sm">{labels.saved}</p>}
         <dl className="mt-4 space-y-4">
