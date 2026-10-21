@@ -53,6 +53,16 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
     name: product.translations[locale]?.name ?? `${labels.details}: ${product.brand} (${product.slug})`,
   }));
   const listingHref = storefrontHref("/products", routeLocale);
+  const appliedCriteria = [
+    ...(criteria.query ? [{ key: "q", label: `${labels.searchProducts}: ${criteria.query}`,
+      href: listingHref + catalogueQueryString({ ...criteria, query: "" }) }] : []),
+    ...(criteria.brand ? [{ key: "brand", label: `${labels.filterBrand}: ${publishedBrands.some(brand => brand === criteria.brand) ? criteria.brand : labels.invalidBrand}`,
+      href: listingHref + catalogueQueryString({ ...criteria, brand: "" }) }] : []),
+    ...(criteria.sort === "name-asc" || criteria.sort === "name-desc" ? [{ key: "sort",
+      label: `${labels.sortBy}: ${criteria.sort === "name-asc" ? labels.nameAscending : labels.nameDescending}`,
+      href: listingHref + catalogueQueryString({ query: criteria.query, brand: criteria.brand }) }] : []),
+  ];
+  const criterionLinkStyle = `${linkStyle} min-w-0 max-w-full break-words rounded-xl border border-hanapure-border px-4 py-3`;
   const controlStyle = "min-h-11 w-full rounded-xl border border-hanapure-border bg-hanapure-warm-white px-3 py-3 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text";
   return (
     <Container className="pb-20 pt-32 sm:pt-36">
@@ -88,6 +98,28 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
         </div>
         <button type="submit" className="min-h-11 rounded-xl bg-hanapure-text px-5 py-3 text-hanapure-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text">{labels.apply}</button>
       </form>
+      {publishedBrands.length > 0 && <nav aria-labelledby="catalogue-brand-shortcuts" className="mt-6 min-w-0">
+        <h2 id="catalogue-brand-shortcuts" className="break-words text-sm font-medium">{labels.quickBrands}</h2>
+        <ul className="mt-3 flex min-w-0 flex-wrap gap-3">
+          {publishedBrands.map(brand => <li key={brand} className="min-w-0 max-w-full">
+            <Link href={listingHref + catalogueQueryString({ ...criteria, brand: criteria.brand === brand ? "" : brand })}
+              aria-current={criteria.brand === brand ? "true" : undefined}
+              aria-label={criteria.brand === brand ? `${labels.removeFilter}: ${labels.filterBrand}: ${brand}` : undefined}
+              className={`${criterionLinkStyle} ${criteria.brand === brand ? "bg-hanapure-beige" : "bg-hanapure-white"}`}>{brand}</Link>
+          </li>)}
+        </ul>
+      </nav>}
+      {appliedCriteria.length > 0 && <section aria-labelledby="catalogue-active-filters" className="mt-6 min-w-0">
+        <h2 id="catalogue-active-filters" className="break-words text-sm font-medium">{labels.activeFilters}</h2>
+        <ul className="mt-3 flex min-w-0 flex-wrap gap-3">
+          {appliedCriteria.map(criterion => <li key={criterion.key} className="min-w-0 max-w-full">
+            <Link href={criterion.href} aria-label={`${labels.removeFilter}: ${criterion.label}`}
+              className={`${criterionLinkStyle} gap-2 bg-hanapure-warm-white`}>
+              <span className="min-w-0 break-words">{criterion.label}</span><span aria-hidden="true">×</span>
+            </Link>
+          </li>)}
+        </ul>
+      </section>}
       <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2">
         <p role="status" className="text-sm text-hanapure-muted">{labels.results}: {products.length}</p>
         {(active || criteria.sort) && <Link href={listingHref} className={linkStyle}>{labels.clear}</Link>}

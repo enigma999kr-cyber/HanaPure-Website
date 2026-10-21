@@ -38,6 +38,7 @@ export const storefrontLabels = {
     filterBrand: "Brand", allBrands: "All brands", apply: "Apply", clear: "Clear search and filters",
     results: "Results", noResults: "No matching products", noResultsDescription: "Try another search or clear the filters.",
     invalidBrand: "Unknown brand selection",
+    quickBrands: "Browse by brand", activeFilters: "Applied search and filters", removeFilter: "Remove filter",
     sortBy: "Sort by", defaultOrder: "Default order", nameAscending: "Name A–Z", nameDescending: "Name Z–A",
   },
   hu: {
@@ -53,6 +54,7 @@ export const storefrontLabels = {
     filterBrand: "Márka", allBrands: "Minden márka", apply: "Alkalmazás", clear: "Keresés és szűrők törlése",
     results: "Találatok", noResults: "Nincs megfelelő termék", noResultsDescription: "Próbáljon más keresést, vagy törölje a szűrőket.",
     invalidBrand: "Ismeretlen márkaválasztás",
+    quickBrands: "Böngészés márka szerint", activeFilters: "Aktív keresés és szűrők", removeFilter: "Szűrő eltávolítása",
     sortBy: "Rendezés", defaultOrder: "Alapértelmezett sorrend", nameAscending: "Név A–Z", nameDescending: "Név Z–A",
   },
   ko: {
@@ -68,6 +70,7 @@ export const storefrontLabels = {
     filterBrand: "브랜드", allBrands: "모든 브랜드", apply: "적용", clear: "검색 및 필터 초기화",
     results: "검색 결과", noResults: "조건에 맞는 상품이 없습니다", noResultsDescription: "다른 검색어를 입력하거나 필터를 초기화하세요.",
     invalidBrand: "알 수 없는 브랜드 선택",
+    quickBrands: "브랜드별 둘러보기", activeFilters: "적용된 검색 및 필터", removeFilter: "조건 해제",
     sortBy: "정렬 기준", defaultOrder: "기본 순서", nameAscending: "이름 오름차순", nameDescending: "이름 내림차순",
   },
 } as const;

@@ -74,6 +74,8 @@ function elements(node) {
   return [node, ...elements(node.props?.children)];
 }
 const text = (nodes) => nodes.filter((node) => typeof node === "string").join(" ");
+// Navigation/chip lists are not product cards: retain the existing card assertions.
+const listingCards = nodes => nodes.filter(node => node.type === "li" && elements(node).some(child => child.type === QuickAdd));
 const content = () => ({ name: "Fictional fixture", description: "Only a test fixture.",
   images: [{ src: "/fixtures/image.webp", alt: "Fictional fixture image" }], usage: "Fixture usage.", caution: "Fixture caution." });
 const product = (patch = {}) => ({ publicId: "12345678-abcd-1234-abcd-123456789abc", brand: "beplain",
@@ -81,6 +83,106 @@ const product = (patch = {}) => ({ publicId: "12345678-abcd-1234-abcd-123456789a
 const reader = (...records) => createLocalCatalogueReader(records);
 const { readCatalogueCriteria, catalogueQueryString } = await import("../lib/catalog/catalogue-discovery.ts");
 const { productMetadata } = await import("../lib/storefront/seo.ts");
+
+test("batch A: published-brand shortcuts apply/toggle only brand, retain query/sort/locale and never depend on results", () => {
+  const first = product({ brand: "Round Lab" });
+  const second = product({ publicId: "22345678-abcd-1234-abcd-123456789abc", slug: "other-public", brand: "Dr. Althea" });
+  const draft = product({ publicId: "32345678-abcd-1234-abcd-123456789abc", slug: "private-brand", brand: "Anua", state: "draft" });
+  for (const routeLocale of [null, "en", "hu", "ko"]) for (const count of [0, 1, 2]) {
+    const locale = routeLocale ?? "en";
+    const catalogue = reader(...[first, second].slice(0, count), draft);
+    for (const brand of ["", "Round Lab", "not-a-public-brand"]) {
+      const criteria = readCatalogueCriteria({ q: "  árvíz 한국 & ?/#  ", brand, sort: "name-desc" });
+      const nodes = elements(ProductListing({ catalogue, locale, routeLocale, criteria }));
+      const nav = nodes.find(node => node.type === "nav" && node.props["aria-labelledby"] === "catalogue-brand-shortcuts");
+      assert.equal(Boolean(nav), count > 0);
+      if (!nav) continue;
+      const links = elements(nav).filter(node => typeof node.props?.href === "string");
+      assert.deepEqual(links.map(node => text(elements(node))), count === 1 ? ["Round Lab"] : ["Dr. Althea", "Round Lab"]);
+      assert.ok(!text(elements(nav)).includes("Anua"));
+      for (const link of links) {
+        const displayed = text(elements(link));
+        const url = new URL(link.props.href, "https://test.invalid");
+        assert.equal(url.pathname, routeLocale ? `/${locale}/products` : "/products");
+        assert.equal(url.searchParams.get("q"), criteria.query);
+        assert.equal(url.searchParams.get("sort"), "name-desc");
+        assert.equal(url.searchParams.get("brand"), brand === displayed ? null : displayed);
+        assert.equal(link.props["aria-current"], brand === displayed ? "true" : undefined);
+        if (brand === displayed) {
+          assert.ok(link.props["aria-label"]);
+          assert.match(link.props.className, /bg-hanapure-beige/);
+        }
+        assert.match(link.props.className, /min-h-11/);
+        assert.match(link.props.className, /focus-visible:outline-2/);
+        assert.match(link.props.className, /max-w-full break-words/);
+        assert.equal(link.props.onClick, undefined);
+      }
+      const form = nodes.find(node => node.type === "form" && node.props.method === "get");
+      assert.ok(form && !elements(form).some(node => node === nav));
+      // Deliberately no matching results: shortcuts still expose exactly public brands.
+      assert.equal(nodes.filter(node => node.type === QuickAdd).length, 0);
+    }
+  }
+});
+
+test("batch B: applied normalized chips remove exactly one criterion, escape text and preserve existing continuation/reset", async () => {
+  const { storefrontLabels } = await import("../lib/storefront/localization.ts");
+  const { renderToStaticMarkup } = require(join(dirname(require.resolve("react-dom/package.json")), "server.node.js"));
+  const record = product({ brand: "Round Lab" });
+  const catalogue = reader(record);
+  for (const routeLocale of [null, "en", "hu", "ko"]) {
+    const locale = routeLocale ?? "en";
+    const labels = storefrontLabels[locale];
+    const root = routeLocale ? `/${locale}/products` : "/products";
+    for (const params of [{}, { q: " Round Lab " }, { brand: "Round Lab" }, { sort: "name-asc" },
+      { q: "  árvíz 한국 & ?/# <script>alert(1)</script>  ", brand: "Round Lab", sort: "name-desc" },
+      { q: " Round Lab ", brand: '<img src=x onerror="x">', sort: "name-asc" },
+      { brand: "Anua", sort: "price-asc" }, { q: ["Round Lab", "ignored"], sort: ["name-asc", "name-desc"] }]) {
+      const criteria = readCatalogueCriteria(params);
+      const nodes = elements(ProductListing({ catalogue, locale, routeLocale, criteria }));
+      const section = nodes.find(node => node.type === "section" && node.props["aria-labelledby"] === "catalogue-active-filters");
+      const expected = [criteria.query && "q", criteria.brand && "brand", criteria.sort && "sort"].filter(Boolean);
+      assert.equal(Boolean(section), expected.length > 0);
+      if (section) {
+        const links = elements(section).filter(node => typeof node.props?.href === "string");
+        assert.equal(links.length, expected.length);
+        for (const [index, key] of expected.entries()) {
+          const link = links[index];
+          const url = new URL(link.props.href, "https://test.invalid");
+          assert.equal(url.pathname, root);
+          const all = { q: criteria.query, brand: criteria.brand, sort: criteria.sort };
+          for (const criterion of ["q", "brand", "sort"]) assert.equal(url.searchParams.get(criterion), criterion === key ? null : all[criterion] || null);
+          assert.ok(link.props["aria-label"].startsWith(`${labels.removeFilter}: `));
+          assert.match(link.props.className, /min-h-11/);
+          assert.match(link.props.className, /focus-visible:outline-2/);
+          assert.equal(link.props.onClick, undefined);
+          if (key === "brand" && criteria.brand !== record.brand) {
+            assert.ok(text(elements(link)).includes(labels.invalidBrand));
+            assert.ok(!text(elements(link)).includes(criteria.brand));
+          }
+        }
+        const html = renderToStaticMarkup(section);
+        assert.ok(!html.includes("<script>") && !html.includes("<img"));
+        assert.ok(!html.includes("<form"));
+      }
+      const clear = nodes.find(node => node.props?.href === root && text(elements(node)) === labels.clear);
+      assert.equal(Boolean(clear), expected.length > 0);
+      const getForm = nodes.find(node => node.type === "form" && node.props.method === "get");
+      assert.equal(getForm.props.action, root);
+      assert.ok(!elements(getForm).some(node => node === section));
+      assert.equal(nodes.find(node => node.type === "input" && node.props.name === "q").props.defaultValue, criteria.query);
+      assert.equal(nodes.find(node => node.type === "select" && node.props.name === "brand").props.defaultValue, criteria.brand);
+      assert.equal(nodes.find(node => node.type === "select" && node.props.name === "sort").props.defaultValue, criteria.sort ?? "");
+    }
+    const criteria = readCatalogueCriteria({ q: "Round Lab", brand: "Round Lab", sort: "name-asc" });
+    const nodes = elements(ProductListing({ catalogue, locale, routeLocale, criteria }));
+    assert.ok(nodes.some(node => node.props?.href === `${root}/${record.slug}${catalogueQueryString(criteria)}`));
+    assert.equal(nodes.filter(node => node.type === QuickAdd).length, 1);
+    const detail = elements(ProductDetail({ catalogue, slug: record.slug, locale, routeLocale, criteria }));
+    assert.ok(detail.some(node => node.props?.href === root + catalogueQueryString(criteria)));
+    for (const key of ["quickBrands", "activeFilters", "removeFilter"]) assert.ok(labels[key].trim());
+  }
+});
 
 test("recent quick return reuses only the full public locale projection and records only resolved public details", () => {
   const first = product({ translations: { en: content(), hu: { ...content(), name: "Szintetikus teszttermék" },
@@ -422,7 +524,7 @@ test("Quick Add receives published editorial identity only and respects missing-
     assert.equal(controls[0].props.publicId, published.publicId);
     assert.equal(controls[0].props.locale, locale);
     assert.ok(locale === "en" ? controls[0].props.name === "Fictional fixture" : controls[0].props.name.includes(published.slug));
-    assert.equal(nodes.find(node => node.type === "li").props.children.some(child => child?.type === QuickAdd), true);
+    assert.equal(listingCards(nodes)[0].props.children.some(child => child?.type === QuickAdd), true);
   }
   assert.equal(elements(ProductListing()).filter(node => node.type === QuickAdd).length, 0);
 });
@@ -624,7 +726,7 @@ test("listing links only published records using the stable slug and exact brand
   const draft = product({ publicId: "22345678-abcd-1234-abcd-123456789abc", slug: "private-draft", state: "draft" });
   const catalogue = reader(published, draft);
   const nodes = elements(ProductListing({ catalogue }));
-  assert.deepEqual(nodes.filter((node) => node.props?.href).map((node) => node.props.href), ["/products/fictional-fixture", "/products/fictional-fixture"]);
+  assert.deepEqual(listingCards(nodes).flatMap(elements).filter((node) => node.props?.href).map((node) => node.props.href), ["/products/fictional-fixture", "/products/fictional-fixture"]);
   assert.match(text(nodes), /beplain Fictional fixture Only a test fixture/);
   assert.equal(nodes.find((node) => node.type === ProductImage).props.alt, published.translations.en.images[0].alt);
   assert.equal(catalogue.listPublished()[0].publicId, published.publicId);
@@ -765,7 +867,7 @@ test("localized GET search/filter controls reflect state and render only combine
   assert.equal(nodes.find(node => node.type === "input").props.defaultValue, "lemosó");
   assert.equal(nodes.find(node => node.type === "select").props.defaultValue, "beplain");
   assert.ok(nodes.some(node => node.type === "button" && node.props.type === "submit"));
-  assert.equal(nodes.filter(node => node.type === "li").length, 1);
+  assert.equal(listingCards(nodes).length, 1);
   assert.ok(nodes.some(node => node.props?.href === "/hu/products/fictional-fixture?q=lemos%C3%B3&brand=beplain"));
   assert.ok(!nodes.some(node => node.props?.href === "/hu/products/other-fixture"));
   assert.ok(nodes.some(node => node.props?.href === "/hu/products"));
@@ -777,15 +879,15 @@ test("zero search results differ from empty catalogue; reset restores publicatio
   const criteria = { query: "no-match", brand: "beplain" };
   const nodes = elements(ProductListing({ catalogue, locale: "ko", routeLocale: "ko", criteria }));
   assert.ok(text(nodes).includes("조건에 맞는 상품이 없습니다"));
-  assert.equal(nodes.filter(node => node.type === "li").length, 0);
+  assert.equal(listingCards(nodes).length, 0);
   assert.ok(nodes.some(node => node.props?.href === "/ko/products"));
   const reset = elements(ProductListing({ catalogue, locale: "ko", routeLocale: "ko" }));
-  assert.equal(reset.filter(node => node.type === "li").length, 1);
+  assert.equal(listingCards(reset).length, 1);
   assert.ok(text(reset).includes("이 상품의 한국어 콘텐츠가 아직 없습니다"));
   assert.ok(!text(reset).includes("Fictional fixture"));
   const invalid = elements(ProductListing({ catalogue, criteria: { query: "", brand: "unknown" } }));
   assert.ok(text(invalid).includes("Unknown brand selection"));
-  assert.equal(invalid.filter(node => node.type === "li").length, 0);
+  assert.equal(listingCards(invalid).length, 0);
 });
 
 test("language switching retains active catalogue search/brand query for the destination locale", () => {
