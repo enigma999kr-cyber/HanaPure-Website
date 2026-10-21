@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import type { EditorialImage, EditorialLocale } from "@/lib/catalog/editorial-catalogue";
 import { storefrontHref, storefrontLabels } from "@/lib/storefront/localization";
 import { cartLabels } from "@/lib/cart/labels";
-import { reconcileCart } from "@/lib/cart/cart-state";
+import { CART_STORAGE_KEY, inspectStoredCart, reconcileCart } from "@/lib/cart/cart-state";
 import type { CartLine } from "@/lib/cart/cart-state";
 import { changeBrowserCart, resetBrowserCart, restoreBrowserCart, useBrowserCart } from "@/lib/cart/browser-cart";
-import { canUndoCart, createCartUndoPlan, type CartUndoPlan } from "@/lib/cart/cart-undo";
+import { canUndoCart, createCartUndoPlan, sameCartSelection, type CartUndoPlan } from "@/lib/cart/cart-undo";
 import { useBrowserFavorites } from "@/lib/favorites/browser-favorites";
 import { MAX_FAVORITES } from "@/lib/favorites/favorite-state";
 import { saveCartLineForLater } from "@/lib/cart/save-for-later";
@@ -23,9 +23,153 @@ import { cartReviewView, EMPTY_CART_REVIEW, CART_REVIEW_QUERY_LIMIT, CART_REVIEW
 import { COMPARISON_DESTINATION, comparisonHref, publishedComparison } from "@/lib/comparison/compare-selection";
 import ProductImage from "@/components/catalogue/ProductImage";
 import { cartRowId, cartRowFromHash } from "@/lib/cart/quick-add-continuity";
+import { portableCartLink, readPortableLink, resolvePortableLines, planPortableMerge } from "@/lib/cart/cart-portable-handoff";
 
 export type CartProduct = Readonly<{ publicId: string; slug: string; brand: string;
   names: Readonly<Record<EditorialLocale, string | null>>; image?: EditorialImage | null }>;
+
+function portableLocation() { return typeof window === "undefined" ? "" : window.location?.href ?? ""; }
+function subscribePortableLocation(notify: () => void) {
+  window.addEventListener("popstate", notify); window.addEventListener("hashchange", notify);
+  return () => { window.removeEventListener("popstate", notify); window.removeEventListener("hashchange", notify); };
+}
+function portableServerLocation() { return ""; }
+type PortableFailure = "conflict" | "unavailable" | "write-failed" | "invalid" | "overflow";
+
+/** Read the entire persisted selection, allowing a virgin key only for an empty witness. */
+function readPortableSnapshot(cart: DetailCartSnapshot): { status: "ready"; lines: readonly CartLine[] } | { status: "conflict" | "unavailable" } {
+  if (typeof window === "undefined" || !cart.ready || cart.invalid || !cart.persistent) return { status: "unavailable" };
+  try {
+    const expected = inspectStoredCart(JSON.stringify({ version: 1, lines: cart.lines }));
+    const stored = inspectStoredCart(window.localStorage.getItem(CART_STORAGE_KEY));
+    if (expected.invalid || stored.invalid) return { status: "unavailable" };
+    return sameCartSelection(stored.lines, expected.lines) ? { status: "ready", lines: stored.lines } : { status: "conflict" };
+  } catch { return { status: "unavailable" }; }
+}
+
+/** Existing store pathway + full witnesses/readback. localStorage is NOT atomic cross-tab CAS. */
+function mergePortableDraft(href: string, cart: DetailCartSnapshot, products: readonly CartProduct[], publicationCurrent: () => boolean):
+  { status: "merged"; after: readonly CartLine[] } | { status: PortableFailure } {
+  const incoming = readPortableLink(href);
+  if (incoming.status !== "ready" || !resolvePortableLines(incoming.lines, products)) return { status: "invalid" };
+  if (portableLocation() !== href || !publicationCurrent()) return { status: "conflict" };
+  const fresh = readPortableSnapshot(cart);
+  if (fresh.status !== "ready") return fresh;
+  const planned = planPortableMerge(fresh.lines, incoming.lines, products);
+  if (planned.status !== "ready") return planned;
+  let refusal: PortableFailure | null = null;
+  let attempted = false;
+  try {
+    const result = changeBrowserCart(current => {
+      const latest = readPortableSnapshot(cart);
+      const draft = readPortableLink(portableLocation());
+      if (latest.status !== "ready") refusal = latest.status;
+      else if (current !== cart.lines || !sameCartSelection(current, fresh.lines) || portableLocation() !== href || !publicationCurrent() ||
+        draft.status !== "ready" || draft.signature !== incoming.signature || !resolvePortableLines(draft.lines, products)) refusal = "conflict";
+      if (refusal) throw new Error("Portable draft witness changed");
+      attempted = true;
+      return planned.after;
+    });
+    if (!result) return { status: "unavailable" };
+    if (!result.persistent) return { status: "write-failed" };
+    const raw = window.localStorage.getItem(CART_STORAGE_KEY), confirmed = inspectStoredCart(raw);
+    if (raw === null || confirmed.invalid || !sameCartSelection(confirmed.lines, planned.after) || portableLocation() !== href ||
+      !publicationCurrent() || !resolvePortableLines(incoming.lines, products)) return { status: "write-failed" };
+    return { status: "merged", after: planned.after };
+  } catch { return { status: refusal ?? (attempted ? "write-failed" : "unavailable") }; }
+}
+
+type PortableCartProps = Readonly<{ products: readonly CartProduct[]; cart: DetailCartSnapshot;
+  locale: EditorialLocale; routeLocale: EditorialLocale | null; onMerged: (after: readonly CartLine[]) => void; onUncertain: () => void }>;
+
+function PortableCartHandoff(props: PortableCartProps) {
+  const href = useSyncExternalStore(subscribePortableLocation, portableLocation, portableServerLocation);
+  // In-page row/navigation hashes must never reset an already consumed draft.
+  return <PortableCartPanel key={href.split("#")[0]} {...props} href={href} />;
+}
+
+function PortableCartPanel({ products, cart, locale, routeLocale, href, onMerged, onUncertain }: PortableCartProps & { href: string }) {
+  const labels = cartLabels[locale], headingId = useId();
+  const incoming = readPortableLink(href);
+  const resolved = incoming.status === "ready" ? resolvePortableLines(incoming.lines, products) : null;
+  const healthy = cart.ready && !cart.invalid && cart.persistent;
+  const hasPublicItems = cart.lines.some(line => products.some(product => product.publicId.toLowerCase() === line.publicId.toLowerCase()));
+  const [copyingDraft, setCopyingDraft] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState("");
+  const [mergeFeedback, setMergeFeedback] = useState("");
+  const [locked, setLocked] = useState(false);
+  const copyPending = useRef(false), confirmationUsed = useRef(false);
+  const live = useRef<null | { cart: DetailCartSnapshot; products: readonly CartProduct[]; locale: EditorialLocale; routeLocale: EditorialLocale | null; href: string }>(null);
+  useEffect(() => {
+    live.current = { cart, products, locale, routeLocale, href };
+    return () => { live.current = null; };
+  }, [cart, products, locale, routeLocale, href]);
+  function contextIsCurrent() {
+    const current = live.current;
+    return current && current.cart.lines === cart.lines && current.cart.ready && current.cart.persistent && !current.cart.invalid &&
+      current.products === products && current.locale === locale && current.routeLocale === routeLocale && current.href === href && portableLocation() === href;
+  }
+  function copyResult(status: string) {
+    return status === "empty" ? labels.portableEmpty : status === "too-large" ? labels.portableTooLarge :
+      status === "conflict" ? labels.portableConflict : labels.portableCopyFailed;
+  }
+  return <section aria-labelledby={headingId} className="mt-6 min-w-0 rounded-2xl border border-hanapure-border p-4">
+    <h2 id={headingId} className="break-words text-xl">{labels.portableTitle}</h2>
+    <p className="mt-3 break-words text-sm">{labels.portableNotice}</p>
+    <button type="button" disabled={!healthy || !href || copyingDraft || !hasPublicItems}
+      className={`${cartControl} mt-4 max-w-full whitespace-normal break-words disabled:opacity-50`} onClick={async () => {
+        if (copyPending.current || !healthy || !contextIsCurrent()) return;
+        const fresh = readPortableSnapshot(cart);
+        if (fresh.status !== "ready") { setCopyFeedback(copyResult(fresh.status)); return; }
+        let origin: string;
+        try { origin = new URL(href).origin; } catch { setCopyFeedback(labels.portableCopyFailed); return; }
+        const path = storefrontHref("/cart", routeLocale);
+        const link = portableCartLink(origin, path, fresh.lines, products);
+        if (link.status !== "ready") { setCopyFeedback(copyResult(link.status)); return; }
+        copyPending.current = true; setCopyingDraft(true); setCopyFeedback("");
+        try {
+          if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+          await navigator.clipboard.writeText(link.url);
+          if (!live.current) return;
+          const current = readPortableSnapshot(cart);
+          const checked = current.status === "ready" ? portableCartLink(origin, path, current.lines, products) : null;
+          setCopyFeedback(contextIsCurrent() && checked?.status === "ready" && checked.url === link.url && checked.omitted === link.omitted ?
+            `${labels.portableCopied} ${labels.portableOmitted}: ${link.omitted}.` : labels.portableConflict);
+        } catch { if (live.current) setCopyFeedback(labels.portableCopyFailed); }
+        finally { copyPending.current = false; if (live.current) setCopyingDraft(false); }
+      }}>{labels.portableCopy}</button>
+    <p role="status" className="mt-3 break-words text-sm">{copyFeedback || (!cart.ready ? labels.loading : !healthy ? labels.portableUnavailable : !hasPublicItems ? labels.portableEmpty : "")}</p>
+    {incoming.status !== "none" && <div className="mt-5 min-w-0 border-t border-hanapure-border pt-4">
+      <h3 className="break-words text-lg">{labels.portablePreview}</h3>
+      {incoming.status !== "ready" || !resolved ? <p role="status" className="mt-3 break-words">{labels.portableInvalid}</p> : <>
+        <dl className="mt-3 break-words text-sm"><div><dt>{labels.portableLines}</dt><dd>{incoming.lines.length}</dd></div>
+          <div><dt>{labels.portableUnits}</dt><dd>{incoming.units}</dd></div></dl>
+        <ul aria-label={labels.portablePreview} className="mt-3 min-w-0 space-y-2">
+          {resolved.map((product, index) => <li key={incoming.lines[index].publicId} className="min-w-0 break-words">
+            {product.names[locale] ?? storefrontLabels[locale].details} — {labels.quantity}: {incoming.lines[index].quantity}
+          </li>)}
+        </ul>
+        <button type="button" disabled={!healthy || locked} className={`${cartControl} mt-4 max-w-full whitespace-normal break-words disabled:opacity-50`}
+          onClick={() => {
+            if (!healthy || confirmationUsed.current) return;
+            confirmationUsed.current = true; setLocked(true);
+            if (!contextIsCurrent()) { setMergeFeedback(labels.portableConflict); return; }
+            const result = mergePortableDraft(href, cart, products, () => {
+              const current = live.current;
+              return current !== null && current.products === products && current.href === href && current.locale === locale && current.routeLocale === routeLocale;
+            });
+            if (result.status === "merged") { onMerged(result.after); setMergeFeedback(labels.portableMerged); }
+            else {
+              if (result.status === "write-failed" || result.status === "unavailable" || result.status === "conflict") onUncertain();
+              setMergeFeedback(result.status === "overflow" ? labels.portableOverflow : result.status === "conflict" ? labels.portableConflict :
+                result.status === "write-failed" ? labels.portableWriteFailed : result.status === "invalid" ? labels.portableInvalid : labels.portableUnavailable);
+            }
+          }}>{labels.portableMerge}</button>
+        <p role="status" className="mt-3 break-words text-sm">{mergeFeedback}</p>
+      </>}
+    </div>}
+  </section>;
+}
 
 function QuantityForm({ publicId, quantity, name, locale, cart, announce }: {
   publicId: string; quantity: number; name: string; locale: EditorialLocale; cart: DetailCartSnapshot; announce: (result: DetailSelectionResult) => void;
@@ -113,6 +257,7 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
     function focusRequestedRow() {
       if (!cart.ready || cart.invalid || !cart.persistent || !window.location) return;
       const hash = window.location.hash;
+      if (typeof hash !== "string") return;
       if (handledRowHash.current === hash) return;
       handledRowHash.current = hash;
       const target = cartRowFromHash(hash);
@@ -360,6 +505,9 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
         }
       }}>{labels.copyShoppingList}</button>
     <p role="status" className="mt-3 break-words text-sm text-hanapure-muted">{copyMessage}</p>
+    <PortableCartHandoff products={products} cart={cart} locale={locale} routeLocale={routeLocale}
+      onMerged={after => { setUndo(null); setChecked({ lines: after, ids: [] }); }}
+      onUncertain={() => { setUndo(null); setQuantityTrusted(false); }} />
     {undoAvailable && <button type="button" className={`${cartControl} mt-4`} onClick={() => {
       setUndo(null);
       restoredFocus.current = undo.before[0].publicId;
