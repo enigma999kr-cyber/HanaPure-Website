@@ -13,7 +13,8 @@ import ProductComparison from "./ProductComparison";
 import SearchSuggestions from "./SearchSuggestions";
 import CopySearchLink from "./CopySearchLink";
 import RecentlyViewedProducts, { ProductVisitTracker } from "./RecentlyViewedProducts";
-import { resolveComparison, type ComparisonProduct } from "@/lib/comparison/compare-selection";
+import { COMPARISON_DESTINATION, comparisonHref, publishedComparison, resolveComparison, type ComparisonContext, type ComparisonProduct } from "@/lib/comparison/compare-selection";
+import { comparisonLabels } from "@/lib/comparison/labels";
 import { cartLabels } from "@/lib/cart/labels";
 import { localCatalogue } from "@/lib/catalog/local-catalogue";
 import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
@@ -34,9 +35,10 @@ const linkStyle = "inline-flex min-h-11 items-center text-sm underline underline
 
 /** Missing selected-locale content stays explicit. null retains legacy English URLs. */
 export function ProductListing({ catalogue = localCatalogue, locale = "en", routeLocale = null,
-  criteria = { query: "", brand: "" } }: {
+  criteria = { query: "", brand: "" }, comparisonContext = {} }: {
   catalogue?: CatalogueReader; locale?: EditorialLocale; routeLocale?: EditorialLocale | null;
   criteria?: CatalogueCriteria;
+  comparisonContext?: ComparisonContext;
 } = {}) {
   const products = discoverCatalogue(catalogue, locale, criteria);
   const suggestions = catalogue.listPublished().map(product => ({
@@ -58,6 +60,7 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
     name: product.name ?? `${labels.details}: ${product.brand} (${product.slug})`,
   }));
   const listingHref = storefrontHref("/products", routeLocale);
+  const comparisonPair = publishedComparison(comparison, comparisonContext);
   const appliedCriteria = [
     ...(criteria.query ? [{ key: "q", label: `${labels.searchProducts}: ${criteria.query}`,
       href: listingHref + catalogueQueryString({ ...criteria, query: "" }) }] : []),
@@ -165,20 +168,29 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
                   name={content?.name ?? `${labels.details}: ${product.brand} (${product.slug})`} />
                 <SaveProductButton publicId={product.publicId} locale={locale}
                   name={content?.name ?? `${labels.details}: ${product.brand} (${product.slug})`} />
+                {(() => {
+                  const pair = resolveComparison(comparison, product.publicId);
+                  const href = pair && comparisonHref(listingHref, pair, catalogueQueryString(criteria));
+                  return href ? <Link href={`${href}#${COMPARISON_DESTINATION}`} className={`${linkStyle} mt-4 max-w-full break-words`}
+                    aria-label={`${comparisonLabels[locale].compare}: ${content?.name ?? `${product.brand} (${product.slug})`}`}>{comparisonLabels[locale].compare}</Link> : null;
+                })()}
               </li>
             );
           })}
         </ul>
       )}
-      {comparison.length >= 2 && <ProductComparison key={locale} products={comparison} locale={locale} routeLocale={routeLocale} />}
+      {comparison.length >= 2 && <ProductComparison key={`${locale}-${comparisonPair?.map(product => product.publicId).join("-") ?? "default"}-${catalogueQueryString(criteria)}`}
+        products={comparison} locale={locale} routeLocale={routeLocale} initialPublicId={comparisonPair?.[0].publicId}
+        initialSecondPublicId={comparisonPair?.[1].publicId} catalogueQuery={catalogueQueryString(criteria)} destinationId={COMPARISON_DESTINATION} />}
     </Container>
   );
 }
 
 export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en", routeLocale = null,
-  criteria = { query: "", brand: "" } }: {
+  criteria = { query: "", brand: "" }, comparisonContext = {} }: {
   slug: string; catalogue?: CatalogueReader; locale?: EditorialLocale; routeLocale?: EditorialLocale | null;
   criteria?: CatalogueCriteria;
+  comparisonContext?: ComparisonContext;
 }) {
   const product = catalogue.findPublishedBySlug(slug);
   // Absent/draft editorial records are not public pages. No ERP absence is inferred.
@@ -189,11 +201,15 @@ export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en",
   const related = catalogue.listPublished().filter(item => item.brand === product.brand && item.publicId !== product.publicId).slice(0, 3);
   const comparison = comparisonProjection(catalogue, locale);
   const hasComparison = resolveComparison(comparison, product.publicId) !== null;
+  const returnPair = comparisonContext.second ? publishedComparison(comparison, comparisonContext) : null;
+  const returnHref = returnPair && returnPair.some(item => item.publicId.toLowerCase() === product.publicId.toLowerCase())
+    ? comparisonHref(storefrontHref("/products", routeLocale), returnPair, catalogueQueryString(criteria)) : null;
   const detailTargetStyle = "scroll-mt-24 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-hanapure-text";
   return (
     <Container className="pb-20 pt-32 sm:pt-36">
       <ProductVisitTracker key={product.publicId} publicId={product.publicId} />
       <Link href={`${storefrontHref("/products", routeLocale)}${catalogueQueryString(criteria)}`} className={linkStyle}>{labels.back}</Link>
+      {returnHref && <Link href={`${returnHref}#${COMPARISON_DESTINATION}`} className={`${linkStyle} mt-3 block max-w-full break-words`}>{comparisonLabels[locale].backToComparison}</Link>}
       <article className="mt-6 grid min-w-0 gap-8 lg:grid-cols-2 lg:gap-12">
         {content && content.images.length > 0 && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-1">
@@ -251,7 +267,7 @@ export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en",
         </ul>
       </section>}
       {hasComparison && <ProductComparison key={`${product.publicId}-${locale}`} products={comparison}
-        locale={locale} routeLocale={routeLocale} initialPublicId={product.publicId} destinationId="product-comparison" />}
+        locale={locale} routeLocale={routeLocale} initialPublicId={product.publicId} catalogueQuery={catalogueQueryString(criteria)} destinationId="product-comparison" />}
     </Container>
   );
 }

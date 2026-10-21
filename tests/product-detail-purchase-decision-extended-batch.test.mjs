@@ -21,6 +21,8 @@ const hooksUrl = "data:text/javascript," + encodeURIComponent(`
 export const driver={instances:new Map(),active:[],index:0,subscriptions:new Map(),serial:0};
 export function useState(initial){const state=driver.active,index=driver.index++;if(!(index in state))state[index]=typeof initial==='function'?initial():initial;return [state[index],value=>{state[index]=typeof value==='function'?value(state[index]):value;}];}
 export function useId(){return useState(()=> 'synthetic-'+(++driver.serial))[0];}
+export function useRef(current){return useState(()=>({current}))[0];}
+export function useEffect(){}
 export function useSyncExternalStore(subscribe,getSnapshot,getServerSnapshot){driver.subscriptions.set(subscribe,getSnapshot);return typeof window==='undefined'?getServerSnapshot():getSnapshot();}
 `);
 registerHooks({
@@ -123,7 +125,7 @@ test("F1/F2 native detail jumps have real unique targets and preselect the curre
     const root = routeLocale ? `/${locale}/products` : "/products";
     assert.ok(nodes(detail).some(node => node.props?.href === `${root}?q=%C3%A1rv%C3%ADz+%ED%95%9C%EA%B5%AD&brand=Anua&sort=name-desc`));
     const listing = nodes(ProductListing({ catalogue, locale, routeLocale })).find(node => node.type === ProductComparison);
-    assert.equal(listing.props.destinationId, undefined);
+    assert.equal(listing.props.destinationId, "catalogue-comparison");
   }
 });
 

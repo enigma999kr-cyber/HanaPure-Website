@@ -469,7 +469,7 @@ test("comparison is published-only, independent of filtered results, localized a
       criteria: { query: "", brand: "beplain", sort: "name-desc" } }));
     const board = nodes.find(node => node.type === ProductComparison);
     assert.equal(nodes.filter(node => node.type === ProductComparison).length, 1);
-    assert.deepEqual(Object.keys(board.props).sort(), ["locale", "products", "routeLocale"]);
+    assert.deepEqual(Object.keys(board.props).sort(), ["catalogueQuery", "destinationId", "initialPublicId", "initialSecondPublicId", "locale", "products", "routeLocale"]);
     assert.equal(board.props.locale, locale);
     assert.equal(board.props.routeLocale, routeLocale);
     assert.equal(board.props.products.length, 2);
@@ -823,7 +823,7 @@ test("localized native sort control preserves normalized criteria and reset keep
 test("detail route shells pass normalized criteria to Back and locale navigation without changing metadata", () => {
   for (const path of ["app/products/[slug]/page.tsx", "app/[locale]/products/[slug]/page.tsx"]) {
     const source = readFileSync(join(repo, path), "utf8");
-    assert.match(source, /readCatalogueCriteria\(await searchParams\)/);
+    assert.match(source, /const query = await searchParams;\s*const criteria = readCatalogueCriteria\(query\)/);
     assert.match(source, /<Header catalogueQuery=\{catalogueQueryString\(criteria\)\}/);
     const metadata = source.slice(source.indexOf("export async function generateMetadata"), source.indexOf("export default"));
     assert.doesNotMatch(metadata, /searchParams|criteria|catalogueQuery/);
@@ -908,10 +908,10 @@ test("invalid publication data cannot enter storefront through the existing cata
 
 test("route wiring uses the authoritative reader and promised slug; Header Shop reaches the real listing", () => {
   const source = (path) => readFileSync(join(repo, path), "utf8");
-  assert.match(source("app/products/page.tsx"), /<ProductListing criteria=\{criteria\}\s*\/>/);
+  assert.match(source("app/products/page.tsx"), /<ProductListing criteria=\{criteria\} comparisonContext=\{readComparisonContext\(query\)\}\s*\/>/);
   const detail = source("app/products/[slug]/page.tsx");
   assert.match(detail, /await params/);
-  assert.match(detail, /ProductDetail\(\{ slug, criteria \}\)/);
+  assert.match(detail, /ProductDetail\(\{ slug, criteria, comparisonContext: readComparisonContext\(query\) \}\)/);
   assert.match(detail, /productMetadata\(slug, "en", \{ legacy: true \}\)/);
   const header = source("components/layout/Header.tsx");
   assert.equal((header.match(/storefrontHref\("\/products", routeLocale\)/g) ?? []).length, 4);
