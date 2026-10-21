@@ -73,7 +73,7 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
     <Container className="pb-20 pt-32 sm:pt-36">
       <h1 id="main-content" tabIndex={-1} className="text-4xl font-light text-hanapure-text sm:text-5xl">{labels.heading}</h1>
       <SavedProductsBar locale={locale} routeLocale={routeLocale} products={savedProducts} comparisonProducts={comparison} />
-      <RecentlyViewedProducts locale={locale} routeLocale={routeLocale} products={quickProducts} />
+      <RecentlyViewedProducts locale={locale} routeLocale={routeLocale} products={quickProducts} comparisonProducts={comparison} />
       <form key={JSON.stringify([locale, criteria.query, criteria.brand, criteria.sort])}
         action={listingHref} method="get" autoComplete="off" role="search" aria-label={labels.searchProducts}
         className="mt-8 grid gap-4 rounded-2xl border border-hanapure-border bg-hanapure-white p-5 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">

@@ -296,7 +296,8 @@ test("recent quick return reuses only the full public locale projection and reco
     const nodes = elements(ProductListing({ catalogue, locale, routeLocale, criteria: { query: "no-match", brand: "beplain" } }));
     const bar = nodes.find(node => node.type === RecentlyViewedProducts);
     assert.equal(nodes.filter(node => node.type === RecentlyViewedProducts).length, 1);
-    assert.deepEqual(Object.keys(bar.props).sort(), ["locale", "products", "routeLocale"]);
+    assert.deepEqual(Object.keys(bar.props).sort(), ["comparisonProducts", "locale", "products", "routeLocale"]);
+    assert.deepEqual(bar.props.comparisonProducts, nodes.find(node => node.type === ProductComparison).props.products);
     assert.equal(bar.props.locale, locale);
     assert.equal(bar.props.routeLocale, routeLocale);
     assert.deepEqual(bar.props.products, nodes.find(node => node.type === SavedProductsBar).props.products.map(({ publicId, slug, name }) => ({ publicId, slug, name })));
@@ -364,7 +365,7 @@ test("recent public MRU products compose QuickAdd without history/Favorites writ
       const nodes = elements(ProductListing({ catalogue: reader(first, second, unseen, draft), locale, routeLocale,
         criteria: { query: "no-match", brand: "Anua", sort: "name-desc" } }));
       const recent = nodes.find(node => node.type === RecentlyViewedProducts);
-      assert.deepEqual(Object.keys(recent.props).sort(), ["locale", "products", "routeLocale"]);
+      assert.deepEqual(Object.keys(recent.props).sort(), ["comparisonProducts", "locale", "products", "routeLocale"]);
       assert.deepEqual(recent.props.products.map(item => item.publicId), [first.publicId, second.publicId, unseen.publicId]);
       assert.ok(recent.props.products.every(item => Object.keys(item).sort().join(",") === "name,publicId,slug"));
       const searchForm = nodes.find(node => node.type === "form" && node.props.method === "get");
@@ -606,7 +607,7 @@ test("saved published products reuse quantity-aware QuickAdd without unsaving, h
       assert.ok(!html.includes(unknown));
       assert.ok(html.includes(favoriteLabels[locale].addSelected));
       assert.ok(html.includes(favoriteLabels[locale].removeSelected));
-      assert.equal((html.match(/<button type="button" disabled=""/g) ?? []).length, 3);
+      assert.equal((html.match(/<button type="button" disabled=""/g) ?? []).length, 5);
       for (const bad of ["corrupt-test-only", serializeFavorites([]), null]) {
         stored = bad; refresh();
         const hidden = renderToStaticMarkup(bar);

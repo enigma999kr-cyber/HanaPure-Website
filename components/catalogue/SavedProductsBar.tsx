@@ -1,10 +1,10 @@
 "use client";
 
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
 import { storefrontHref } from "@/lib/storefront/localization";
-import { useBrowserFavorites, resetBrowserFavorites, getFavoriteSnapshot } from "@/lib/favorites/browser-favorites";
+import { useBrowserFavorites, resetBrowserFavorites, getFavoriteSnapshot, mutateBrowserFavorites } from "@/lib/favorites/browser-favorites";
 import { favoriteLabels } from "@/lib/favorites/labels";
 import QuickAdd from "@/components/cart/QuickAdd";
 import { useBrowserCart } from "@/lib/cart/browser-cart";
@@ -13,6 +13,7 @@ import { emptySavedView, savedCollectionView, savedComparisonPair, type SavedVie
 import type { ComparisonProduct } from "@/lib/comparison/compare-selection";
 import { browserCartOverlap } from "@/lib/cart/cart-selection-summary";
 import ProductComparison from "./ProductComparison";
+import { savedShoppingList } from "@/lib/favorites/saved-shopping-list";
 
 export default function SavedProductsBar({ products, comparisonProducts = [], locale, routeLocale }: {
   products: readonly SavedViewProduct[]; comparisonProducts?: readonly ComparisonProduct[];
@@ -25,6 +26,8 @@ export default function SavedProductsBar({ products, comparisonProducts = [], lo
   const cart = useBrowserCart();
   const [checked, setChecked] = useState<{ baseline: readonly string[]; ids: readonly string[] }>({ baseline: state.ids, ids: [] });
   const [bulkMessage, setBulkMessage] = useState("");
+  const [copying, setCopying] = useState(false);
+  const copyPending = useRef(false);
   const [view, setView] = useState<SavedView>(emptySavedView);
   const [comparisonRequest, setComparisonRequest] = useState<{
     baseline: readonly string[]; selection: readonly string[]; view: SavedView;
@@ -33,7 +36,15 @@ export default function SavedProductsBar({ products, comparisonProducts = [], lo
   const selected = collection.rows;
   const healthy = state.ready && state.persistent && !state.invalid;
   const coherent = checked.baseline === state.ids && checked.ids.every(id => selected.some(product => product.publicId.toLowerCase() === id.toLowerCase()));
-  const checkedIds = coherent ? checked.ids : [];
+  const checkedIds = healthy && coherent ? checked.ids : [];
+  const copyContext = { baseline: state.ids, selection: checked.ids, view, products, locale, healthy, coherent };
+  const latestCopyContext = useRef(copyContext);
+  useEffect(() => { latestCopyContext.current = copyContext; });
+  const [copyResult, setCopyResult] = useState<{ context: typeof copyContext; message: string } | null>(null);
+  function sameCopyContext(left: typeof copyContext, right: typeof copyContext) {
+    return left.baseline === right.baseline && left.selection === right.selection && left.view === right.view &&
+      left.products === right.products && left.locale === right.locale && right.healthy && right.coherent;
+  }
   const usable = state.ready && state.persistent && !state.invalid && checkedIds.length > 0;
   const pair = healthy && coherent ? savedComparisonPair(checkedIds, state.ids, selected, comparisonProducts) : null;
   const activePair = comparisonRequest?.baseline === state.ids && comparisonRequest?.selection === checked.ids && comparisonRequest?.view === view ? pair : null;
@@ -86,6 +97,32 @@ export default function SavedProductsBar({ products, comparisonProducts = [], lo
       </li>)}</ul>}
     <div className="mt-3 flex min-w-0 flex-wrap gap-3">
       <p className="w-full break-words text-sm">{labels.selectedCount}: {checkedIds.length}</p>
+      <button type="button" disabled={!healthy || selected.length === 0} className={`${control} disabled:opacity-50`} onClick={() => {
+        setChecked({ baseline: state.ids, ids: [...new Map(selected.map(product => [product.publicId.toLowerCase(), product.publicId])).values()] });
+        setComparisonRequest(null); setBulkMessage(""); setCopyResult(null);
+      }}>{labels.selectDisplayed}</button>
+      <button type="button" disabled={!usable} className={`${control} disabled:opacity-50`} onClick={() => {
+        setChecked({ baseline: state.ids, ids: [] }); setComparisonRequest(null); setBulkMessage(""); setCopyResult(null);
+      }}>{labels.clearSelection}</button>
+      <button type="button" disabled={!usable || copying} className={`${control} disabled:opacity-50`} onClick={async () => {
+        if (copyPending.current || !usable) return;
+        const context = copyContext;
+        // CLOSED no-op mutation guard validates the complete fresh snapshot, with zero writes.
+        const guard = () => mutateBrowserFavorites(context.baseline, before => before) === "unchanged";
+        if (!guard()) { setCopyResult({ context, message: labels.copyFailed }); return; }
+        const list = savedShoppingList(state.ids, checkedIds, selected, locale);
+        if (list.status !== "ready") {
+          setCopyResult({ context, message: list.status === "too-large" ? labels.copyTooLarge : labels.copyFailed }); return;
+        }
+        copyPending.current = true; setCopying(true); setCopyResult(null);
+        try {
+          if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+          await navigator.clipboard.writeText(list.text);
+          if (sameCopyContext(context, latestCopyContext.current) && guard()) setCopyResult({ context, message: labels.copied });
+        } catch {
+          if (sameCopyContext(context, latestCopyContext.current)) setCopyResult({ context, message: labels.copyFailed });
+        } finally { copyPending.current = false; setCopying(false); }
+      }}>{labels.copySelected}</button>
       <button type="button" disabled={!pair} className={`${control} disabled:opacity-50`} onClick={() => {
         const current = getFavoriteSnapshot();
         if (pair && current.ids === state.ids && current.ready && current.persistent && !current.invalid) {
@@ -110,6 +147,7 @@ export default function SavedProductsBar({ products, comparisonProducts = [], lo
         }}>{labels.removeSelected}</button>
     </div>
     <p role="status" className="mt-2 break-words text-sm">{checked.ids.length > 0 && !coherent && !bulkMessage ? labels.bulkChanged : bulkMessage}</p>
+    <p role="status" className="mt-2 break-words text-sm">{copyResult && sameCopyContext(copyResult.context, copyContext) ? copyResult.message : ""}</p>
     {activePair && <ProductComparison key={`${locale}:${activePair.map(product => product.publicId).join(":")}`} products={activePair}
       locale={locale} routeLocale={routeLocale} initialPublicId={activePair[0].publicId} />}
     {state.invalid && <button type="button" onClick={() => resetBrowserFavorites()}

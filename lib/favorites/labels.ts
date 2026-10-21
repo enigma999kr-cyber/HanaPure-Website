@@ -1,5 +1,8 @@
 export const favoriteLabels = {
   en: {
+    selectDisplayed: "Select all displayed saved products", clearSelection: "Clear saved selection",
+    copySelected: "Copy selected saved products", copied: "Selected saved products copied as a personal one-unit interest list. Cart unchanged.",
+    copyFailed: "The saved selection could not be copied safely. Reload, check the selection and clipboard permission, then try again.", copyTooLarge: "This selected list is too long to copy. Select fewer saved products.",
     searchSaved: "Search saved products", savedBrand: "Saved product brand", allSavedBrands: "All saved brands",
     sortSaved: "Sort saved products", savedOrder: "Saved order", nameAscending: "Name A–Z", nameDescending: "Name Z–A",
     resetView: "Reset view", matches: "Matching saved products", noMatches: "No saved products match this view.",
@@ -14,6 +17,9 @@ export const favoriteLabels = {
     reset: "Reset saved products", limit: "You can save up to 100 products.",
   },
   hu: {
+    selectDisplayed: "Minden megjelenített mentett termék kiválasztása", clearSelection: "Mentett kiválasztás törlése",
+    copySelected: "Kiválasztott mentett termékek másolása", copied: "A mentett termékeket személyes érdeklődési listaként másoltuk, egy-egy darabbal. A kosár nem változott.",
+    copyFailed: "A mentett kiválasztás nem másolható biztonságosan. Töltse újra az oldalt, ellenőrizze a kiválasztást és a vágólap engedélyét, majd próbálja újra.", copyTooLarge: "A kiválasztott lista túl hosszú a másoláshoz. Válasszon kevesebb mentett terméket.",
     searchSaved: "Keresés a mentett termékek között", savedBrand: "Mentett termék márkája", allSavedBrands: "Minden mentett márka",
     sortSaved: "Mentett termékek rendezése", savedOrder: "Mentési sorrend", nameAscending: "Név A–Z", nameDescending: "Név Z–A",
     resetView: "Nézet alaphelyzetbe állítása", matches: "Megfelelő mentett termékek", noMatches: "Nincs a nézetnek megfelelő mentett termék.",
@@ -28,6 +34,9 @@ export const favoriteLabels = {
     reset: "Mentett termékek alaphelyzetbe állítása", limit: "Legfeljebb 100 terméket menthet.",
   },
   ko: {
+    selectDisplayed: "표시된 저장 상품 모두 선택", clearSelection: "저장 상품 선택 해제",
+    copySelected: "선택한 저장 상품 목록 복사", copied: "선택한 저장 상품을 각 1개 기준의 개인 관심 목록으로 복사했습니다. 장바구니는 변경되지 않았습니다.",
+    copyFailed: "저장 상품 선택 목록을 안전하게 복사할 수 없습니다. 새로고침 후 선택 내역과 클립보드 권한을 확인하고 다시 시도해 주세요.", copyTooLarge: "복사할 선택 목록이 너무 깁니다. 저장 상품을 더 적게 선택해 주세요.",
     searchSaved: "저장한 상품에서 검색", savedBrand: "저장한 상품 브랜드", allSavedBrands: "저장한 모든 브랜드",
     sortSaved: "저장한 상품 정렬", savedOrder: "저장 순서", nameAscending: "이름 오름차순", nameDescending: "이름 내림차순",
     resetView: "보기 초기화", matches: "조건에 맞는 저장 상품", noMatches: "현재 보기 조건에 맞는 저장 상품이 없습니다.",

@@ -155,6 +155,13 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
         <div><dt>{labels.selectedUnavailable}</dt><dd>{summary.unavailable}</dd></div>
       </dl>}
       <div className="mt-3 flex min-w-0 flex-wrap gap-3">
+        <button type="button" disabled={!cart.ready || cart.invalid || !cart.persistent || cart.lines.length === 0}
+          className={`${cartControl} max-w-full break-words disabled:opacity-50`} onClick={() => {
+            setChecked({ lines: cart.lines, ids: cart.lines.map(line => line.publicId) }); setBulkMessage(""); setSelectedCopyMessage("");
+          }}>{labels.selectDisplayed}</button>
+        <button type="button" disabled={!bulkReady} className={`${cartControl} max-w-full break-words disabled:opacity-50`} onClick={() => {
+          setChecked({ lines: cart.lines, ids: [] }); setBulkMessage(""); setSelectedCopyMessage("");
+        }}>{labels.clearSelection}</button>
         <button type="button" disabled={!bulkReady || !favorites.ready || favorites.invalid || !favorites.persistent ||
           selected.some(line => !products.some(product => product.publicId.toLowerCase() === line.publicId.toLowerCase()))}
           className={`${cartControl} max-w-full break-words disabled:opacity-50`} onClick={() => {
