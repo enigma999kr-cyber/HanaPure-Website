@@ -15,8 +15,16 @@ export function storefrontHref(path: string, locale: EditorialLocale | null): st
 /** Only existing storefront destinations are carried across; slugs never change. */
 export function switchLocalePath(path: string, locale: EditorialLocale): string {
   const [pathname] = path.split(/[?#]/);
-  const suffix = path.slice(pathname.length);
+  let suffix = path.slice(pathname.length);
   const current = localeFromPath(pathname);
+  if (current !== locale && suffix.startsWith("?")) {
+    const hashIndex = suffix.indexOf("#"), hash = hashIndex < 0 ? "" : suffix.slice(hashIndex);
+    const params = new URLSearchParams(hashIndex < 0 ? suffix : suffix.slice(0, hashIndex));
+    if (params.has("pickFirst")) {
+      params.delete("pickFirst");
+      suffix = (params.size ? `?${params}` : "") + hash;
+    }
+  }
   const destination = current ? pathname.slice(current.length + 1) || "/" : pathname;
   if (!/^\/(?:cart\/?|brands\/?|products(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)?\/?)?$/.test(destination)) {
     return storefrontHref("/", locale);
@@ -26,6 +34,10 @@ export function switchLocalePath(path: string, locale: EditorialLocale): string 
 
 export const storefrontLabels = {
   en: {
+    informationFilters: "Information in this language", withLocaleInfo: "Only products with information in this language", withLocaleImage: "Only products with images in this language",
+    visibleResults: "Visible results", resultPage: "Page", resultPages: "Result pages", previousPage: "Previous page", nextPage: "Next page",
+    crossPageComparison: "Choose products across result pages", firstResultSelected: "First product selected", cancelFirstResult: "Cancel first product selection",
+    chooseFirstResult: "Choose first product across pages", chooseSecondResult: "Compare with the selected first product",
     selectResultComparison: "Select for comparison", compareSelectedResults: "Compare two selected results", resultComparisonCount: "Selected results for comparison",
     matchingNavigation: "Matching product navigation", previousMatch: "Previous matching product", nextMatch: "Next matching product", compareRelated: "Compare with this product",
     gallery: "Product images", inspectImage: "Inspect image", closeImage: "Close image inspection", previousImage: "Previous image", nextImage: "Next image",
@@ -47,6 +59,10 @@ export const storefrontLabels = {
     sortBy: "Sort by", defaultOrder: "Default order", nameAscending: "Name A–Z", nameDescending: "Name Z–A",
   },
   hu: {
+    informationFilters: "Információ ezen a nyelven", withLocaleInfo: "Csak az ezen a nyelven információval rendelkező termékek", withLocaleImage: "Csak az ezen a nyelven képpel rendelkező termékek",
+    visibleResults: "Látható találatok", resultPage: "Oldal", resultPages: "Találati oldalak", previousPage: "Előző oldal", nextPage: "Következő oldal",
+    crossPageComparison: "Termékek kiválasztása több találati oldalról", firstResultSelected: "Első termék kiválasztva", cancelFirstResult: "Első termék kiválasztásának törlése",
+    chooseFirstResult: "Első termék kiválasztása többoldalas összehasonlításhoz", chooseSecondResult: "Összehasonlítás a kiválasztott első termékkel",
     selectResultComparison: "Kiválasztás összehasonlításhoz", compareSelectedResults: "Két kiválasztott találat összehasonlítása", resultComparisonCount: "Összehasonlításhoz kiválasztott találatok",
     matchingNavigation: "Navigáció a megfelelő termékek között", previousMatch: "Előző megfelelő termék", nextMatch: "Következő megfelelő termék", compareRelated: "Összehasonlítás ezzel a termékkel",
     gallery: "Termékképek", inspectImage: "Kép megtekintése nagyban", closeImage: "Nagyított kép bezárása", previousImage: "Előző kép", nextImage: "Következő kép",
@@ -68,6 +84,10 @@ export const storefrontLabels = {
     sortBy: "Rendezés", defaultOrder: "Alapértelmezett sorrend", nameAscending: "Név A–Z", nameDescending: "Név Z–A",
   },
   ko: {
+    informationFilters: "현재 언어의 정보", withLocaleInfo: "현재 언어의 정보가 있는 상품만", withLocaleImage: "현재 언어의 이미지가 있는 상품만",
+    visibleResults: "표시된 검색 결과", resultPage: "페이지", resultPages: "검색 결과 페이지", previousPage: "이전 페이지", nextPage: "다음 페이지",
+    crossPageComparison: "여러 검색 결과 페이지에서 비교 상품 선택", firstResultSelected: "선택한 첫 번째 상품", cancelFirstResult: "첫 번째 상품 선택 취소",
+    chooseFirstResult: "페이지 간 비교의 첫 상품으로 선택", chooseSecondResult: "선택한 첫 번째 상품과 비교",
     selectResultComparison: "비교할 상품 선택", compareSelectedResults: "선택한 검색 결과 두 개 비교", resultComparisonCount: "비교할 검색 결과 선택 수",
     matchingNavigation: "조건에 맞는 상품 탐색", previousMatch: "조건에 맞는 이전 상품", nextMatch: "조건에 맞는 다음 상품", compareRelated: "이 상품과 비교",
     gallery: "상품 이미지", inspectImage: "이미지 크게 보기", closeImage: "확대 이미지 닫기", previousImage: "이전 이미지", nextImage: "다음 이미지",

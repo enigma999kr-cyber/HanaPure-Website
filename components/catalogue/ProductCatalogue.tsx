@@ -22,6 +22,7 @@ import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
 import { storefrontHref, storefrontLabels } from "@/lib/storefront/localization";
 import { brandNames } from "@/data/brands";
 import { catalogueQueryString, discoverCatalogue, publishedCatalogueBrands, type CatalogueCriteria } from "@/lib/catalog/catalogue-discovery";
+import { catalogueBrowseHref, catalogueCardId, catalogueResultPage, readCatalogueBrowse, CATALOGUE_PAGE_SIZE, type CatalogueBrowse } from "@/lib/catalog/catalogue-browse";
 
 type CatalogueReader = typeof localCatalogue;
 function comparisonProjection(catalogue: CatalogueReader, locale: EditorialLocale): readonly ComparisonProduct[] {
@@ -36,19 +37,25 @@ const linkStyle = "inline-flex min-h-11 items-center text-sm underline underline
 
 /** Missing selected-locale content stays explicit. null retains legacy English URLs. */
 export function ProductListing({ catalogue = localCatalogue, locale = "en", routeLocale = null,
-  criteria = { query: "", brand: "" }, comparisonContext = {} }: {
+  criteria = { query: "", brand: "" }, comparisonContext = {}, browse = readCatalogueBrowse() }: {
   catalogue?: CatalogueReader; locale?: EditorialLocale; routeLocale?: EditorialLocale | null;
   criteria?: CatalogueCriteria;
   comparisonContext?: ComparisonContext;
+  browse?: CatalogueBrowse;
 } = {}) {
-  const products = discoverCatalogue(catalogue, locale, criteria);
+  const resultPage = catalogueResultPage(discoverCatalogue(catalogue, locale, criteria), locale, browse);
+  const products = resultPage.items;
+  const firstProduct = resultPage.total >= 2 ? resultPage.all.find(product => product.publicId.toLowerCase() === browse.pickFirst) : undefined;
+  const view = { ...browse, page: resultPage.page, pickFirst: firstProduct?.publicId.toLowerCase() };
+  const resetView = { ...view, page: 1, pageSpecified: false, pickFirst: undefined };
+  const positioned = resultPage.pages > 1 || view.pageSpecified || view.withLocaleInfo || view.withLocaleImage;
   const suggestions = catalogue.listPublished().map(product => ({
     publicId: product.publicId, slug: product.slug, brand: product.brand,
     name: product.translations[locale]?.name ?? null,
     description: product.translations[locale]?.description ?? null,
   }));
   const comparison = comparisonProjection(catalogue, locale);
-  const active = Boolean(criteria.query || criteria.brand);
+  const active = Boolean(criteria.query || criteria.brand || view.withLocaleInfo || view.withLocaleImage);
   const unknownBrand = criteria.brand && !brandNames.some((brand) => brand === criteria.brand);
   const publishedBrands = publishedCatalogueBrands(catalogue);
   const labels = storefrontLabels[locale];
@@ -63,15 +70,22 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
     image: product.image ?? null,
   }));
   const listingHref = storefrontHref("/products", routeLocale);
+  const query = catalogueQueryString(criteria);
+  const changedViewHref = (next: CatalogueCriteria, nextView = resetView) => catalogueBrowseHref(listingHref, catalogueQueryString(next), nextView) ?? listingHref;
+  const pageHref = (page: number) => catalogueBrowseHref(listingHref, query, { ...view, page });
   const comparisonPair = publishedComparison(comparison, comparisonContext);
   const appliedCriteria = [
     ...(criteria.query ? [{ key: "q", label: `${labels.searchProducts}: ${criteria.query}`,
-      href: listingHref + catalogueQueryString({ ...criteria, query: "" }) }] : []),
+      href: changedViewHref({ ...criteria, query: "" }) }] : []),
     ...(criteria.brand ? [{ key: "brand", label: `${labels.filterBrand}: ${publishedBrands.some(brand => brand === criteria.brand) ? criteria.brand : labels.invalidBrand}`,
-      href: listingHref + catalogueQueryString({ ...criteria, brand: "" }) }] : []),
+      href: changedViewHref({ ...criteria, brand: "" }) }] : []),
     ...(criteria.sort === "name-asc" || criteria.sort === "name-desc" ? [{ key: "sort",
       label: `${labels.sortBy}: ${criteria.sort === "name-asc" ? labels.nameAscending : labels.nameDescending}`,
-      href: listingHref + catalogueQueryString({ query: criteria.query, brand: criteria.brand }) }] : []),
+      href: changedViewHref({ query: criteria.query, brand: criteria.brand }) }] : []),
+    ...(view.withLocaleInfo ? [{ key: "withLocaleInfo", label: labels.withLocaleInfo,
+      href: changedViewHref(criteria, { ...resetView, withLocaleInfo: false }) }] : []),
+    ...(view.withLocaleImage ? [{ key: "withLocaleImage", label: labels.withLocaleImage,
+      href: changedViewHref(criteria, { ...resetView, withLocaleImage: false }) }] : []),
   ];
   const criterionLinkStyle = `${linkStyle} min-w-0 max-w-full break-words rounded-xl border border-hanapure-border px-4 py-3`;
   const controlStyle = "min-h-11 w-full rounded-xl border border-hanapure-border bg-hanapure-warm-white px-3 py-3 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text";
@@ -80,7 +94,7 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
       <h1 id="main-content" tabIndex={-1} className="text-4xl font-light text-hanapure-text sm:text-5xl">{labels.heading}</h1>
       <SavedProductsBar locale={locale} routeLocale={routeLocale} products={savedProducts} comparisonProducts={comparison} />
       <RecentlyViewedProducts locale={locale} routeLocale={routeLocale} products={quickProducts} comparisonProducts={comparison} />
-      <form key={JSON.stringify([locale, criteria.query, criteria.brand, criteria.sort])}
+      <form key={JSON.stringify([locale, criteria.query, criteria.brand, criteria.sort, view.withLocaleInfo, view.withLocaleImage])}
         action={listingHref} method="get" autoComplete="off" role="search" aria-label={labels.searchProducts}
         className="mt-8 grid gap-4 rounded-2xl border border-hanapure-border bg-hanapure-white p-5 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
         <div className="min-w-0">
@@ -108,13 +122,20 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
             <option value="name-desc">{labels.nameDescending}</option>
           </select>
         </div>
+        <fieldset className="min-w-0 space-y-2 sm:col-span-2 lg:col-span-full">
+          <legend className="mb-2 text-sm font-medium">{labels.informationFilters}</legend>
+          <label className="flex min-h-11 items-center gap-3 break-words"><input type="checkbox" name="withLocaleInfo" value="1" defaultChecked={view.withLocaleInfo}
+            className="h-5 w-5 shrink-0 accent-hanapure-text focus-visible:outline-2 focus-visible:outline-offset-2" />{labels.withLocaleInfo}</label>
+          <label className="flex min-h-11 items-center gap-3 break-words"><input type="checkbox" name="withLocaleImage" value="1" defaultChecked={view.withLocaleImage}
+            className="h-5 w-5 shrink-0 accent-hanapure-text focus-visible:outline-2 focus-visible:outline-offset-2" />{labels.withLocaleImage}</label>
+        </fieldset>
         <button type="submit" className="min-h-11 rounded-xl bg-hanapure-text px-5 py-3 text-hanapure-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text">{labels.apply}</button>
       </form>
       {publishedBrands.length > 0 && <nav aria-labelledby="catalogue-brand-shortcuts" className="mt-6 min-w-0">
         <h2 id="catalogue-brand-shortcuts" className="break-words text-sm font-medium">{labels.quickBrands}</h2>
         <ul className="mt-3 flex min-w-0 flex-wrap gap-3">
           {publishedBrands.map(brand => <li key={brand} className="min-w-0 max-w-full">
-            <Link href={listingHref + catalogueQueryString({ ...criteria, brand: criteria.brand === brand ? "" : brand })}
+            <Link href={changedViewHref({ ...criteria, brand: criteria.brand === brand ? "" : brand })}
               aria-current={criteria.brand === brand ? "true" : undefined}
               aria-label={criteria.brand === brand ? `${labels.removeFilter}: ${labels.filterBrand}: ${brand}` : undefined}
               className={`${criterionLinkStyle} ${criteria.brand === brand ? "bg-hanapure-beige" : "bg-hanapure-white"}`}>{brand}</Link>
@@ -132,12 +153,22 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
           </li>)}
         </ul>
       </section>}
-      {appliedCriteria.length > 0 && <CopySearchLink key={`${locale}-${catalogueQueryString(criteria)}`} locale={locale}
+      {appliedCriteria.length > 0 && !view.withLocaleInfo && !view.withLocaleImage && <CopySearchLink key={`${locale}-${catalogueQueryString(criteria)}`} locale={locale}
         relativeHref={listingHref + catalogueQueryString(criteria)} />}
       <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2">
-        <p role="status" className="text-sm text-hanapure-muted">{labels.results}: {products.length}</p>
+        <p role="status" className="text-sm text-hanapure-muted">{labels.results}: {resultPage.total}</p>
+        <p className="break-words text-sm">{labels.visibleResults}: {resultPage.from}–{resultPage.to} / {resultPage.total}</p>
+        {resultPage.total > 0 && <p className="break-words text-sm">{labels.resultPage}: {resultPage.page} / {resultPage.pages}</p>}
         {(active || criteria.sort) && <Link href={listingHref} className={linkStyle}>{labels.clear}</Link>}
       </div>
+      {resultPage.pages > 1 && <nav aria-label={labels.resultPages} className="mt-5 flex min-w-0 flex-wrap gap-4">
+        {resultPage.page > 1 && pageHref(resultPage.page - 1) && <Link rel="prev" href={pageHref(resultPage.page - 1)!} className={`${linkStyle} max-w-full break-words`}>{labels.previousPage}</Link>}
+        {resultPage.page < resultPage.pages && pageHref(resultPage.page + 1) && <Link rel="next" href={pageHref(resultPage.page + 1)!} className={`${linkStyle} max-w-full break-words`}>{labels.nextPage}</Link>}
+      </nav>}
+      {firstProduct && <section aria-label={labels.crossPageComparison} className="mt-5 min-w-0 rounded-xl border border-hanapure-border p-4">
+        <p role="status" className="break-words">{labels.firstResultSelected}: {firstProduct.translations[locale]?.name ?? labels.details}</p>
+        <Link href={catalogueBrowseHref(listingHref, query, { ...view, pickFirst: undefined }) ?? listingHref} className={`${linkStyle} max-w-full break-words`}>{labels.cancelFirstResult}</Link>
+      </section>}
       {products.length > 0 && <p className="mt-4 text-sm leading-6 text-hanapure-muted">{cartLabels[locale].notice}</p>}
       {products.length === 0 ? (
         <div className="mt-10 rounded-2xl border border-hanapure-border bg-hanapure-white p-6 sm:p-8">
@@ -153,10 +184,19 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
         <ul className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {products.map((product) => {
             const content = product.translations[locale];
-            const detailHref = `${storefrontHref(`/products/${product.slug}`, routeLocale)}${catalogueQueryString(criteria)}`;
+            const detailHref = catalogueBrowseHref(storefrontHref(`/products/${product.slug}`, routeLocale), query,
+              { ...view, pickFirst: undefined }, { forcePage: positioned }) ?? storefrontHref(`/products/${product.slug}`, routeLocale);
+            const explicitPair = firstProduct && firstProduct.publicId.toLowerCase() !== product.publicId.toLowerCase()
+              ? publishedComparison(comparison, { first: firstProduct.publicId, second: product.publicId }) : null;
+            const secondHref = explicitPair && comparisonHref(listingHref, explicitPair, query);
+            const firstHref = !firstProduct && resultPage.total >= 2 ? catalogueBrowseHref(listingHref, query, { ...view, pickFirst: product.publicId.toLowerCase() }) : null;
             return (
-              <li key={product.publicId} className="min-w-0 rounded-2xl border border-hanapure-border bg-hanapure-white p-5">
+              <li key={product.publicId} id={catalogueCardId(product.publicId) ?? undefined} tabIndex={-1}
+                className="min-w-0 scroll-mt-24 rounded-2xl border border-hanapure-border bg-hanapure-white p-5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-hanapure-text">
                 <CatalogueResultPairCheckbox publicId={product.publicId} />
+                {firstHref && <Link href={firstHref} className={`${linkStyle} mb-3 max-w-full break-words`} aria-label={`${labels.chooseFirstResult}: ${content?.name ?? labels.details}`}>{labels.chooseFirstResult}</Link>}
+                {secondHref && <Link href={`${secondHref}#${COMPARISON_DESTINATION}`} className={`${linkStyle} mb-3 max-w-full break-words`}
+                  aria-label={`${labels.chooseSecondResult}: ${content?.name ?? labels.details}`}>{labels.chooseSecondResult}</Link>}
                 {content?.images[0] && <Link href={detailHref} aria-label={`${labels.details}: ${content.name}`}
                   className="block rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-hanapure-text">
                   <ProductImage {...content.images[0]} />
@@ -203,11 +243,12 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
 }
 
 export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en", routeLocale = null,
-  criteria = { query: "", brand: "" }, comparisonContext = {}, cartReturn = false }: {
+  criteria = { query: "", brand: "" }, comparisonContext = {}, cartReturn = false, browse = readCatalogueBrowse() }: {
   slug: string; catalogue?: CatalogueReader; locale?: EditorialLocale; routeLocale?: EditorialLocale | null;
   criteria?: CatalogueCriteria;
   comparisonContext?: ComparisonContext;
   cartReturn?: boolean;
+  browse?: CatalogueBrowse;
 }) {
   const product = catalogue.findPublishedBySlug(slug);
   // Absent/draft editorial records are not public pages. No ERP absence is inferred.
@@ -222,21 +263,30 @@ export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en",
   const returnHref = returnPair && returnPair.some(item => item.publicId.toLowerCase() === product.publicId.toLowerCase())
     ? comparisonHref(storefrontHref("/products", routeLocale), returnPair, catalogueQueryString(criteria)) : null;
   const browseQuery = catalogueQueryString(criteria);
-  const matching = browseQuery.length <= 8192 ? discoverCatalogue(catalogue, locale, criteria) : [];
+  const resultPage = catalogueResultPage(browseQuery.length <= 8192 ? discoverCatalogue(catalogue, locale, criteria) : [], locale, browse);
+  const matching = resultPage.all;
   const position = matching.findIndex(item => item.publicId.toLowerCase() === product.publicId.toLowerCase());
+  const positioned = browse.pageSpecified || browse.withLocaleInfo || browse.withLocaleImage;
+  const cleanView = { ...browse, page: 1, pickFirst: undefined };
+  const backHref = catalogueBrowseHref(storefrontHref("/products", routeLocale), browseQuery,
+    { ...cleanView, page: position >= 0 && positioned ? Math.floor(position / CATALOGUE_PAGE_SIZE) + 1 : 1 },
+    position >= 0 && positioned ? { forcePage: true, card: product.publicId } : {}) ?? storefrontHref("/products", routeLocale);
   const adjacent = position < 0 ? [] : [
     { item: matching[position - 1], label: labels.previousMatch },
     { item: matching[position + 1], label: labels.nextMatch },
   ].flatMap(({ item, label }) => {
     if (!item || item.publicId.toLowerCase() === product.publicId.toLowerCase()) return [];
-    const href = storefrontHref(`/products/${item.slug}`, routeLocale) + browseQuery;
-    return href.length <= 8192 ? [{ href, label, name: item.translations[locale]?.name ?? `${labels.details}: ${item.brand} (${item.slug})` }] : [];
+    const itemIndex = matching.indexOf(item);
+    const href = catalogueBrowseHref(storefrontHref(`/products/${item.slug}`, routeLocale), browseQuery,
+      { ...cleanView, page: positioned || resultPage.pages > 1 ? Math.floor(itemIndex / CATALOGUE_PAGE_SIZE) + 1 : 1 },
+      { forcePage: positioned || resultPage.pages > 1 });
+    return href ? [{ href, label, name: item.translations[locale]?.name ?? `${labels.details}: ${item.brand} (${item.slug})` }] : [];
   });
   const detailTargetStyle = "scroll-mt-24 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-hanapure-text";
   return (
     <Container className="pb-20 pt-32 sm:pt-36">
       <ProductVisitTracker key={product.publicId} publicId={product.publicId} />
-      <Link href={`${storefrontHref("/products", routeLocale)}${catalogueQueryString(criteria)}`} className={linkStyle}>{labels.back}</Link>
+      <Link href={backHref} className={linkStyle}>{labels.back}</Link>
       {cartReturn === true && <Link href={storefrontHref("/cart", routeLocale)} className={`${linkStyle} mt-3 block max-w-full break-words`}>{cartLabels[locale].backToCart}</Link>}
       {returnHref && <Link href={`${returnHref}#${COMPARISON_DESTINATION}`} className={`${linkStyle} mt-3 block max-w-full break-words`}>{comparisonLabels[locale].backToComparison}</Link>}
       {adjacent.length > 0 && <nav aria-label={labels.matchingNavigation} className="mt-5 flex min-w-0 flex-wrap gap-4">

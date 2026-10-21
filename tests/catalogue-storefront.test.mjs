@@ -455,7 +455,8 @@ test("instant suggestions receive full published selected-locale projection whil
     assert.equal(nodes.filter(node => node.type === "button" && node.props.type === "submit").length, 1);
     const empty = elements(ProductListing({ locale, routeLocale }));
     assert.deepEqual(empty.find(node => node.type === SearchSuggestions).props.products, []);
-    assert.equal(empty.filter(node => node.type === "input").length, 1);
+    assert.equal(empty.filter(node => node.type === "input" && node.props.type === "search").length, 1);
+    assert.deepEqual(empty.filter(node => node.type === "input" && node.props.type === "checkbox").map(node => node.props.name), ["withLocaleInfo", "withLocaleImage"]);
   }
 });
 
@@ -668,7 +669,7 @@ test("listing and comparison reuse localized native Quick Add quantity forms wit
       assert.deepEqual(Object.keys(control.props).sort(), ["locale", "name", "publicId"]);
       const html = renderToStaticMarkup(createElement(QuickAdd, control.props));
       for (const markup of [html, boardHtml]) {
-        assert.ok(markup.includes(`${cartLabels[locale].quantity}: ${control.props.name}`));
+        assert.ok(markup.includes(`${cartLabels[locale].addQuantity}: ${control.props.name}`));
         assert.match(markup, /type="number" min="1" step="1" required=""[^>]*value="1"/);
         assert.match(markup, /<button type="submit"[^>]*disabled=""/);
         assert.match(markup, /min-h-11/);
@@ -826,7 +827,7 @@ test("detail route shells pass normalized criteria to Back and locale navigation
   for (const path of ["app/products/[slug]/page.tsx", "app/[locale]/products/[slug]/page.tsx"]) {
     const source = readFileSync(join(repo, path), "utf8");
     assert.match(source, /const query = await searchParams;\s*const criteria = readCatalogueCriteria\(query\)/);
-    assert.match(source, /<Header catalogueQuery=\{catalogueQueryString\(criteria\)\}/);
+    assert.match(source, /<Header catalogueQuery=\{catalogueBrowseQuery\(catalogueQueryString\(criteria\), \{ \.\.\.browse, pickFirst: undefined \}\) \?\? ""\}/);
     const metadata = source.slice(source.indexOf("export async function generateMetadata"), source.indexOf("export default"));
     assert.doesNotMatch(metadata, /searchParams|criteria|catalogueQuery/);
   }
@@ -910,10 +911,10 @@ test("invalid publication data cannot enter storefront through the existing cata
 
 test("route wiring uses the authoritative reader and promised slug; Header Shop reaches the real listing", () => {
   const source = (path) => readFileSync(join(repo, path), "utf8");
-  assert.match(source("app/products/page.tsx"), /<ProductListing criteria=\{criteria\} comparisonContext=\{readComparisonContext\(query\)\}\s*\/>/);
+  assert.match(source("app/products/page.tsx"), /<ProductListing criteria=\{criteria\} browse=\{browse\} comparisonContext=\{readComparisonContext\(query\)\}\s*\/>/);
   const detail = source("app/products/[slug]/page.tsx");
   assert.match(detail, /await params/);
-  assert.match(detail, /ProductDetail\(\{ slug, criteria, comparisonContext: readComparisonContext\(query\), cartReturn: readCartReturn\(query.cartReturn\) \}\)/);
+  assert.match(detail, /ProductDetail\(\{ slug, criteria, browse, comparisonContext: readComparisonContext\(query\), cartReturn: readCartReturn\(query.cartReturn\) \}\)/);
   assert.match(detail, /productMetadata\(slug, "en", \{ legacy: true \}\)/);
   const header = source("components/layout/Header.tsx");
   assert.equal((header.match(/storefrontHref\("\/products", routeLocale\)/g) ?? []).length, 4);
