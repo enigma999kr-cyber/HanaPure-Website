@@ -187,10 +187,11 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
 }
 
 export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en", routeLocale = null,
-  criteria = { query: "", brand: "" }, comparisonContext = {} }: {
+  criteria = { query: "", brand: "" }, comparisonContext = {}, cartReturn = false }: {
   slug: string; catalogue?: CatalogueReader; locale?: EditorialLocale; routeLocale?: EditorialLocale | null;
   criteria?: CatalogueCriteria;
   comparisonContext?: ComparisonContext;
+  cartReturn?: boolean;
 }) {
   const product = catalogue.findPublishedBySlug(slug);
   // Absent/draft editorial records are not public pages. No ERP absence is inferred.
@@ -209,6 +210,7 @@ export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en",
     <Container className="pb-20 pt-32 sm:pt-36">
       <ProductVisitTracker key={product.publicId} publicId={product.publicId} />
       <Link href={`${storefrontHref("/products", routeLocale)}${catalogueQueryString(criteria)}`} className={linkStyle}>{labels.back}</Link>
+      {cartReturn === true && <Link href={storefrontHref("/cart", routeLocale)} className={`${linkStyle} mt-3 block max-w-full break-words`}>{cartLabels[locale].backToCart}</Link>}
       {returnHref && <Link href={`${returnHref}#${COMPARISON_DESTINATION}`} className={`${linkStyle} mt-3 block max-w-full break-words`}>{comparisonLabels[locale].backToComparison}</Link>}
       <article className="mt-6 grid min-w-0 gap-8 lg:grid-cols-2 lg:gap-12">
         {content && content.images.length > 0 && (

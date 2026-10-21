@@ -1,5 +1,11 @@
 export const cartLabels = {
   en: {
+    review: "Review browser cart", find: "Find cart items", reviewBrand: "Filter cart by brand", allReviewBrands: "All cart brands",
+    reviewSort: "Cart view order", originalOrder: "Original cart order", nameOrder: "Product name A–Z", quantityOrder: "Stored quantity: highest first",
+    resetReview: "Clear cart view filters", noReviewResults: "No cart items match this view. Your saved cart has not been emptied.",
+    visibleLines: "Visible / total cart lines", visibleUnits: "Visible stored units", visibleUnpublished: "Visible lines not in the published catalogue",
+    reviewUnpublished: "Review unpublished entries", selectUnpublished: "Select unpublished entries", unpublishedCount: "Lines not in the published catalogue",
+    compareSelected: "Compare two selected cart items", backToCart: "Back to cart",
     draftQuantity: "Draft quantity", decreaseDraft: "Decrease draft quantity", increaseDraft: "Increase draft quantity",
     cartNavigation: "Cart list navigation", cartRows: "Cart items", jumpToActions: "Go to selected item actions", backToRows: "Back to cart items",
     selectDisplayed: "Select all displayed cart items", clearSelection: "Clear cart selection",
@@ -41,6 +47,12 @@ export const cartLabels = {
     invalid: "Enter a positive whole-number quantity.", loading: "Loading cart", updated: "Cart updated",
   },
   hu: {
+    review: "A böngésző kosarának áttekintése", find: "Kosártételek keresése", reviewBrand: "Kosár szűrése márka szerint", allReviewBrands: "Minden kosárban szereplő márka",
+    reviewSort: "Kosárnézet sorrendje", originalOrder: "Eredeti kosársorrend", nameOrder: "Terméknév A–Z", quantityOrder: "Mentett mennyiség: csökkenő",
+    resetReview: "Kosárnézet szűrőinek törlése", noReviewResults: "Nincs a nézetnek megfelelő kosártétel. A mentett kosár nem ürült ki.",
+    visibleLines: "Látható / összes kosártétel", visibleUnits: "Látható mentett darabszám", visibleUnpublished: "Látható, a közzétett katalógusban nem szereplő tételek",
+    reviewUnpublished: "Nem közzétett tételek áttekintése", selectUnpublished: "Nem közzétett tételek kiválasztása", unpublishedCount: "A közzétett katalógusban nem szereplő tételek",
+    compareSelected: "Két kiválasztott kosártétel összehasonlítása", backToCart: "Vissza a kosárhoz",
     draftQuantity: "Tervezett mennyiség", decreaseDraft: "Tervezett mennyiség csökkentése", increaseDraft: "Tervezett mennyiség növelése",
     cartNavigation: "Kosárlista navigáció", cartRows: "Kosártételek", jumpToActions: "Ugrás a kiválasztott tételek műveleteihez", backToRows: "Vissza a kosártételekhez",
     selectDisplayed: "Minden megjelenített kosártétel kiválasztása", clearSelection: "Kosárkiválasztás törlése",
@@ -82,6 +94,12 @@ export const cartLabels = {
     invalid: "Adjon meg pozitív egész mennyiséget.", loading: "Kosár betöltése", updated: "Kosár frissítve",
   },
   ko: {
+    review: "브라우저 장바구니 검토", find: "장바구니 항목 검색", reviewBrand: "장바구니 브랜드 필터", allReviewBrands: "장바구니의 모든 브랜드",
+    reviewSort: "장바구니 표시 순서", originalOrder: "원래 장바구니 순서", nameOrder: "상품명 오름차순", quantityOrder: "저장 수량 많은 순",
+    resetReview: "장바구니 보기 필터 초기화", noReviewResults: "이 보기 조건에 맞는 항목이 없습니다. 저장된 장바구니가 비워진 것은 아닙니다.",
+    visibleLines: "표시된 / 전체 장바구니 항목", visibleUnits: "표시된 저장 수량 합계", visibleUnpublished: "공개 카탈로그에 없는 표시 항목 수",
+    reviewUnpublished: "공개 카탈로그에 없는 항목 보기", selectUnpublished: "공개 카탈로그에 없는 항목 선택", unpublishedCount: "공개 카탈로그에 없는 항목 수",
+    compareSelected: "선택한 장바구니 상품 두 개 비교", backToCart: "장바구니로 돌아가기",
     draftQuantity: "입력 중인 수량", decreaseDraft: "입력 수량 줄이기", increaseDraft: "입력 수량 늘리기",
     cartNavigation: "장바구니 목록 바로가기", cartRows: "장바구니 항목", jumpToActions: "선택 항목 작업으로 이동", backToRows: "장바구니 항목으로 돌아가기",
     selectDisplayed: "표시된 장바구니 항목 모두 선택", clearSelection: "장바구니 선택 해제",

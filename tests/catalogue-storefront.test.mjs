@@ -911,7 +911,7 @@ test("route wiring uses the authoritative reader and promised slug; Header Shop 
   assert.match(source("app/products/page.tsx"), /<ProductListing criteria=\{criteria\} comparisonContext=\{readComparisonContext\(query\)\}\s*\/>/);
   const detail = source("app/products/[slug]/page.tsx");
   assert.match(detail, /await params/);
-  assert.match(detail, /ProductDetail\(\{ slug, criteria, comparisonContext: readComparisonContext\(query\) \}\)/);
+  assert.match(detail, /ProductDetail\(\{ slug, criteria, comparisonContext: readComparisonContext\(query\), cartReturn: readCartReturn\(query.cartReturn\) \}\)/);
   assert.match(detail, /productMetadata\(slug, "en", \{ legacy: true \}\)/);
   const header = source("components/layout/Header.tsx");
   assert.equal((header.match(/storefrontHref\("\/products", routeLocale\)/g) ?? []).length, 4);

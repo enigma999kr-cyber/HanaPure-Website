@@ -6,6 +6,7 @@ import { requireStorefrontLocale } from "@/lib/storefront/require-locale";
 import { productMetadata } from "@/lib/storefront/seo";
 import { catalogueQueryString, readCatalogueCriteria, type CatalogueSearchParams } from "@/lib/catalog/catalogue-discovery";
 import { readComparisonContext } from "@/lib/comparison/compare-selection";
+import { readCartReturn } from "@/lib/cart/cart-review-view";
 
 type Props = { params: Promise<{ locale: string; slug: string }>; searchParams: Promise<CatalogueSearchParams> };
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -18,7 +19,7 @@ export default async function LocalizedProduct({ params, searchParams }: Props) 
   const locale = requireStorefrontLocale(value);
   const query = await searchParams;
   const criteria = readCatalogueCriteria(query);
-  const detail = ProductDetail({ slug, locale, routeLocale: locale, criteria, comparisonContext: readComparisonContext(query) });
+  const detail = ProductDetail({ slug, locale, routeLocale: locale, criteria, comparisonContext: readComparisonContext(query), cartReturn: readCartReturn(query.cartReturn) });
   return (
     <><main lang={locale} className="min-h-screen bg-hanapure-warm-white text-hanapure-text">
       <Header catalogueQuery={catalogueQueryString(criteria)} />

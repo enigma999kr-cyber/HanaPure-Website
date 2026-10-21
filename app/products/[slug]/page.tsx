@@ -5,6 +5,7 @@ import { ProductDetail } from "@/components/catalogue/ProductCatalogue";
 import { productMetadata } from "@/lib/storefront/seo";
 import { catalogueQueryString, readCatalogueCriteria, type CatalogueSearchParams } from "@/lib/catalog/catalogue-discovery";
 import { readComparisonContext } from "@/lib/comparison/compare-selection";
+import { readCartReturn } from "@/lib/cart/cart-review-view";
 
 type Props = { params: Promise<{ slug: string }>; searchParams: Promise<CatalogueSearchParams> };
 
@@ -18,7 +19,7 @@ export default async function ProductPage({ params, searchParams }: Props) {
   const query = await searchParams;
   const criteria = readCatalogueCriteria(query);
   // Resolve existence before rendering the page shell; drafts use the same 404 path.
-  const detail = ProductDetail({ slug, criteria, comparisonContext: readComparisonContext(query) });
+  const detail = ProductDetail({ slug, criteria, comparisonContext: readComparisonContext(query), cartReturn: readCartReturn(query.cartReturn) });
   return (
     <><main className="min-h-screen bg-hanapure-warm-white text-hanapure-text">
       <Header catalogueQuery={catalogueQueryString(criteria)} />

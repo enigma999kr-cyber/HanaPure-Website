@@ -19,6 +19,8 @@ import { cartSelectionSummary, savedProductOverlap } from "@/lib/cart/cart-selec
 import { cartControl } from "./AddToCart";
 import { setDetailCartQuantity, detailSelectionNeedsReload, type DetailCartSnapshot, type DetailSelectionResult } from "@/lib/cart/detail-cart-selection";
 import { stepQuantityDraft } from "@/lib/cart/quantity-draft-controls";
+import { cartReviewView, EMPTY_CART_REVIEW, CART_REVIEW_QUERY_LIMIT, CART_REVIEW_BRAND_LIMIT, type CartReviewCriteria } from "@/lib/cart/cart-review-view";
+import { COMPARISON_DESTINATION, comparisonHref, publishedComparison } from "@/lib/comparison/compare-selection";
 
 export type CartProduct = Readonly<{ publicId: string; slug: string; brand: string;
   names: Readonly<Record<EditorialLocale, string | null>> }>;
@@ -59,6 +61,10 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
   const snapshot = useBrowserCart();
   const [quantityTrusted, setQuantityTrusted] = useState(true);
   const cart = quantityTrusted ? snapshot : { ...snapshot, persistent: false };
+  const [review, setReview] = useState<CartReviewCriteria>(EMPTY_CART_REVIEW);
+  const view = cartReviewView(cart.lines, products, locale, review);
+  const viewReady = cart.ready && !cart.invalid && cart.persistent;
+  const visibleIds = new Set(view.rows.map(({ line }) => line.publicId.toLowerCase()));
   const navigationId = useId();
   const canNavigate = cart.ready && !cart.invalid && cart.persistent && cart.lines.length > 0;
   const favorites = useBrowserFavorites();
@@ -73,16 +79,25 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
   const [selectedCopyMessage, setSelectedCopyMessage] = useState("");
   const [copyingSelected, setCopyingSelected] = useState(false);
   const selectedCopyPending = useRef(false);
-  const coherentSelection = checked.lines === cart.lines;
+  const coherentSelection = checked.lines === cart.lines && checked.ids.every(id => visibleIds.has(id.toLowerCase()));
   const selected = coherentSelection ? selectedCartLines(cart.lines, checked.ids) ?? [] : [];
   const bulkReady = coherentSelection && cart.ready && !cart.invalid && cart.persistent && selected.length > 0;
   const selectedPublic = reconcileCart(selected, products).some(item => item.product !== null);
-  const summary = cartSelectionSummary(cart, checked.lines, checked.ids, products);
+  const summary = coherentSelection ? cartSelectionSummary(cart, checked.lines, checked.ids, products) : null;
+  const compared = bulkReady && selected.length === 2 ? publishedComparison(products,
+    { first: selected[0].publicId, second: selected[1].publicId }) : null;
+  const compareHref = compared ? comparisonHref(storefrontHref("/products", routeLocale), compared) : null;
   const browseRef = useRef<HTMLAnchorElement>(null);
   const removeRefs = useRef(new Map<string, HTMLButtonElement>());
   const restoredFocus = useRef<string | null>(null);
   const items = reconcileCart(cart.lines, products);
   const undoAvailable = undo && cart.ready && cart.persistent && !cart.invalid && canUndoCart(undo, cart.lines);
+  function changeReview(next: CartReviewCriteria) {
+    if (!viewReady) return;
+    setReview(next);
+    if (next.query !== review.query || next.brand !== review.brand || next.unpublishedOnly !== review.unpublishedOnly) setChecked({ lines: cart.lines, ids: [] });
+    setBulkMessage(""); setSelectedCopyMessage("");
+  }
   useEffect(() => {
     if (restoredFocus.current) {
       (removeRefs.current.get(restoredFocus.current) ?? browseRef.current)?.focus();
@@ -110,13 +125,52 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
         browseRef.current?.focus(); setUndo(null); resetBrowserCart(); setMessage(labels.updated);
       }}>{labels.reset}</button>
     </div>}
+    <section aria-labelledby={`${navigationId}-review`} className="mt-6 min-w-0 rounded-2xl border border-hanapure-border p-4">
+      <h2 id={`${navigationId}-review`} className="break-words text-xl">{labels.review}</h2>
+      <div className="mt-4 grid min-w-0 gap-4 sm:grid-cols-3">
+        <div className="min-w-0"><label htmlFor={`${navigationId}-search`} className="mb-2 block break-words text-sm">{labels.find}</label>
+          <input id={`${navigationId}-search`} type="search" maxLength={CART_REVIEW_QUERY_LIMIT} value={review.query} disabled={!viewReady}
+            className={`${cartControl} w-full min-w-0 max-w-full disabled:opacity-50`}
+            onChange={event => changeReview({ ...review, query: event.target.value.slice(0, CART_REVIEW_QUERY_LIMIT) })} /></div>
+        <div className="min-w-0"><label htmlFor={`${navigationId}-brand`} className="mb-2 block break-words text-sm">{labels.reviewBrand}</label>
+          <select id={`${navigationId}-brand`} value={review.brand} disabled={!viewReady} className={`${cartControl} w-full min-w-0 max-w-full disabled:opacity-50`}
+            onChange={event => changeReview({ ...review, brand: event.target.value.slice(0, CART_REVIEW_BRAND_LIMIT) })}>
+            <option value="">{labels.allReviewBrands}</option>{view.brands.map(brand => <option key={brand} value={brand}>{brand}</option>)}
+          </select></div>
+        <div className="min-w-0"><label htmlFor={`${navigationId}-sort`} className="mb-2 block break-words text-sm">{labels.reviewSort}</label>
+          <select id={`${navigationId}-sort`} value={review.sort} disabled={!viewReady} className={`${cartControl} w-full min-w-0 max-w-full disabled:opacity-50`}
+            onChange={event => changeReview({ ...review, sort: event.target.value === "name" || event.target.value === "quantity" ? event.target.value : "original" })}>
+            <option value="original">{labels.originalOrder}</option><option value="name">{labels.nameOrder}</option><option value="quantity">{labels.quantityOrder}</option>
+          </select></div>
+      </div>
+      <div className="mt-3 flex min-w-0 flex-wrap gap-3">
+        <button type="button" disabled={!viewReady} className={`${cartControl} max-w-full break-words disabled:opacity-50`}
+          onClick={() => changeReview(EMPTY_CART_REVIEW)}>{labels.resetReview}</button>
+        <button type="button" disabled={!viewReady || view.unpublishedTotal === 0} aria-pressed={review.unpublishedOnly}
+          className={`${cartControl} max-w-full break-words disabled:opacity-50`}
+          onClick={() => { if (viewReady && view.unpublishedTotal > 0) changeReview({ ...review, query: "", brand: "", unpublishedOnly: !review.unpublishedOnly }); }}>{labels.reviewUnpublished}</button>
+        <button type="button" disabled={!viewReady || view.unpublishedTotal === 0} className={`${cartControl} max-w-full break-words disabled:opacity-50`}
+          onClick={() => {
+            if (!viewReady || view.unpublishedTotal === 0) return;
+            setReview({ ...review, query: "", brand: "", unpublishedOnly: true });
+            setChecked({ lines: cart.lines, ids: items.filter(item => !item.product).map(item => item.line.publicId) });
+            setBulkMessage(""); setSelectedCopyMessage("");
+          }}>{labels.selectUnpublished}</button>
+      </div>
+      {viewReady ? <dl aria-label={labels.review} className="mt-4 min-w-0 space-y-2 break-words text-sm" aria-live="polite">
+        <div><dt>{labels.visibleLines}</dt><dd>{view.rows.length} / {view.total}</dd></div>
+        <div><dt>{labels.visibleUnits}</dt><dd>{view.units}</dd></div>
+        <div><dt>{labels.visibleUnpublished}</dt><dd>{view.unpublished}</dd></div>
+        <div><dt>{labels.unpublishedCount}</dt><dd>{view.unpublishedTotal}</dd></div>
+      </dl> : <p role="status" className="mt-4 break-words text-sm">{labels.selectionUnknown}</p>}
+    </section>
     {!cart.ready ? <p className="mt-8">{labels.loading}</p> : cart.lines.length === 0 ? <p className="mt-8 text-xl">{labels.empty}</p> : <>
       {canNavigate && <nav aria-label={labels.cartNavigation} className="mt-6 flex min-w-0 flex-wrap gap-3">
         <a href={`#${navigationId}-actions`} className={`${cartControl} inline-flex min-w-0 max-w-full items-center break-words`}>{labels.jumpToActions}</a>
       </nav>}
       <ul id={canNavigate ? `${navigationId}-rows` : undefined} tabIndex={canNavigate ? -1 : undefined} aria-label={labels.cartRows}
         className="mt-8 scroll-mt-24 space-y-5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-hanapure-text">
-        {items.map(({ line, product }, index) => {
+        {view.rows.map(({ line, product, originalIndex }, visibleIndex) => {
           const name = product?.names[locale] ?? storefrontLabels[locale].details;
           return <li key={line.publicId} className="min-w-0 rounded-2xl border border-hanapure-border bg-hanapure-white p-5">
             <label className="mb-3 flex min-h-11 min-w-0 items-center gap-3 break-words">
@@ -124,18 +178,19 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
                 disabled={!cart.ready || cart.invalid || !cart.persistent}
                 className="h-5 w-5 shrink-0 accent-hanapure-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text"
                 onChange={event => {
+                  if (!viewReady) return;
                   const enabled = event.target.checked;
                   setChecked(previous => {
-                    const remaining = (previous.lines === cart.lines ? previous.ids : []).filter(id => id.toLowerCase() !== line.publicId.toLowerCase());
+                    const remaining = (previous.lines === cart.lines ? previous.ids : []).filter(id => visibleIds.has(id.toLowerCase()) && id.toLowerCase() !== line.publicId.toLowerCase());
                     return { lines: cart.lines, ids: enabled ? [...remaining, line.publicId] : remaining };
                   });
                   setBulkMessage(""); setSelectedCopyMessage("");
                 }} />
-              <span className="min-w-0 break-words">{labels.selectCartItem}: {product ? name : `${labels.unavailable} (${index + 1})`}</span>
+              <span className="min-w-0 break-words">{labels.selectCartItem}: {product ? name : `${labels.unavailable} (${originalIndex + 1})`}</span>
             </label>
             {product ? <>
               <p className="text-sm text-hanapure-muted">{product.brand}</p>
-              <Link href={storefrontHref(`/products/${product.slug}`, routeLocale)} className={`${cartControl} mt-2 block max-w-full break-words text-xl`}>{name}</Link>
+              <Link href={`${storefrontHref(`/products/${product.slug}`, routeLocale)}?cartReturn=1`} className={`${cartControl} mt-2 block max-w-full break-words text-xl`}>{name}</Link>
               {!product.names[locale] && <p className="mt-3">{storefrontLabels[locale].missing}</p>}
               {savedProductOverlap(favorites, line.publicId) && <p className="mt-3 break-words text-sm">{labels.alsoSaved}</p>}
             </> : <p>{labels.unavailable}</p>}
@@ -157,7 +212,7 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
                 setMessage(result === "moved" ? labels.savedForLater : result === "partial" ? labels.saveForLaterPartial :
                   result === "conflict" ? labels.saveForLaterConflict : labels.saveForLaterBlocked);
                 if (result === "moved" || result === "partial") {
-                  const neighbour = cart.lines[index + 1] ?? cart.lines[index - 1];
+                  const neighbour = view.rows[visibleIndex + 1]?.line ?? view.rows[visibleIndex - 1]?.line;
                   (neighbour ? removeRefs.current.get(neighbour.publicId) : browseRef.current)?.focus();
                 }
               }}>{labels.saveForLater}</button>}
@@ -166,7 +221,7 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
               else removeRefs.current.delete(line.publicId);
             }} type="button" disabled={!cart.ready || cart.invalid || !cart.persistent}
               className={`${cartControl} mt-4 disabled:opacity-50`} aria-label={`${labels.remove}: ${name}`} onClick={() => {
-              const neighbour = cart.lines[index + 1] ?? cart.lines[index - 1];
+              const neighbour = view.rows[visibleIndex + 1]?.line ?? view.rows[visibleIndex - 1]?.line;
               if (neighbour) removeRefs.current.get(neighbour.publicId)?.focus();
               else browseRef.current?.focus();
               removeSelection(lines => lines.filter(item => item.publicId !== line.publicId), labels.removed);
@@ -174,6 +229,7 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
           </li>;
         })}
       </ul>
+      {view.rows.length === 0 && <p role="status" className="mt-5 break-words">{labels.noReviewResults}</p>}
       <button type="button" disabled={!cart.ready || cart.invalid || !cart.persistent} className={`${cartControl} mt-6 disabled:opacity-50`}
         onClick={() => { browseRef.current?.focus(); removeSelection(() => [], labels.cleared); }}>{labels.clear}</button>
     </>}
@@ -186,9 +242,10 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
         <div><dt>{labels.selectedUnavailable}</dt><dd>{summary.unavailable}</dd></div>
       </dl>}
       <div className="mt-3 flex min-w-0 flex-wrap gap-3">
-        <button type="button" disabled={!cart.ready || cart.invalid || !cart.persistent || cart.lines.length === 0}
+        <button type="button" disabled={!viewReady || view.rows.length === 0}
           className={`${cartControl} max-w-full break-words disabled:opacity-50`} onClick={() => {
-            setChecked({ lines: cart.lines, ids: cart.lines.map(line => line.publicId) }); setBulkMessage(""); setSelectedCopyMessage("");
+            if (!viewReady || view.rows.length === 0) return;
+            setChecked({ lines: cart.lines, ids: view.rows.map(item => item.line.publicId) }); setBulkMessage(""); setSelectedCopyMessage("");
           }}>{labels.selectDisplayed}</button>
         <button type="button" disabled={!bulkReady} className={`${cartControl} max-w-full break-words disabled:opacity-50`} onClick={() => {
           setChecked({ lines: cart.lines, ids: [] }); setBulkMessage(""); setSelectedCopyMessage("");
@@ -214,8 +271,8 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
               setUndo(result.plan);
               setChecked({ lines: result.plan.after, ids: [] });
               setBulkMessage(labels.selectedRemoved);
-              const survivor = result.plan.after[0];
-              (survivor ? removeRefs.current.get(survivor.publicId) : browseRef.current)?.focus();
+              const survivor = view.rows.find(item => result.plan.after.some(line => line.publicId === item.line.publicId))?.line;
+              (survivor ? removeRefs.current.get(survivor.publicId) ?? browseRef.current : browseRef.current)?.focus();
             } else {
               setChecked({ lines: cart.lines, ids: [] });
               setBulkMessage(result.status === "conflict" ? labels.bulkSelectionChanged :
@@ -244,6 +301,15 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
       </div>
       <p role="status" className="mt-3 break-words text-sm">{checked.ids.length > 0 && !coherentSelection ? labels.bulkSelectionChanged : bulkMessage}</p>
       <p role="status" className="mt-3 break-words text-sm">{selectedCopyMessage}</p>
+      {compareHref && <button type="button" className={`${cartControl} mt-3 max-w-full break-words`} onClick={() => {
+        if (!bulkReady) return;
+        const current = readBulkSelection(cart, checked.ids);
+        const pair = current.status === "ready" && current.lines.length === 2 ? publishedComparison(products,
+          { first: current.lines[0].publicId, second: current.lines[1].publicId }) : null;
+        const href = pair && comparisonHref(storefrontHref("/products", routeLocale), pair);
+        if (!href || href !== compareHref) { setBulkMessage(labels.bulkSelectionChanged); return; }
+        window.location.assign(`${href}#${COMPARISON_DESTINATION}`);
+      }}>{labels.compareSelected}</button>}
     </section>
     <button type="button" className={`${cartControl} mt-4 max-w-full break-words disabled:opacity-50`}
       disabled={copying || !cart.ready || cart.invalid || !cart.persistent || !items.some(item => item.product !== null)}
