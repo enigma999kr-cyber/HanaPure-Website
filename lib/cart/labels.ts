@@ -1,5 +1,10 @@
 export const cartLabels = {
   en: {
+    inBrowserCart: "Quantity currently saved in your browser cart", notInBrowserCart: "This product is not in your browser cart.",
+    setCartQuantity: "Set cart quantity", selectionUpdated: "Saved cart quantity updated.", selectionUnchanged: "The saved quantity is already the same. No change was made.",
+    selectionConflict: "Your cart selection changed. Reload and check the cart before trying again.",
+    selectionUnavailable: "The saved cart cannot be checked safely. Check browser storage and reload before trying again.",
+    selectionWriteFailed: "The quantity could not be confirmed as saved. Reload and check your cart before trying again.",
     copyShoppingList: "Copy shopping list", shoppingListCopied: "Shopping list copied.",
     shoppingListCopiedOmitted: "Shopping list copied. Unavailable entries omitted:",
     shoppingListFailed: "The shopping list could not be copied. Check clipboard access and try again.",
@@ -23,6 +28,11 @@ export const cartLabels = {
     invalid: "Enter a positive whole-number quantity.", loading: "Loading cart", updated: "Cart updated",
   },
   hu: {
+    inBrowserCart: "A böngésző kosarában jelenleg mentett mennyiség", notInBrowserCart: "Ez a termék nincs a böngésző kosarában.",
+    setCartQuantity: "Kosármennyiség beállítása", selectionUpdated: "A mentett kosármennyiség frissítve.", selectionUnchanged: "A mentett mennyiség már ugyanennyi. Nem történt módosítás.",
+    selectionConflict: "A kosár tartalma megváltozott. Töltse újra és ellenőrizze a kosarat, mielőtt újra próbálkozik.",
+    selectionUnavailable: "A mentett kosár nem ellenőrizhető biztonságosan. Ellenőrizze a böngésző tárhelyét, és töltse újra az oldalt, mielőtt újra próbálkozik.",
+    selectionWriteFailed: "A mennyiség mentését nem tudtuk megerősíteni. Töltse újra és ellenőrizze a kosarat, mielőtt újra próbálkozik.",
     copyShoppingList: "Bevásárlólista másolása", shoppingListCopied: "Bevásárlólista másolva.",
     shoppingListCopiedOmitted: "Bevásárlólista másolva. Kihagyott, nem elérhető tételek:",
     shoppingListFailed: "A bevásárlólista nem másolható. Ellenőrizze a vágólaphoz való hozzáférést, és próbálja újra.",
@@ -46,6 +56,11 @@ export const cartLabels = {
     invalid: "Adjon meg pozitív egész mennyiséget.", loading: "Kosár betöltése", updated: "Kosár frissítve",
   },
   ko: {
+    inBrowserCart: "이 브라우저 장바구니에 현재 저장된 수량", notInBrowserCart: "이 상품은 브라우저 장바구니에 없습니다.",
+    setCartQuantity: "장바구니 수량 설정", selectionUpdated: "저장된 장바구니 수량을 변경했습니다.", selectionUnchanged: "이미 같은 수량이 저장되어 있어 변경하지 않았습니다.",
+    selectionConflict: "장바구니 선택이 변경되었습니다. 새로고침하여 장바구니를 확인한 뒤 다시 시도해 주세요.",
+    selectionUnavailable: "저장된 장바구니를 안전하게 확인할 수 없습니다. 브라우저 저장소를 확인하고 새로고침한 뒤 다시 시도해 주세요.",
+    selectionWriteFailed: "수량이 저장되었는지 확인할 수 없습니다. 새로고침하여 장바구니를 확인한 뒤 다시 시도해 주세요.",
     copyShoppingList: "쇼핑 목록 복사", shoppingListCopied: "쇼핑 목록을 복사했습니다.",
     shoppingListCopiedOmitted: "쇼핑 목록을 복사했습니다. 제외된 이용 불가 항목 수:",
     shoppingListFailed: "쇼핑 목록을 복사할 수 없습니다. 클립보드 접근 권한을 확인하고 다시 시도해 주세요.",
