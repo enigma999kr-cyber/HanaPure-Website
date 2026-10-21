@@ -13,15 +13,16 @@ const require = createRequire(import.meta.url);
 const reactEntry = pathToFileURL(join(dirname(require.resolve("react/package.json")), "index.js")).href;
 const jsxEntry = pathToFileURL(join(dirname(require.resolve("react/package.json")), "jsx-runtime.js")).href;
 const repo = dirname(dirname(fileURLToPath(import.meta.url)));
-// Existing subscription-hook pattern: simulate only the Favorites snapshot read.
+// Existing subscription-hook pattern: simulate Favorites/Recent snapshot reads.
 // Real React still renders components; this is not browser hydration evidence.
 const favoriteSnapshotReact = "data:text/javascript," + encodeURIComponent(
-  "export function useSyncExternalStore(subscribe,getSnapshot,getServerSnapshot){return typeof window==='undefined'?getServerSnapshot():getSnapshot();}");
+  "export let subscribeToStore; export function useSyncExternalStore(subscribe,getSnapshot,getServerSnapshot){subscribeToStore=subscribe;return typeof window==='undefined'?getServerSnapshot():getSnapshot();}");
 registerHooks({
   resolve(specifier, context, nextResolve) {
     // Native Node does not provide Next's client-reference bundling. Load real
     // React/Link for their element references; do not execute client hooks here.
-    if (specifier === "react" && context.parentURL?.endsWith("/lib/favorites/browser-favorites.ts")) {
+    if (specifier === "react" && (context.parentURL?.endsWith("/lib/favorites/browser-favorites.ts") ||
+      context.parentURL?.endsWith("/lib/recently-viewed/browser-recent.ts"))) {
       return { url: favoriteSnapshotReact, shortCircuit: true };
     }
     if (specifier === "react") return { url: reactEntry, shortCircuit: true };
@@ -119,6 +120,91 @@ test("recent quick return reuses only the full public locale projection and reco
     assert.deepEqual(elements(ProductListing({ locale, routeLocale })).find(node => node.type === RecentlyViewedProducts).props.products, []);
     for (const value of Object.values(recentlyViewedLabels[locale])) assert.ok(value.trim());
     assert.deepEqual(Object.keys(recentlyViewedLabels[locale]), Object.keys(recentlyViewedLabels.en));
+  }
+});
+
+test("recent public MRU products compose QuickAdd without history/Favorites writes or nested navigation forms", async () => {
+  const { createElement } = await import("react");
+  const { renderToStaticMarkup } = require(join(dirname(require.resolve("react-dom/package.json")), "server.node.js"));
+  const { useBrowserRecent } = await import("../lib/recently-viewed/browser-recent.ts");
+  const { RECENT_STORAGE_KEY, serializeRecent } = await import("../lib/recently-viewed/recent-state.ts");
+  const { cartLabels } = await import("../lib/cart/labels.ts");
+  const first = product({ translations: { en: content(), hu: { ...content(), name: "Szintetikus teszttermék" }, ko: { ...content(), name: "가상 테스트 상품" } } });
+  const second = product({ publicId: "22345678-abcd-1234-abcd-123456789abc", slug: "recent-second" });
+  const unseen = product({ publicId: "32345678-abcd-1234-abcd-123456789abc", slug: "not-in-history" });
+  const draft = product({ publicId: "42345678-abcd-1234-abcd-123456789abc", slug: "private-recent-draft", state: "draft" });
+  const unknown = "52345678-abcd-1234-abcd-123456789abc";
+  const raw = serializeRecent([second.publicId.toUpperCase(), draft.publicId, first.publicId.toUpperCase(), unknown]);
+  const source = readFileSync(join(repo, "components/catalogue/RecentlyViewedProducts.tsx"), "utf8");
+  assert.match(source, /<QuickAdd publicId=\{product.publicId\} locale=\{locale\} name=\{product.name\} \/>/);
+  assert.doesNotMatch(source, /changeBrowserCart|changeBrowserFavorite|localStorage|onSubmit/);
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "window");
+  assert.equal(typeof window, "undefined");
+  assert.equal(renderToStaticMarkup(createElement(RecentlyViewedProducts, { products: [], locale: "en", routeLocale: null })), "");
+  useBrowserRecent();
+  const { subscribeToStore } = await import(favoriteSnapshotReact);
+  const events = new Set();
+  let stored = raw, blocked = false, writes = 0, unsubscribe;
+  Object.defineProperty(globalThis, "window", { configurable: true, value: {
+    localStorage: {
+      getItem(key) { assert.equal(key, RECENT_STORAGE_KEY); if (blocked) throw new Error("synthetic read denial"); return stored; },
+      setItem() { writes++; throw new Error("Recent/Favorites must not be written while composing QuickAdd"); },
+    },
+    addEventListener(type, listener) { if (type === "storage") events.add(listener); },
+    removeEventListener(type, listener) { if (type === "storage") events.delete(listener); },
+  } });
+  const refresh = () => events.forEach(listener => listener({ key: RECENT_STORAGE_KEY }));
+  try {
+    unsubscribe = subscribeToStore(() => {});
+    for (const routeLocale of [null, "en", "hu", "ko"]) {
+      const locale = routeLocale ?? "en";
+      const nodes = elements(ProductListing({ catalogue: reader(first, second, unseen, draft), locale, routeLocale,
+        criteria: { query: "no-match", brand: "Anua", sort: "name-desc" } }));
+      const recent = nodes.find(node => node.type === RecentlyViewedProducts);
+      assert.deepEqual(Object.keys(recent.props).sort(), ["locale", "products", "routeLocale"]);
+      assert.deepEqual(recent.props.products.map(item => item.publicId), [first.publicId, second.publicId, unseen.publicId]);
+      assert.ok(recent.props.products.every(item => Object.keys(item).sort().join(",") === "name,publicId,slug"));
+      const searchForm = nodes.find(node => node.type === "form" && node.props.method === "get");
+      assert.ok(searchForm && !elements(searchForm).some(node => node.type === RecentlyViewedProducts));
+      const html = renderToStaticMarkup(recent);
+      const rows = [...html.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/g)].map(match => match[1]);
+      assert.equal(rows.length, 2);
+      for (const [index, item] of [second, first].entries()) {
+        const name = recent.props.products.find(entry => entry.publicId === item.publicId).name;
+        if (locale !== "en" && item === second) { assert.ok(name.includes(second.slug)); assert.ok(!name.includes(content().name)); }
+        const label = renderToStaticMarkup(createElement("span", null, `${cartLabels[locale].quantity}: ${name}`));
+        assert.ok(rows[index].includes(label.slice(6, -7)));
+        assert.ok(rows[index].includes(`href="${routeLocale ? `/${locale}` : ""}/products/${item.slug}"`));
+        assert.equal((rows[index].match(/<form\b/g) ?? []).length, 1);
+        assert.ok(rows[index].indexOf("</a>") < rows[index].indexOf("<form"));
+        assert.match(rows[index], /type="number" min="1" step="1" required=""[^>]*value="1"/);
+        assert.match(rows[index], /<button type="submit"[^>]*disabled=""/);
+        assert.match(rows[index], /min-h-11/);
+        assert.match(rows[index], /focus-visible:outline-2/);
+        assert.match(rows[index], /flex-wrap/);
+      }
+      for (const value of [draft.slug, unseen.slug, unknown]) assert.ok(!html.includes(value));
+      assert.ok(html.includes(recentlyViewedLabels[locale].clear));
+      assert.ok(!renderToStaticMarkup(createElement(RecentlyViewedProducts, { ...recent.props, products: [] })).includes("<form"));
+      for (const bad of ["corrupt-test-only", serializeRecent([]), null]) {
+        stored = bad; refresh();
+        const hidden = renderToStaticMarkup(recent);
+        assert.ok(!hidden.includes("<form"));
+        if (bad === "corrupt-test-only") assert.ok(hidden.includes(recentlyViewedLabels[locale].invalid));
+        else assert.equal(hidden, "");
+      }
+      stored = raw; blocked = true; refresh();
+      const unavailable = renderToStaticMarkup(recent);
+      assert.ok(!unavailable.includes("<form"));
+      assert.ok(unavailable.includes(recentlyViewedLabels[locale].storage));
+      blocked = false; refresh();
+      assert.equal(stored, raw);
+    }
+    assert.equal(writes, 0);
+  } finally {
+    unsubscribe?.();
+    if (previous) Object.defineProperty(globalThis, "window", previous);
+    else delete globalThis.window;
   }
 });
 

@@ -6,6 +6,7 @@ import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
 import { storefrontHref } from "@/lib/storefront/localization";
 import { recentPublishedProducts } from "@/lib/recently-viewed/recent-state";
 import { useBrowserRecent, recordRecentVisit, clearBrowserRecent } from "@/lib/recently-viewed/browser-recent";
+import QuickAdd from "@/components/cart/QuickAdd";
 
 export const recentlyViewedLabels = {
   en: {
@@ -56,6 +57,7 @@ export default function RecentlyViewedProducts({ products, locale, routeLocale }
           className="inline-flex min-h-11 max-w-full items-center rounded-xl border border-hanapure-border px-4 py-3 text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text">
           <span className="min-w-0 break-words">{product.name}</span>
         </Link>
+        <QuickAdd publicId={product.publicId} locale={locale} name={product.name} />
       </li>)}
     </ul>}
     {(state.invalid || state.ids.length > 0) && <button type="button"
