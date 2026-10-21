@@ -12,6 +12,7 @@ export default function CartContent({ locale = "en", routeLocale = null }: {
   const products = localCatalogue.listPublished().map(product => ({
     publicId: product.publicId, slug: product.slug, brand: product.brand,
     names: { en: product.translations.en?.name ?? null, hu: product.translations.hu?.name ?? null, ko: product.translations.ko?.name ?? null },
+    image: product.translations[locale]?.images[0] ?? null,
   }));
   return <Container className="pb-20 pt-32 sm:pt-36">
     <h1 id="main-content" tabIndex={-1} className="text-4xl font-light sm:text-5xl">{cartLabels[locale].cart}</h1>

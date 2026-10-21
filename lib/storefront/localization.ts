@@ -26,6 +26,7 @@ export function switchLocalePath(path: string, locale: EditorialLocale): string 
 
 export const storefrontLabels = {
   en: {
+    gallery: "Product images", inspectImage: "Inspect image", closeImage: "Close image inspection", previousImage: "Previous image", nextImage: "Next image",
     home: "Home", shop: "Shop", brands: "Brands", language: "Language",
     openMenu: "Open menu", closeMenu: "Close menu", navigation: "Mobile navigation",
     skipContent: "Skip to content", primaryNavigation: "Main navigation",
@@ -44,6 +45,7 @@ export const storefrontLabels = {
     sortBy: "Sort by", defaultOrder: "Default order", nameAscending: "Name A–Z", nameDescending: "Name Z–A",
   },
   hu: {
+    gallery: "Termékképek", inspectImage: "Kép megtekintése nagyban", closeImage: "Nagyított kép bezárása", previousImage: "Előző kép", nextImage: "Következő kép",
     home: "Kezdőlap", shop: "Termékek", brands: "Márkák", language: "Nyelv",
     openMenu: "Menü megnyitása", closeMenu: "Menü bezárása", navigation: "Mobil navigáció",
     skipContent: "Ugrás a tartalomra", primaryNavigation: "Fő navigáció",
@@ -62,6 +64,7 @@ export const storefrontLabels = {
     sortBy: "Rendezés", defaultOrder: "Alapértelmezett sorrend", nameAscending: "Név A–Z", nameDescending: "Név Z–A",
   },
   ko: {
+    gallery: "상품 이미지", inspectImage: "이미지 크게 보기", closeImage: "확대 이미지 닫기", previousImage: "이전 이미지", nextImage: "다음 이미지",
     home: "홈", shop: "상품", brands: "브랜드", language: "언어",
     openMenu: "메뉴 열기", closeMenu: "메뉴 닫기", navigation: "모바일 탐색",
     skipContent: "본문으로 건너뛰기", primaryNavigation: "주 탐색",

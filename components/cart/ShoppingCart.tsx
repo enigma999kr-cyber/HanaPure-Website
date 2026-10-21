@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
-import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
+import type { EditorialImage, EditorialLocale } from "@/lib/catalog/editorial-catalogue";
 import { storefrontHref, storefrontLabels } from "@/lib/storefront/localization";
 import { cartLabels } from "@/lib/cart/labels";
 import { reconcileCart } from "@/lib/cart/cart-state";
@@ -21,9 +21,10 @@ import { setDetailCartQuantity, detailSelectionNeedsReload, type DetailCartSnaps
 import { stepQuantityDraft } from "@/lib/cart/quantity-draft-controls";
 import { cartReviewView, EMPTY_CART_REVIEW, CART_REVIEW_QUERY_LIMIT, CART_REVIEW_BRAND_LIMIT, type CartReviewCriteria } from "@/lib/cart/cart-review-view";
 import { COMPARISON_DESTINATION, comparisonHref, publishedComparison } from "@/lib/comparison/compare-selection";
+import ProductImage from "@/components/catalogue/ProductImage";
 
 export type CartProduct = Readonly<{ publicId: string; slug: string; brand: string;
-  names: Readonly<Record<EditorialLocale, string | null>> }>;
+  names: Readonly<Record<EditorialLocale, string | null>>; image?: EditorialImage | null }>;
 
 function QuantityForm({ publicId, quantity, name, locale, cart, announce }: {
   publicId: string; quantity: number; name: string; locale: EditorialLocale; cart: DetailCartSnapshot; announce: (result: DetailSelectionResult) => void;
@@ -172,6 +173,7 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
         className="mt-8 scroll-mt-24 space-y-5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-hanapure-text">
         {view.rows.map(({ line, product, originalIndex }, visibleIndex) => {
           const name = product?.names[locale] ?? storefrontLabels[locale].details;
+          const image = product ? products.find(item => item.publicId.toLowerCase() === line.publicId.toLowerCase())?.image : null;
           return <li key={line.publicId} className="min-w-0 rounded-2xl border border-hanapure-border bg-hanapure-white p-5">
             <label className="mb-3 flex min-h-11 min-w-0 items-center gap-3 break-words">
               <input type="checkbox" checked={selected.some(item => item.publicId.toLowerCase() === line.publicId.toLowerCase())}
@@ -189,6 +191,10 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
               <span className="min-w-0 break-words">{labels.selectCartItem}: {product ? name : `${labels.unavailable} (${originalIndex + 1})`}</span>
             </label>
             {product ? <>
+              {image && <Link href={`${storefrontHref(`/products/${product.slug}`, routeLocale)}?cartReturn=1`}
+                className="mb-3 block w-24 max-w-full rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text">
+                <ProductImage {...image} />
+              </Link>}
               <p className="text-sm text-hanapure-muted">{product.brand}</p>
               <Link href={`${storefrontHref(`/products/${product.slug}`, routeLocale)}?cartReturn=1`} className={`${cartControl} mt-2 block max-w-full break-words text-xl`}>{name}</Link>
               {!product.names[locale] && <p className="mt-3">{storefrontLabels[locale].missing}</p>}

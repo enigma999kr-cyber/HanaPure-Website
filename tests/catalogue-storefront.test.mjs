@@ -300,10 +300,10 @@ test("recent quick return reuses only the full public locale projection and reco
     assert.deepEqual(bar.props.comparisonProducts, nodes.find(node => node.type === ProductComparison).props.products);
     assert.equal(bar.props.locale, locale);
     assert.equal(bar.props.routeLocale, routeLocale);
-    assert.deepEqual(bar.props.products, nodes.find(node => node.type === SavedProductsBar).props.products.map(({ publicId, slug, name }) => ({ publicId, slug, name })));
+    assert.deepEqual(bar.props.products, nodes.find(node => node.type === SavedProductsBar).props.products.map(({ publicId, slug, name, image }) => ({ publicId, slug, name, image })));
     assert.deepEqual(bar.props.products.map(item => item.publicId), [first.publicId, second.publicId]);
     assert.deepEqual(bar.props.products.map(item => Object.keys(item).sort()), [
-      ["name", "publicId", "slug"], ["name", "publicId", "slug"],
+      ["image", "name", "publicId", "slug"], ["image", "name", "publicId", "slug"],
     ]);
     assert.equal(bar.props.products[0].name, first.translations[locale].name);
     if (locale !== "en") {
@@ -367,7 +367,7 @@ test("recent public MRU products compose QuickAdd without history/Favorites writ
       const recent = nodes.find(node => node.type === RecentlyViewedProducts);
       assert.deepEqual(Object.keys(recent.props).sort(), ["comparisonProducts", "locale", "products", "routeLocale"]);
       assert.deepEqual(recent.props.products.map(item => item.publicId), [first.publicId, second.publicId, unseen.publicId]);
-      assert.ok(recent.props.products.every(item => Object.keys(item).sort().join(",") === "name,publicId,slug"));
+      assert.ok(recent.props.products.every(item => Object.keys(item).sort().join(",") === "image,name,publicId,slug"));
       const searchForm = nodes.find(node => node.type === "form" && node.props.method === "get");
       assert.ok(searchForm && !elements(searchForm).some(node => node.type === RecentlyViewedProducts));
       const html = renderToStaticMarkup(recent);
@@ -476,7 +476,7 @@ test("comparison is published-only, independent of filtered results, localized a
     assert.deepEqual(board.props.products.map(item => item.publicId), [first.publicId, second.publicId]);
     assert.equal(nodes.filter(node => node.type === QuickAdd).length, 1);
     for (const [index, item] of board.props.products.entries()) {
-      assert.deepEqual(Object.keys(item).sort(), ["brand", "caution", "description", "name", "publicId", "slug", "usage"]);
+      assert.deepEqual(Object.keys(item).sort(), ["brand", "caution", "description", "image", "name", "publicId", "slug", "usage"]);
       assert.equal(item.slug, [first, second][index].slug);
       if (locale === "en") {
         assert.equal(item.name, content().name);
@@ -518,7 +518,7 @@ test("Saved controls use only published identity and the full minimal locale pro
     assert.equal(bar.props.locale, locale);
     assert.deepEqual(bar.props.products.map(item => item.publicId), [published.publicId, second.publicId]);
     for (const item of bar.props.products) {
-      assert.deepEqual(Object.keys(item).sort(), ["brand", "name", "publicId", "slug"]);
+      assert.deepEqual(Object.keys(item).sort(), ["brand", "image", "name", "publicId", "slug"]);
       assert.equal(item.brand, item.publicId === published.publicId ? published.brand : second.brand);
       assert.ok(locale === "en" ? item.name === "Fictional fixture" : item.name.includes(item.slug));
       if (locale !== "en") assert.ok(!item.name.includes("Fictional fixture"));
@@ -578,7 +578,7 @@ test("saved published products reuse quantity-aware QuickAdd without unsaving, h
         criteria: { query: "no-match", brand: "Anua", sort: "name-desc" } }));
       const bar = nodes.find(node => node.type === SavedProductsBar);
       assert.deepEqual(Object.keys(bar.props).sort(), ["comparisonProducts", "locale", "products", "routeLocale"]);
-      assert.deepEqual(bar.props.products.map(item => Object.keys(item).sort()), Array(3).fill(["brand", "name", "publicId", "slug"]));
+      assert.deepEqual(bar.props.products.map(item => Object.keys(item).sort()), Array(3).fill(["brand", "image", "name", "publicId", "slug"]));
       assert.deepEqual(bar.props.products.map(item => item.publicId), [first.publicId, second.publicId, unsaved.publicId]);
       const searchForm = nodes.find(node => node.type === "form" && node.props.method === "get");
       assert.ok(searchForm);
@@ -723,18 +723,18 @@ test("related detail Back restores brand context without changing canonical SEO"
   assert.equal(metadata.alternates.canonical, "/en/products/same-brand-other".replace(/^/, "https://hanapure.test"));
 });
 
-test("detail gallery receives exact ordered editorial media only for multiple images; zero/one stays unchanged", () => {
+test("detail gallery receives exact ordered editorial media for single/multiple images; zero remains absent", () => {
   for (const count of [0, 1, 2, 3]) {
     const record = product();
     record.translations.en.images = Array.from({ length: count }, (_, i) => ({ src: `/test-only-${i}.svg`, alt: `Editorial ${i}` }));
     const catalogue = reader(record);
     const nodes = elements(ProductDetail({ catalogue, slug: record.slug }));
-    assert.equal(nodes.filter(node => node.type === ProductMediaGallery).length, count > 1 ? 1 : 0);
-    assert.equal(nodes.filter(node => node.type === ProductImage).length, count === 1 ? 1 : 0);
-    if (count > 1) {
+    assert.equal(nodes.filter(node => node.type === ProductMediaGallery).length, count > 0 ? 1 : 0);
+    assert.equal(nodes.filter(node => node.type === ProductImage).length, 0);
+    if (count > 0) {
       const images = nodes.find(node => node.type === ProductMediaGallery).props.images;
       assert.deepEqual(images, record.translations.en.images);
-      assert.deepEqual(Object.keys(nodes.find(node => node.type === ProductMediaGallery).props), ["images"]);
+      assert.deepEqual(Object.keys(nodes.find(node => node.type === ProductMediaGallery).props), ["images", "locale"]);
     }
   }
   const images = [{ src: "/test-only.svg", alt: "Editorial" }, { src: "/test-only-2.svg", alt: "Editorial 2" }];
@@ -755,7 +755,7 @@ test("image sources get distinct state identities without altering editorial pub
   assert.equal(catalogue.listPublished().length, 1);
   assert.equal(catalogue.listPublished()[0].publicId, record.publicId);
   const detail = elements(ProductDetail({ catalogue, slug: record.slug }));
-  assert.ok(detail.find(node => node.type === ProductImage).key.startsWith(`${record.publicId}-`));
+  assert.ok(detail.find(node => node.type === ProductMediaGallery).key.startsWith(`${record.publicId}-`));
 });
 
 test("published listing/detail/Back round-trip preserves only parsed criteria in every locale and legacy URLs", () => {
@@ -854,7 +854,7 @@ test("detail resolves a published slug and renders supplied images, usage and ca
   for (const value of [record.brand, record.translations.en.name, record.translations.en.description,
     record.translations.en.usage, record.translations.en.caution]) assert.ok(text(nodes).includes(value));
   assert.ok(nodes.some((node) => node.props?.href === "/products"));
-  assert.equal(nodes.find((node) => node.type === ProductImage).props.src, record.translations.en.images[0].src);
+  assert.equal(nodes.find((node) => node.type === ProductMediaGallery).props.images[0].src, record.translations.en.images[0].src);
   assert.ok(nodes.every((node) => !node.props?.dangerouslySetInnerHTML));
 });
 
@@ -931,7 +931,8 @@ test("EN/HU/KO catalogue views select only the requested editorial content and k
       ProductDetail({ catalogue, slug: record.slug, locale, routeLocale: locale })]) {
       const nodes = elements(view);
       assert.ok(text(nodes).includes(`${locale} fixture`));
-      assert.equal(nodes.find((node) => node.type === ProductImage).props.alt, `${locale} image`);
+      const image = nodes.find((node) => node.type === ProductImage)?.props ?? nodes.find((node) => node.type === ProductMediaGallery).props.images[0];
+      assert.equal(image.alt, `${locale} image`);
       assert.ok(nodes.some((node) => node.props?.href === `/${locale}/products/${record.slug}` || node.props?.href === `/${locale}/products`));
       for (const other of ["en", "hu", "ko"].filter((value) => value !== locale)) assert.ok(!text(nodes).includes(`${other} fixture`));
     }

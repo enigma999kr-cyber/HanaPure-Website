@@ -12,6 +12,7 @@ import { useBrowserCart } from "@/lib/cart/browser-cart";
 import { useBrowserFavorites } from "@/lib/favorites/browser-favorites";
 import { browserCartOverlap, savedProductOverlap } from "@/lib/cart/cart-selection-summary";
 import SaveProductButton from "./SaveProductButton";
+import ProductImage from "./ProductImage";
 
 /** Keyed to the current pair/context: obsolete asynchronous writes cannot announce success. */
 function CopyComparisonLink({ relativeHref, products, locale }: {
@@ -105,6 +106,7 @@ export default function ProductComparison({ products, locale, routeLocale, initi
       {pair.map((product, slot) => <article key={product.publicId} id={`${id}-panel-${slot}`} tabIndex={-1} aria-labelledby={`${id}-panel-${slot}-heading`}
         className="min-w-0 scroll-mt-24 rounded-xl border border-hanapure-border bg-hanapure-white p-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-hanapure-text">
         <h3 id={`${id}-panel-${slot}-heading`} className="break-words text-xl font-medium">{displayName(product)}</h3>
+        {product.image && <div className="mt-4 w-full min-w-0 max-w-64"><ProductImage {...product.image} /></div>}
         {browserCartOverlap(cart, product.publicId) !== null && <p className="mt-3 break-words text-sm">{labels.inBrowserCart}: {browserCartOverlap(cart, product.publicId)}</p>}
         {savedProductOverlap(favorites, product.publicId) && <p className="mt-2 break-words text-sm">{labels.saved}</p>}
         <dl className="mt-4 space-y-4">

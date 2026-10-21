@@ -28,7 +28,7 @@ function comparisonProjection(catalogue: CatalogueReader, locale: EditorialLocal
     const content = product.translations[locale];
     return { publicId: product.publicId, slug: product.slug, brand: product.brand,
       name: content?.name ?? null, description: content?.description ?? null,
-      usage: content?.usage ?? null, caution: content?.caution ?? null };
+      usage: content?.usage ?? null, caution: content?.caution ?? null, image: content?.images[0] ?? null };
   });
 }
 const linkStyle = "inline-flex min-h-11 items-center text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-hanapure-text";
@@ -54,10 +54,12 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
   const quickProducts = catalogue.listPublished().map(product => ({
     publicId: product.publicId, slug: product.slug,
     name: product.translations[locale]?.name ?? `${labels.details}: ${product.brand} (${product.slug})`,
+    image: product.translations[locale]?.images[0] ?? null,
   }));
   const savedProducts = comparison.map(product => ({
     publicId: product.publicId, slug: product.slug, brand: product.brand,
     name: product.name ?? `${labels.details}: ${product.brand} (${product.slug})`,
+    image: product.image ?? null,
   }));
   const listingHref = storefrontHref("/products", routeLocale);
   const comparisonPair = publishedComparison(comparison, comparisonContext);
@@ -215,8 +217,7 @@ export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en",
       <article className="mt-6 grid min-w-0 gap-8 lg:grid-cols-2 lg:gap-12">
         {content && content.images.length > 0 && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-1">
-            {content.images.length > 1 ? <ProductMediaGallery key={`${product.publicId}-${locale}`} images={content.images} />
-              : content.images.map((image, index) => <ProductImage key={`${product.publicId}-${image.src}-${index}`} {...image} />)}
+            <ProductMediaGallery key={`${product.publicId}-${locale}`} images={content.images} locale={locale} />
           </div>
         )}
         <div className="min-w-0">

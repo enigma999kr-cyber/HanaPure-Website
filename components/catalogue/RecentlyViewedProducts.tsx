@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
-import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
+import type { EditorialImage, EditorialLocale } from "@/lib/catalog/editorial-catalogue";
 import { storefrontHref } from "@/lib/storefront/localization";
 import { recentPublishedProducts } from "@/lib/recently-viewed/recent-state";
 import { useBrowserRecent, recordRecentVisit, clearBrowserRecent, removeBrowserRecent } from "@/lib/recently-viewed/browser-recent";
@@ -11,6 +11,7 @@ import SaveProductButton from "./SaveProductButton";
 import ProductComparison from "./ProductComparison";
 import type { ComparisonProduct } from "@/lib/comparison/compare-selection";
 import { recentComparisonPair } from "@/lib/recently-viewed/recent-comparison";
+import ProductImage from "./ProductImage";
 
 export const recentlyViewedLabels = {
   en: {
@@ -46,7 +47,7 @@ export function ProductVisitTracker({ publicId }: { publicId: string }) {
 }
 
 export default function RecentlyViewedProducts({ products, comparisonProducts = [], locale, routeLocale }: {
-  products: readonly Readonly<{ publicId: string; slug: string; name: string }>[];
+  products: readonly Readonly<{ publicId: string; slug: string; name: string; image?: EditorialImage | null }>[];
   comparisonProducts?: readonly ComparisonProduct[];
   locale: EditorialLocale; routeLocale: EditorialLocale | null;
 }) {
@@ -87,6 +88,10 @@ export default function RecentlyViewedProducts({ products, comparisonProducts = 
             }} />
           <span className="min-w-0 break-words">{labels.select}: {product.name}</span>
         </label>
+        {product.image && <Link href={storefrontHref(`/products/${product.slug}`, routeLocale)}
+          className="mb-3 block w-24 max-w-full rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text">
+          <ProductImage {...product.image} />
+        </Link>}
         <Link href={storefrontHref(`/products/${product.slug}`, routeLocale)}
           className="inline-flex min-h-11 max-w-full items-center rounded-xl border border-hanapure-border px-4 py-3 text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text">
           <span className="min-w-0 break-words">{product.name}</span>

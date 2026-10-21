@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
-import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
+import type { EditorialImage, EditorialLocale } from "@/lib/catalog/editorial-catalogue";
 import { storefrontHref } from "@/lib/storefront/localization";
 import { useBrowserFavorites, resetBrowserFavorites, getFavoriteSnapshot, mutateBrowserFavorites } from "@/lib/favorites/browser-favorites";
 import { favoriteLabels } from "@/lib/favorites/labels";
@@ -14,9 +14,10 @@ import type { ComparisonProduct } from "@/lib/comparison/compare-selection";
 import { browserCartOverlap } from "@/lib/cart/cart-selection-summary";
 import ProductComparison from "./ProductComparison";
 import { savedShoppingList } from "@/lib/favorites/saved-shopping-list";
+import ProductImage from "./ProductImage";
 
 export default function SavedProductsBar({ products, comparisonProducts = [], locale, routeLocale }: {
-  products: readonly SavedViewProduct[]; comparisonProducts?: readonly ComparisonProduct[];
+  products: readonly (SavedViewProduct & Readonly<{ image?: EditorialImage | null }>)[]; comparisonProducts?: readonly ComparisonProduct[];
   locale: EditorialLocale; routeLocale: EditorialLocale | null;
 }) {
   const state = useBrowserFavorites();
@@ -34,6 +35,7 @@ export default function SavedProductsBar({ products, comparisonProducts = [], lo
   } | null>(null);
   const collection = savedCollectionView(state.ids, products, view, locale);
   const selected = collection.rows;
+  const images = new Map(products.map(product => [product.publicId.toLowerCase(), product.image]));
   const healthy = state.ready && state.persistent && !state.invalid;
   const coherent = checked.baseline === state.ids && checked.ids.every(id => selected.some(product => product.publicId.toLowerCase() === id.toLowerCase()));
   const checkedIds = healthy && coherent ? checked.ids : [];
@@ -88,6 +90,10 @@ export default function SavedProductsBar({ products, comparisonProducts = [], lo
             }} />
           <span className="min-w-0 break-words">{labels.select}: {product.name}</span>
         </label>
+        {images.get(product.publicId.toLowerCase()) && <Link href={storefrontHref(`/products/${product.slug}`, routeLocale)}
+          className="mb-3 block w-24 max-w-full rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text">
+          <ProductImage {...images.get(product.publicId.toLowerCase())!} />
+        </Link>}
         <Link href={storefrontHref(`/products/${product.slug}`, routeLocale)}
           className="inline-flex min-h-11 max-w-full items-center break-words rounded-xl border border-hanapure-border bg-hanapure-white px-4 py-3 text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text">
           <span className="min-w-0 break-words">{product.name}</span>

@@ -1,3 +1,5 @@
+import type { EditorialImage } from "../catalog/editorial-catalogue";
+
 /** Selected-locale editorial projection only; the caller supplies published records. */
 export type ComparisonProduct = Readonly<{
   publicId: string;
@@ -7,6 +9,7 @@ export type ComparisonProduct = Readonly<{
   description: string | null;
   usage: string | null;
   caution: string | null;
+  image?: EditorialImage | null;
 }>;
 
 const identity = (value: unknown): string | null => typeof value === "string" &&

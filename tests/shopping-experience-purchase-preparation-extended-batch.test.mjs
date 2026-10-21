@@ -301,7 +301,7 @@ test("SSR, empty/invalid stores and full-public projections keep new controls in
     const recent = nodes(tree).find(node => node.type === RecentlyViewedProducts);
     assert.deepEqual(recent.props.comparisonProducts.map(product => product.publicId), [id, other]);
     if (locale !== "en") assert.ok(recent.props.comparisonProducts.every(product => product.name === null));
-    assert.deepEqual(Object.keys(recent.props.comparisonProducts[0]).sort(), ["brand", "caution", "description", "name", "publicId", "slug", "usage"]);
+    assert.deepEqual(Object.keys(recent.props.comparisonProducts[0]).sort(), ["brand", "caution", "description", "image", "name", "publicId", "slug", "usage"]);
     assert.deepEqual(Object.keys(recentlyViewedLabels[locale]), Object.keys(recentlyViewedLabels.en));
     assert.deepEqual(Object.keys(favoriteLabels[locale]), Object.keys(favoriteLabels.en));
     for (const key of ["selectDisplayed", "clearSelection", "copySelected", "copied", "copyFailed", "copyTooLarge"]) assert.ok(favoriteLabels[locale][key].trim());
