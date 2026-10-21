@@ -26,6 +26,8 @@ export function switchLocalePath(path: string, locale: EditorialLocale): string 
 
 export const storefrontLabels = {
   en: {
+    selectResultComparison: "Select for comparison", compareSelectedResults: "Compare two selected results", resultComparisonCount: "Selected results for comparison",
+    matchingNavigation: "Matching product navigation", previousMatch: "Previous matching product", nextMatch: "Next matching product", compareRelated: "Compare with this product",
     gallery: "Product images", inspectImage: "Inspect image", closeImage: "Close image inspection", previousImage: "Previous image", nextImage: "Next image",
     home: "Home", shop: "Shop", brands: "Brands", language: "Language",
     openMenu: "Open menu", closeMenu: "Close menu", navigation: "Mobile navigation",
@@ -45,6 +47,8 @@ export const storefrontLabels = {
     sortBy: "Sort by", defaultOrder: "Default order", nameAscending: "Name A–Z", nameDescending: "Name Z–A",
   },
   hu: {
+    selectResultComparison: "Kiválasztás összehasonlításhoz", compareSelectedResults: "Két kiválasztott találat összehasonlítása", resultComparisonCount: "Összehasonlításhoz kiválasztott találatok",
+    matchingNavigation: "Navigáció a megfelelő termékek között", previousMatch: "Előző megfelelő termék", nextMatch: "Következő megfelelő termék", compareRelated: "Összehasonlítás ezzel a termékkel",
     gallery: "Termékképek", inspectImage: "Kép megtekintése nagyban", closeImage: "Nagyított kép bezárása", previousImage: "Előző kép", nextImage: "Következő kép",
     home: "Kezdőlap", shop: "Termékek", brands: "Márkák", language: "Nyelv",
     openMenu: "Menü megnyitása", closeMenu: "Menü bezárása", navigation: "Mobil navigáció",
@@ -64,6 +68,8 @@ export const storefrontLabels = {
     sortBy: "Rendezés", defaultOrder: "Alapértelmezett sorrend", nameAscending: "Név A–Z", nameDescending: "Név Z–A",
   },
   ko: {
+    selectResultComparison: "비교할 상품 선택", compareSelectedResults: "선택한 검색 결과 두 개 비교", resultComparisonCount: "비교할 검색 결과 선택 수",
+    matchingNavigation: "조건에 맞는 상품 탐색", previousMatch: "조건에 맞는 이전 상품", nextMatch: "조건에 맞는 다음 상품", compareRelated: "이 상품과 비교",
     gallery: "상품 이미지", inspectImage: "이미지 크게 보기", closeImage: "확대 이미지 닫기", previousImage: "이전 이미지", nextImage: "다음 이미지",
     home: "홈", shop: "상품", brands: "브랜드", language: "언어",
     openMenu: "메뉴 열기", closeMenu: "메뉴 닫기", navigation: "모바일 탐색",

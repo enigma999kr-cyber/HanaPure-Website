@@ -12,6 +12,7 @@ import SavedProductsBar from "./SavedProductsBar";
 import ProductComparison from "./ProductComparison";
 import SearchSuggestions from "./SearchSuggestions";
 import CopySearchLink from "./CopySearchLink";
+import CatalogueResultPairPicker, { CatalogueResultPairCheckbox } from "./CatalogueResultPairPicker";
 import RecentlyViewedProducts, { ProductVisitTracker } from "./RecentlyViewedProducts";
 import { COMPARISON_DESTINATION, comparisonHref, publishedComparison, resolveComparison, type ComparisonContext, type ComparisonProduct } from "@/lib/comparison/compare-selection";
 import { comparisonLabels } from "@/lib/comparison/labels";
@@ -145,12 +146,17 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
           <Link href={storefrontHref("/brands", routeLocale)} className={`${linkStyle} mt-4`}>{labels.exploreBrands}</Link>
         </div>
       ) : (
+        <CatalogueResultPairPicker key={JSON.stringify([locale, routeLocale, criteria, products.map(product => product.publicId)])}
+          products={products.map(product => ({ publicId: product.publicId,
+            name: product.translations[locale]?.name ?? `${labels.details}: ${product.brand} (${product.slug})` }))}
+          locale={locale} routeLocale={routeLocale} catalogueQuery={catalogueQueryString(criteria)}>
         <ul className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {products.map((product) => {
             const content = product.translations[locale];
             const detailHref = `${storefrontHref(`/products/${product.slug}`, routeLocale)}${catalogueQueryString(criteria)}`;
             return (
               <li key={product.publicId} className="min-w-0 rounded-2xl border border-hanapure-border bg-hanapure-white p-5">
+                <CatalogueResultPairCheckbox publicId={product.publicId} />
                 {content?.images[0] && <Link href={detailHref} aria-label={`${labels.details}: ${content.name}`}
                   className="block rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-hanapure-text">
                   <ProductImage {...content.images[0]} />
@@ -166,6 +172,13 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
                 <p className="mt-3 whitespace-pre-line break-words leading-7 text-hanapure-muted">
                   {content?.description ?? labels.missing}
                 </p>
+                {(content?.usage || content?.caution) && <details className="mt-4 min-w-0 rounded-xl border border-hanapure-border p-3">
+                  <summary className="min-h-11 cursor-pointer break-words py-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text">
+                    {[content.usage ? labels.usage : null, content.caution ? labels.caution : null].filter(Boolean).join(" / ")}
+                  </summary>
+                  {content.usage && <div className="mt-3"><h3 className="text-sm font-medium">{labels.usage}</h3><p className="mt-2 whitespace-pre-line break-words leading-7">{content.usage}</p></div>}
+                  {content.caution && <div className="mt-3"><h3 className="text-sm font-medium">{labels.caution}</h3><p className="mt-2 whitespace-pre-line break-words leading-7">{content.caution}</p></div>}
+                </details>}
                 <QuickAdd publicId={product.publicId} locale={locale}
                   name={content?.name ?? `${labels.details}: ${product.brand} (${product.slug})`} />
                 <SaveProductButton publicId={product.publicId} locale={locale}
@@ -180,6 +193,7 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
             );
           })}
         </ul>
+        </CatalogueResultPairPicker>
       )}
       {comparison.length >= 2 && <ProductComparison key={`${locale}-${comparisonPair?.map(product => product.publicId).join("-") ?? "default"}-${catalogueQueryString(criteria)}`}
         products={comparison} locale={locale} routeLocale={routeLocale} initialPublicId={comparisonPair?.[0].publicId}
@@ -207,6 +221,17 @@ export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en",
   const returnPair = comparisonContext.second ? publishedComparison(comparison, comparisonContext) : null;
   const returnHref = returnPair && returnPair.some(item => item.publicId.toLowerCase() === product.publicId.toLowerCase())
     ? comparisonHref(storefrontHref("/products", routeLocale), returnPair, catalogueQueryString(criteria)) : null;
+  const browseQuery = catalogueQueryString(criteria);
+  const matching = browseQuery.length <= 8192 ? discoverCatalogue(catalogue, locale, criteria) : [];
+  const position = matching.findIndex(item => item.publicId.toLowerCase() === product.publicId.toLowerCase());
+  const adjacent = position < 0 ? [] : [
+    { item: matching[position - 1], label: labels.previousMatch },
+    { item: matching[position + 1], label: labels.nextMatch },
+  ].flatMap(({ item, label }) => {
+    if (!item || item.publicId.toLowerCase() === product.publicId.toLowerCase()) return [];
+    const href = storefrontHref(`/products/${item.slug}`, routeLocale) + browseQuery;
+    return href.length <= 8192 ? [{ href, label, name: item.translations[locale]?.name ?? `${labels.details}: ${item.brand} (${item.slug})` }] : [];
+  });
   const detailTargetStyle = "scroll-mt-24 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-hanapure-text";
   return (
     <Container className="pb-20 pt-32 sm:pt-36">
@@ -214,6 +239,10 @@ export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en",
       <Link href={`${storefrontHref("/products", routeLocale)}${catalogueQueryString(criteria)}`} className={linkStyle}>{labels.back}</Link>
       {cartReturn === true && <Link href={storefrontHref("/cart", routeLocale)} className={`${linkStyle} mt-3 block max-w-full break-words`}>{cartLabels[locale].backToCart}</Link>}
       {returnHref && <Link href={`${returnHref}#${COMPARISON_DESTINATION}`} className={`${linkStyle} mt-3 block max-w-full break-words`}>{comparisonLabels[locale].backToComparison}</Link>}
+      {adjacent.length > 0 && <nav aria-label={labels.matchingNavigation} className="mt-5 flex min-w-0 flex-wrap gap-4">
+        {adjacent.map(link => <Link key={link.href} href={link.href} aria-label={`${link.label}: ${link.name}`}
+          className={`${linkStyle} min-w-0 max-w-full break-words`}>{link.label}: {link.name}</Link>)}
+      </nav>}
       <article className="mt-6 grid min-w-0 gap-8 lg:grid-cols-2 lg:gap-12">
         {content && content.images.length > 0 && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-1">
@@ -258,6 +287,9 @@ export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en",
         <ul className="mt-4 grid gap-3 sm:grid-cols-3">
           {related.map(item => {
             const translated = item.translations[locale];
+            const name = translated?.name ?? `${labels.details}: ${item.brand} (${item.slug})`;
+            const pair = publishedComparison(comparison, { first: product.publicId, second: item.publicId });
+            const compareHref = pair && comparisonHref(storefrontHref("/products", routeLocale), pair, browseQuery);
             return <li key={item.publicId} className="min-w-0">
               <Link href={`${storefrontHref(`/products/${item.slug}`, routeLocale)}${brandQuery}`}
                 aria-label={translated ? undefined : `${labels.details}: ${item.brand} (${item.slug})`}
@@ -265,6 +297,10 @@ export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en",
                 {translated?.name ?? labels.details}
               </Link>
               {!translated && <p className="mt-2 text-sm text-hanapure-muted">{labels.missing}</p>}
+              {compareHref && <Link href={`${compareHref}#${COMPARISON_DESTINATION}`} aria-label={`${labels.compareRelated}: ${name}`}
+                className={`${linkStyle} mt-3 max-w-full break-words`}>{labels.compareRelated}</Link>}
+              <QuickAdd publicId={item.publicId} locale={locale} name={name} />
+              <SaveProductButton publicId={item.publicId} locale={locale} name={name} />
             </li>;
           })}
         </ul>

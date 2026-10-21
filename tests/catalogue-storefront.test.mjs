@@ -57,6 +57,7 @@ const { default: QuickAdd } = await import("../components/cart/QuickAdd.tsx");
 const { default: SaveProductButton } = await import("../components/catalogue/SaveProductButton.tsx");
 const { default: SavedProductsBar } = await import("../components/catalogue/SavedProductsBar.tsx");
 const { default: ProductComparison } = await import("../components/catalogue/ProductComparison.tsx");
+const { default: CatalogueResultPairPicker, CatalogueResultPairCheckbox } = await import("../components/catalogue/CatalogueResultPairPicker.tsx");
 const { default: SearchSuggestions, suggestionDetailHref } = await import("../components/catalogue/SearchSuggestions.tsx");
 const { default: CopySearchLink, canonicalSearchLink } = await import("../components/catalogue/CopySearchLink.tsx");
 const { default: RecentlyViewedProducts, ProductVisitTracker, recentlyViewedLabels } = await import("../components/catalogue/RecentlyViewedProducts.tsx");
@@ -67,7 +68,8 @@ function elements(node) {
   if (typeof node !== "object") return [node];
   // Client hooks are exercised in the hydrated browser, not called as server functions.
   // This island also carries the actual server-rendered native input as its child.
-  if (node.type === SearchSuggestions) return [node, ...elements(node.props.children)];
+  if (node.type === SearchSuggestions || node.type === CatalogueResultPairPicker) return [node, ...elements(node.props.children)];
+  if (node.type === CatalogueResultPairCheckbox) return [node];
   if (node.type === ProductImage || node.type === ProductMediaGallery || node.type === AddToCart || node.type === QuickAdd ||
     node.type === SaveProductButton || node.type === SavedProductsBar || node.type === ProductComparison ||
     node.type === RecentlyViewedProducts || node.type === ProductVisitTracker || node.type === CopySearchLink) return [node];
@@ -699,7 +701,7 @@ test("same-brand detail discovery limits only other published identities and pre
     const section = nodes.find(node => node.type === "section" && node.props["aria-labelledby"] === "same-brand-heading");
     assert.equal(Boolean(section), count > 0);
     if (section) {
-      const links = elements(section).filter(node => node.props?.href);
+      const links = elements(section).filter(node => node.props?.href?.startsWith(`${root}/`));
       assert.deepEqual(links.map(node => node.props.href), others.slice(0, 3).map(item => `${root}/${item.slug}?brand=Dr.+Althea`));
       for (const link of links) assert.match(link.props.className, /focus-visible:outline-2/);
       if (locale !== "en") {
