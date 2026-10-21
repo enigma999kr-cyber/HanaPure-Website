@@ -13,7 +13,7 @@ import ProductComparison from "./ProductComparison";
 import SearchSuggestions from "./SearchSuggestions";
 import CopySearchLink from "./CopySearchLink";
 import RecentlyViewedProducts, { ProductVisitTracker } from "./RecentlyViewedProducts";
-import type { ComparisonProduct } from "@/lib/comparison/compare-selection";
+import { resolveComparison, type ComparisonProduct } from "@/lib/comparison/compare-selection";
 import { cartLabels } from "@/lib/cart/labels";
 import { localCatalogue } from "@/lib/catalog/local-catalogue";
 import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
@@ -188,6 +188,8 @@ export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en",
   const brandQuery = catalogueQueryString({ query: "", brand: product.brand });
   const related = catalogue.listPublished().filter(item => item.brand === product.brand && item.publicId !== product.publicId).slice(0, 3);
   const comparison = comparisonProjection(catalogue, locale);
+  const hasComparison = resolveComparison(comparison, product.publicId) !== null;
+  const detailTargetStyle = "scroll-mt-24 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-hanapure-text";
   return (
     <Container className="pb-20 pt-32 sm:pt-36">
       <ProductVisitTracker key={product.publicId} publicId={product.publicId} />
@@ -202,22 +204,32 @@ export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en",
         <div className="min-w-0">
           <p className="text-sm text-hanapure-muted"><Link href={`${storefrontHref("/products", routeLocale)}${brandQuery}`} className={linkStyle}>{product.brand}</Link></p>
           <h1 id="main-content" tabIndex={-1} className="mt-3 break-words text-4xl font-light sm:text-5xl">{content?.name ?? labels.details}</h1>
-          <p className="mt-6 whitespace-pre-line break-words leading-8 text-hanapure-muted">
+          <nav aria-label={labels.detailNavigation} className="mt-5 flex min-w-0 flex-wrap gap-3">
+            {content?.description && <a href="#product-description" className={`${linkStyle} max-w-full break-words`}>{labels.description}</a>}
+            {content?.usage && <a href="#product-usage" className={`${linkStyle} max-w-full break-words`}>{labels.usage}</a>}
+            {content?.caution && <a href="#product-caution" className={`${linkStyle} max-w-full break-words`}>{labels.caution}</a>}
+            <a href="#product-selection" className={`${linkStyle} max-w-full break-words`}>{labels.detailSelection}</a>
+            {hasComparison && <a href="#product-comparison" className={`${linkStyle} max-w-full break-words`}>{labels.compareAnother}</a>}
+          </nav>
+          <p id={content?.description ? "product-description" : undefined} tabIndex={content?.description ? -1 : undefined}
+            className={`mt-6 whitespace-pre-line break-words leading-8 text-hanapure-muted ${detailTargetStyle}`}>
             {content?.description ?? labels.missing}
           </p>
           {content?.usage && (
             <section className="mt-8" aria-labelledby="product-usage">
-              <h2 id="product-usage" className="text-xl font-medium">{labels.usage}</h2>
+              <h2 id="product-usage" tabIndex={-1} className={`text-xl font-medium ${detailTargetStyle}`}>{labels.usage}</h2>
               <p className="mt-3 whitespace-pre-line break-words leading-7 text-hanapure-muted">{content.usage}</p>
             </section>
           )}
           {content?.caution && (
             <section className="mt-8" aria-labelledby="product-caution">
-              <h2 id="product-caution" className="text-xl font-medium">{labels.caution}</h2>
+              <h2 id="product-caution" tabIndex={-1} className={`text-xl font-medium ${detailTargetStyle}`}>{labels.caution}</h2>
               <p className="mt-3 whitespace-pre-line break-words leading-7 text-hanapure-muted">{content.caution}</p>
             </section>
           )}
-          <AddToCart key={product.publicId} publicId={product.publicId} locale={locale} routeLocale={routeLocale} />
+          <section id="product-selection" tabIndex={-1} aria-label={labels.detailSelection} className={detailTargetStyle}>
+            <AddToCart key={product.publicId} publicId={product.publicId} locale={locale} routeLocale={routeLocale} />
+          </section>
           <SaveProductButton publicId={product.publicId} locale={locale}
             name={content?.name ?? `${labels.details}: ${product.brand} (${product.slug})`} />
         </div>
@@ -238,8 +250,8 @@ export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en",
           })}
         </ul>
       </section>}
-      {comparison.length >= 2 && <ProductComparison key={`${product.publicId}-${locale}`} products={comparison}
-        locale={locale} routeLocale={routeLocale} initialPublicId={product.publicId} />}
+      {hasComparison && <ProductComparison key={`${product.publicId}-${locale}`} products={comparison}
+        locale={locale} routeLocale={routeLocale} initialPublicId={product.publicId} destinationId="product-comparison" />}
     </Container>
   );
 }

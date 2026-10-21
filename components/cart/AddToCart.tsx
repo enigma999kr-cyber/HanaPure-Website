@@ -57,6 +57,11 @@ export default function AddToCart({ publicId, locale, routeLocale }: {
         <input id={id} type="number" min="1" step="1" required value={quantity}
           onChange={event => setQuantity(event.target.value)} className={`${cartControl} w-28 bg-hanapure-white`} />
       </div>
+      <fieldset className="flex min-w-0 max-w-full flex-wrap gap-2">
+        <legend className="mb-2 break-words text-sm">{labels.draftPresets}</legend>
+        {[1, 2, 3].map(value => <button key={value} type="button" aria-label={`${labels.presetQuantity}: ${value}`}
+          className={`${cartControl} bg-hanapure-white`} onClick={() => setQuantity(String(value))}>{value}</button>)}
+      </fieldset>
       <button type="submit" disabled={!cart.ready || cart.invalid} className={`${cartControl} bg-hanapure-text text-hanapure-white disabled:opacity-50`}>{labels.add}</button>
       <Link href={storefrontHref("/cart", routeLocale)} className={`${cartControl} inline-flex items-center`}>{labels.cart}</Link>
     </form>

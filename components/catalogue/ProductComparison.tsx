@@ -8,13 +8,19 @@ import { comparisonLabels } from "@/lib/comparison/labels";
 import { storefrontHref, storefrontLabels } from "@/lib/storefront/localization";
 import { cartLabels } from "@/lib/cart/labels";
 import QuickAdd from "@/components/cart/QuickAdd";
+import { useBrowserCart } from "@/lib/cart/browser-cart";
+import { useBrowserFavorites } from "@/lib/favorites/browser-favorites";
+import { browserCartOverlap, savedProductOverlap } from "@/lib/cart/cart-selection-summary";
 
-export default function ProductComparison({ products, locale, routeLocale, initialPublicId }: {
+export default function ProductComparison({ products, locale, routeLocale, initialPublicId, destinationId }: {
   products: readonly ComparisonProduct[]; locale: EditorialLocale; routeLocale: EditorialLocale | null;
   initialPublicId?: string;
+  destinationId?: string;
 }) {
   const [selection, setSelection] = useState<readonly [string, string]>(() => [initialPublicId ?? "", ""]);
   const id = useId();
+  const cart = useBrowserCart();
+  const favorites = useBrowserFavorites();
   const pair = resolveComparison(products, selection[0], selection[1]);
   if (!pair) return null;
   const labels = comparisonLabels[locale];
@@ -22,7 +28,8 @@ export default function ProductComparison({ products, locale, routeLocale, initi
   const options = comparisonOptions(products);
   const displayName = (product: ComparisonProduct) => product.name ?? `${existing.details}: ${product.brand} (${product.slug})`;
   const controlStyle = "min-h-11 w-full min-w-0 max-w-full rounded-xl border border-hanapure-border bg-hanapure-white px-3 py-3 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text";
-  return <section aria-labelledby={`${id}-heading`} className="mt-12 min-w-0 rounded-2xl border border-hanapure-border bg-hanapure-warm-white p-5 sm:p-6">
+  return <section id={destinationId} tabIndex={destinationId ? -1 : undefined} aria-labelledby={`${id}-heading`}
+    className="mt-12 min-w-0 scroll-mt-24 rounded-2xl border border-hanapure-border bg-hanapure-warm-white p-5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-hanapure-text sm:p-6">
     <h2 id={`${id}-heading`} className="break-words text-2xl font-light">{labels.heading}</h2>
     <noscript><p className="mt-3 text-sm">{labels.requiresJs}</p></noscript>
     <div className="mt-5 grid min-w-0 gap-4 md:grid-cols-2">
@@ -40,10 +47,14 @@ export default function ProductComparison({ products, locale, routeLocale, initi
         </select>
       </div>)}
     </div>
+    <button type="button" className="mt-4 min-h-11 max-w-full break-words rounded-xl border border-hanapure-border px-4 py-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text"
+      onClick={() => setSelection([pair[1].publicId, pair[0].publicId])}>{labels.swap}</button>
     <p className="mt-4 break-words text-sm leading-6 text-hanapure-muted">{cartLabels[locale].notice}</p>
     <div className="mt-5 grid min-w-0 gap-4 md:grid-cols-2">
       {pair.map(product => <article key={product.publicId} className="min-w-0 rounded-xl border border-hanapure-border bg-hanapure-white p-4">
         <h3 className="break-words text-xl font-medium">{displayName(product)}</h3>
+        {browserCartOverlap(cart, product.publicId) !== null && <p className="mt-3 break-words text-sm">{labels.inBrowserCart}: {browserCartOverlap(cart, product.publicId)}</p>}
+        {savedProductOverlap(favorites, product.publicId) && <p className="mt-2 break-words text-sm">{labels.saved}</p>}
         <dl className="mt-4 space-y-4">
           <div><dt className="text-sm font-medium">{labels.brand}</dt><dd className="mt-1 break-words">{product.brand}</dd></div>
           {product.description !== null && <div><dt className="text-sm font-medium">{labels.description}</dt>

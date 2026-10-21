@@ -1,5 +1,6 @@
 export const cartLabels = {
   en: {
+    draftPresets: "Add quantity presets", presetQuantity: "Choose draft add quantity",
     selectionOverview: "Browser cart selection overview", selectedUnits: "Selected units", selectedUnavailable: "Selected lines not in the published catalogue",
     selectionUnknown: "Selection not confirmed", alsoSaved: "Also in Saved Products",
     moveSelectedToSaved: "Move selected to saved products", selectedMoved: "Selected products saved and removed from the cart.",
@@ -37,6 +38,7 @@ export const cartLabels = {
     invalid: "Enter a positive whole-number quantity.", loading: "Loading cart", updated: "Cart updated",
   },
   hu: {
+    draftPresets: "Hozzáadandó mennyiség gyorsválasztása", presetQuantity: "Hozzáadandó mennyiség kiválasztása",
     selectionOverview: "A böngésző kosarában kiválasztott tételek áttekintése", selectedUnits: "Kiválasztott darabszám", selectedUnavailable: "Kiválasztott, a közzétett katalógusban nem szereplő tételek",
     selectionUnknown: "A kiválasztás nem megerősített", alsoSaved: "A mentett termékek között is szerepel",
     moveSelectedToSaved: "Kiválasztott termékek áthelyezése a mentettek közé", selectedMoved: "A kiválasztott termékeket elmentettük és eltávolítottuk a kosárból.",
@@ -74,6 +76,7 @@ export const cartLabels = {
     invalid: "Adjon meg pozitív egész mennyiséget.", loading: "Kosár betöltése", updated: "Kosár frissítve",
   },
   ko: {
+    draftPresets: "추가할 수량 빠른 선택", presetQuantity: "추가할 수량 입력값 선택",
     selectionOverview: "브라우저 장바구니 선택 요약", selectedUnits: "선택한 총 수량", selectedUnavailable: "공개 카탈로그에 없는 선택 항목 수",
     selectionUnknown: "선택 내역 확인 불가", alsoSaved: "저장한 상품에도 포함됨",
     moveSelectedToSaved: "선택한 상품을 관심 상품으로 이동", selectedMoved: "선택한 상품을 저장하고 장바구니에서 삭제했습니다.",
