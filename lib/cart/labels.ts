@@ -1,5 +1,10 @@
 export const cartLabels = {
   en: {
+    copyShoppingList: "Copy shopping list", shoppingListCopied: "Shopping list copied.",
+    shoppingListCopiedOmitted: "Shopping list copied. Unavailable entries omitted:",
+    shoppingListFailed: "The shopping list could not be copied. Check clipboard access and try again.",
+    shoppingListEmpty: "There are no published products to copy.", shoppingListTooLarge: "This shopping list is too long to copy. Copy was not performed.",
+    shoppingListNotice: "Personal selection only, not an order or confirmation of price, availability or stock.",
     saveForLater: "Save for later", savedForLater: "Saved for later and removed from your cart. Find it in Saved products on the product list.",
     saveForLaterBlocked: "Could not move this item safely. Check browser storage, your saved products limit and the published catalogue, then reload and try again.",
     saveForLaterConflict: "Your saved cart changed. Reload the cart before trying again.",
@@ -18,6 +23,11 @@ export const cartLabels = {
     invalid: "Enter a positive whole-number quantity.", loading: "Loading cart", updated: "Cart updated",
   },
   hu: {
+    copyShoppingList: "Bevásárlólista másolása", shoppingListCopied: "Bevásárlólista másolva.",
+    shoppingListCopiedOmitted: "Bevásárlólista másolva. Kihagyott, nem elérhető tételek:",
+    shoppingListFailed: "A bevásárlólista nem másolható. Ellenőrizze a vágólaphoz való hozzáférést, és próbálja újra.",
+    shoppingListEmpty: "Nincs másolható közzétett termék.", shoppingListTooLarge: "Ez a bevásárlólista túl hosszú a másoláshoz. Nem történt másolás.",
+    shoppingListNotice: "Csak személyes kiválasztás, nem rendelés, és nem igazolja az árat, az elérhetőséget vagy a készletet.",
     saveForLater: "Mentés későbbre", savedForLater: "Elmentettük későbbre, és eltávolítottuk a kosárból. A terméklistán a mentett termékek között találja.",
     saveForLaterBlocked: "A termék nem helyezhető át biztonságosan. Ellenőrizze a böngésző tárhelyét, a mentett termékek korlátját és a közzétett katalógust, majd töltse újra az oldalt és próbálja újra.",
     saveForLaterConflict: "A mentett kosár megváltozott. Újabb próbálkozás előtt töltse újra a kosarat.",
@@ -36,6 +46,11 @@ export const cartLabels = {
     invalid: "Adjon meg pozitív egész mennyiséget.", loading: "Kosár betöltése", updated: "Kosár frissítve",
   },
   ko: {
+    copyShoppingList: "쇼핑 목록 복사", shoppingListCopied: "쇼핑 목록을 복사했습니다.",
+    shoppingListCopiedOmitted: "쇼핑 목록을 복사했습니다. 제외된 이용 불가 항목 수:",
+    shoppingListFailed: "쇼핑 목록을 복사할 수 없습니다. 클립보드 접근 권한을 확인하고 다시 시도해 주세요.",
+    shoppingListEmpty: "복사할 공개 상품이 없습니다.", shoppingListTooLarge: "쇼핑 목록이 너무 길어 복사하지 않았습니다.",
+    shoppingListNotice: "개인적인 상품 선택 목록일 뿐이며 주문 또는 가격, 판매 가능 여부, 재고의 확정이 아닙니다.",
     saveForLater: "나중을 위해 저장", savedForLater: "관심 상품에 저장하고 장바구니에서 삭제했습니다. 상품 목록의 저장한 상품에서 확인할 수 있습니다.",
     saveForLaterBlocked: "이 상품을 안전하게 옮길 수 없습니다. 브라우저 저장소, 저장한 상품의 개수 제한과 공개 카탈로그를 확인한 뒤 새로고침하고 다시 시도해 주세요.",
     saveForLaterConflict: "저장된 장바구니가 변경되었습니다. 장바구니를 새로고침한 뒤 다시 시도해 주세요.",

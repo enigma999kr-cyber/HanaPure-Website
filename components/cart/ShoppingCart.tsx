@@ -12,6 +12,7 @@ import { canUndoCart, createCartUndoPlan, type CartUndoPlan } from "@/lib/cart/c
 import { useBrowserFavorites } from "@/lib/favorites/browser-favorites";
 import { MAX_FAVORITES } from "@/lib/favorites/favorite-state";
 import { saveCartLineForLater } from "@/lib/cart/save-for-later";
+import { formatCartShoppingList } from "@/lib/cart/cart-shopping-list";
 import { cartControl } from "./AddToCart";
 
 export type CartProduct = Readonly<{ publicId: string; slug: string; brand: string;
@@ -45,6 +46,9 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
   const labels = cartLabels[locale];
   const [message, setMessage] = useState("");
   const [undo, setUndo] = useState<CartUndoPlan | null>(null);
+  const [copying, setCopying] = useState(false);
+  const [copyMessage, setCopyMessage] = useState("");
+  const copyPending = useRef(false);
   const browseRef = useRef<HTMLAnchorElement>(null);
   const removeRefs = useRef(new Map<string, HTMLButtonElement>());
   const restoredFocus = useRef<string | null>(null);
@@ -116,6 +120,27 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
       </ul>
       <button type="button" className={`${cartControl} mt-6`} onClick={() => { browseRef.current?.focus(); removeSelection(() => [], labels.cleared); }}>{labels.clear}</button>
     </>}
+    <button type="button" className={`${cartControl} mt-4 max-w-full break-words disabled:opacity-50`}
+      disabled={copying || !cart.ready || cart.invalid || !cart.persistent || !items.some(item => item.product !== null)}
+      onClick={async () => {
+        if (copyPending.current || !cart.ready || cart.invalid || !cart.persistent) return;
+        const list = formatCartShoppingList(cart.lines, products, locale);
+        if (list.status !== "ready") {
+          setCopyMessage(list.status === "empty" ? labels.shoppingListEmpty : list.status === "too-large" ? labels.shoppingListTooLarge : labels.shoppingListFailed);
+          return;
+        }
+        copyPending.current = true; setCopying(true); setCopyMessage("");
+        try {
+          if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+          await navigator.clipboard.writeText(list.text);
+          setCopyMessage(list.omitted ? `${labels.shoppingListCopiedOmitted} ${list.omitted}.` : labels.shoppingListCopied);
+        } catch {
+          setCopyMessage(labels.shoppingListFailed);
+        } finally {
+          copyPending.current = false; setCopying(false);
+        }
+      }}>{labels.copyShoppingList}</button>
+    <p role="status" className="mt-3 break-words text-sm text-hanapure-muted">{copyMessage}</p>
     {undoAvailable && <button type="button" className={`${cartControl} mt-4`} onClick={() => {
       setUndo(null);
       restoredFocus.current = undo.before[0].publicId;
