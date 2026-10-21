@@ -1,5 +1,8 @@
 export const cartLabels = {
   en: {
+    moveSelectedToSaved: "Move selected to saved products", selectedMoved: "Selected products saved and removed from the cart.",
+    selectedMovePartial: "The move was partially completed or could not be confirmed. Reload and check both your cart and saved products before trying again.",
+    selectedMoveFailed: "Selected products could not be moved safely. Check browser storage, saved-products limit and the current catalogue, then reload.",
     selectCartItem: "Select item", selectedItems: "Selected items", removeSelected: "Remove selected items", selectedRemoved: "Selected items removed from the saved cart.",
     bulkSelectionEmpty: "Select at least one current cart item.", bulkSelectionChanged: "The cart changed. Check the cart and select the items again, or reload.",
     bulkRemovalFailed: "The selected removal could not be confirmed as saved. Reload and check the cart before trying again.",
@@ -32,6 +35,9 @@ export const cartLabels = {
     invalid: "Enter a positive whole-number quantity.", loading: "Loading cart", updated: "Cart updated",
   },
   hu: {
+    moveSelectedToSaved: "Kiválasztott termékek áthelyezése a mentettek közé", selectedMoved: "A kiválasztott termékeket elmentettük és eltávolítottuk a kosárból.",
+    selectedMovePartial: "Az áthelyezés részben történt meg, vagy nem igazolható. Töltse újra az oldalt, és ellenőrizze a kosarat és a mentett termékeket, mielőtt újra próbálkozik.",
+    selectedMoveFailed: "A termékek nem helyezhetők át biztonságosan. Ellenőrizze a böngésző tárhelyét, a mentett termékek korlátját és a katalógust, majd töltse újra az oldalt.",
     selectCartItem: "Tétel kiválasztása", selectedItems: "Kiválasztott tételek", removeSelected: "Kiválasztott tételek eltávolítása", selectedRemoved: "A kiválasztott tételeket eltávolítottuk a mentett kosárból.",
     bulkSelectionEmpty: "Válasszon ki legalább egy jelenlegi kosártételt.", bulkSelectionChanged: "A kosár megváltozott. Ellenőrizze, és válassza ki újra a tételeket, vagy töltse újra az oldalt.",
     bulkRemovalFailed: "A kiválasztott tételek eltávolításának mentését nem tudtuk megerősíteni. Töltse újra és ellenőrizze a kosarat, mielőtt újra próbálkozik.",
@@ -64,6 +70,9 @@ export const cartLabels = {
     invalid: "Adjon meg pozitív egész mennyiséget.", loading: "Kosár betöltése", updated: "Kosár frissítve",
   },
   ko: {
+    moveSelectedToSaved: "선택한 상품을 관심 상품으로 이동", selectedMoved: "선택한 상품을 저장하고 장바구니에서 삭제했습니다.",
+    selectedMovePartial: "이동이 일부만 완료되었거나 확인되지 않았습니다. 새로고침하여 장바구니와 저장한 상품을 모두 확인한 뒤 다시 시도해 주세요.",
+    selectedMoveFailed: "선택한 상품을 안전하게 옮길 수 없습니다. 브라우저 저장소, 저장 개수 제한과 현재 카탈로그를 확인하고 새로고침해 주세요.",
     selectCartItem: "항목 선택", selectedItems: "선택한 항목", removeSelected: "선택한 항목 삭제", selectedRemoved: "선택한 항목을 저장된 장바구니에서 삭제했습니다.",
     bulkSelectionEmpty: "현재 장바구니 항목을 하나 이상 선택해 주세요.", bulkSelectionChanged: "장바구니가 변경되었습니다. 내용을 확인하고 항목을 다시 선택하거나 새로고침해 주세요.",
     bulkRemovalFailed: "선택 항목 삭제가 저장되었는지 확인할 수 없습니다. 새로고침하여 장바구니를 확인한 뒤 다시 시도해 주세요.",

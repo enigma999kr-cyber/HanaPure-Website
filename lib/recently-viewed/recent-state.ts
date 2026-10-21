@@ -50,6 +50,11 @@ export function recordRecent(ids: RecentIds, publicId: string): RecentIds {
   return Object.freeze([stored ?? publicId, ...valid.filter(id => id.toLowerCase() !== publicId.toLowerCase())].slice(0, MAX_RECENT));
 }
 export function clearRecent(): RecentIds { return empty; }
+export function removeRecent(ids: RecentIds, publicId: string): RecentIds {
+  const valid = inspectIds(ids);
+  if (!valid || !validRecentId(publicId) || !valid.some(id => id.toLowerCase() === publicId.toLowerCase())) return ids;
+  return Object.freeze(valid.filter(id => id.toLowerCase() !== publicId.toLowerCase()));
+}
 export function recentPublishedProducts<T extends Readonly<{ publicId: string }>>(ids: RecentIds, products: readonly T[]): readonly T[] {
   const valid = inspectIds(ids);
   if (!valid) return [];

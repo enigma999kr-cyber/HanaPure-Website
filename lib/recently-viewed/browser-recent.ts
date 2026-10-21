@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { RECENT_STORAGE_KEY, inspectStoredRecent, serializeRecent, recordRecent, clearRecent, validRecentId, type RecentIds } from "./recent-state";
+import { RECENT_STORAGE_KEY, inspectStoredRecent, serializeRecent, recordRecent, clearRecent, removeRecent, validRecentId, type RecentIds } from "./recent-state";
 
 type Snapshot = Readonly<{ ids: RecentIds; ready: boolean; persistent: boolean; invalid: boolean }>;
 const serverSnapshot: Snapshot = Object.freeze({ ids: Object.freeze([]), ready: false, persistent: true, invalid: false });
@@ -45,6 +45,29 @@ export function clearBrowserRecent(): boolean {
   if (!snapshot.persistent || (!snapshot.invalid && snapshot.ids.length === 0)) return false;
   // Explicit clear/reset is the only operation allowed to replace malformed history.
   return save(clearRecent());
+}
+export function removeBrowserRecent(publicId: string, expected: RecentIds): "removed" | "unchanged" | "conflict" | "unavailable" | "write-failed" {
+  if (typeof window === "undefined" || !snapshot.ready || !snapshot.persistent || snapshot.invalid || !validRecentId(publicId)) return "unavailable";
+  if (snapshot.ids !== expected) return "conflict";
+  const same = (left: RecentIds, right: RecentIds) => left.length === right.length && left.every((id, index) => id === right[index]);
+  try {
+    const stored = inspectStoredRecent(window.localStorage.getItem(RECENT_STORAGE_KEY));
+    if (stored.invalid) return "unavailable";
+    if (!same(stored.ids, expected)) { readStorage(); return "conflict"; }
+    const after = removeRecent(expected, publicId);
+    if (after === expected) return "unchanged";
+    const latest = inspectStoredRecent(window.localStorage.getItem(RECENT_STORAGE_KEY));
+    if (latest.invalid) return "unavailable";
+    if (snapshot.ids !== expected || !same(latest.ids, expected)) return "conflict";
+    if (!save(after)) return "write-failed";
+    const confirmedRaw = window.localStorage.getItem(RECENT_STORAGE_KEY);
+    const confirmed = inspectStoredRecent(confirmedRaw);
+    if (confirmedRaw === null || confirmed.invalid || !same(confirmed.ids, after)) throw new Error("Recent removal confirmation failed");
+    return "removed";
+  } catch {
+    snapshot = { ids: [], ready: true, persistent: false, invalid: false }; emit();
+    return "write-failed";
+  }
 }
 function save(ids: RecentIds): boolean {
   try { window.localStorage.setItem(RECENT_STORAGE_KEY, serializeRecent(ids)); }

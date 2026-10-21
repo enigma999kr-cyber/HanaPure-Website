@@ -382,6 +382,9 @@ test("recent public MRU products compose QuickAdd without history/Favorites writ
         assert.ok(rows[index].indexOf("</a>") < rows[index].indexOf("<form"));
         assert.match(rows[index], /type="number" min="1" step="1" required=""[^>]*value="1"/);
         assert.match(rows[index], /<button type="submit"[^>]*disabled=""/);
+        const removeName = renderToStaticMarkup(createElement("span", null, `${recentlyViewedLabels[locale].remove}: ${name}`)).slice(6, -7);
+        assert.ok(rows[index].includes(`aria-label="${removeName}"`));
+        assert.ok(rows[index].indexOf("</form>") < rows[index].indexOf(`aria-label="${removeName}"`));
         assert.match(rows[index], /min-h-11/);
         assert.match(rows[index], /focus-visible:outline-2/);
         assert.match(rows[index], /flex-wrap/);
@@ -584,6 +587,11 @@ test("saved published products reuse quantity-aware QuickAdd without unsaving, h
         const name = bar.props.products.find(entry => entry.publicId === item.publicId).name;
         const encodedName = renderToStaticMarkup(createElement("span", null, `${cartLabels[locale].quantity}: ${name}`));
         assert.ok(rows[index].includes(encodedName.slice(6, -7)));
+        const selectName = renderToStaticMarkup(createElement("span", null, `${favoriteLabels[locale].select}: ${name}`)).slice(6, -7);
+        assert.ok(rows[index].includes(selectName));
+        assert.equal((rows[index].match(/type="checkbox"/g) ?? []).length, 1);
+        assert.match(rows[index], /<label\b[^>]*>[\s\S]*?<input type="checkbox"[\s\S]*?<\/label>/);
+        assert.ok(rows[index].indexOf("</label>") < rows[index].indexOf("<a "));
         assert.ok(rows[index].includes(`href="${routeLocale ? `/${locale}` : ""}/products/${item.slug}"`));
         assert.equal((rows[index].match(/<form\b/g) ?? []).length, 1);
         assert.ok(rows[index].indexOf("</a>") < rows[index].indexOf("<form"));
@@ -594,6 +602,9 @@ test("saved published products reuse quantity-aware QuickAdd without unsaving, h
       }
       for (const item of [draft, unsaved]) assert.ok(!html.includes(item.slug));
       assert.ok(!html.includes(unknown));
+      assert.ok(html.includes(favoriteLabels[locale].addSelected));
+      assert.ok(html.includes(favoriteLabels[locale].removeSelected));
+      assert.equal((html.match(/<button type="button" disabled=""/g) ?? []).length, 2);
       for (const bad of ["corrupt-test-only", serializeFavorites([]), null]) {
         stored = bad; refresh();
         const hidden = renderToStaticMarkup(bar);

@@ -47,6 +47,38 @@ export function changeBrowserFavorite(publicId: string, saved: boolean): boolean
   return save(ids);
 }
 export function resetBrowserFavorites(): boolean { return save([]); }
+export function sameFavoriteIds(left: FavoriteIds, right: FavoriteIds): boolean {
+  return left.length === right.length && left.every((id, index) => id === right[index]);
+}
+/** New batch path only; old save/toggle/reset semantics remain unchanged. */
+export function mutateBrowserFavorites(expected: FavoriteIds, change: (ids: FavoriteIds) => FavoriteIds):
+  "updated" | "unchanged" | "conflict" | "unavailable" | "write-failed" | "unconfirmed" {
+  if (typeof window === "undefined" || !snapshot.ready || !snapshot.persistent || snapshot.invalid) return "unavailable";
+  if (snapshot.ids !== expected) return "conflict";
+  let written = false;
+  try {
+    const stored = inspectStoredFavorites(window.localStorage.getItem(FAVORITES_STORAGE_KEY));
+    if (stored.invalid) return "unavailable";
+    if (!sameFavoriteIds(stored.ids, expected)) { readStorage(); return "conflict"; }
+    const after = change(expected);
+    const serialized = serializeFavorites(after);
+    const latest = inspectStoredFavorites(window.localStorage.getItem(FAVORITES_STORAGE_KEY));
+    if (latest.invalid) return "unavailable";
+    if (snapshot.ids !== expected || !sameFavoriteIds(latest.ids, expected)) return "conflict";
+    if (sameFavoriteIds(after, expected)) return "unchanged";
+    window.localStorage.setItem(FAVORITES_STORAGE_KEY, serialized);
+    written = true;
+    const confirmedRaw = window.localStorage.getItem(FAVORITES_STORAGE_KEY);
+    const confirmed = inspectStoredFavorites(confirmedRaw);
+    if (confirmedRaw === null || confirmed.invalid || !sameFavoriteIds(confirmed.ids, after)) throw new Error("Favorites confirmation failed");
+    snapshot = { ids: confirmed.ids, ready: true, persistent: true, invalid: false };
+    emit();
+    return "updated";
+  } catch {
+    snapshot = { ids: [], ready: true, persistent: false, invalid: false }; emit();
+    return written ? "unconfirmed" : "write-failed";
+  }
+}
 function save(ids: FavoriteIds): boolean {
   try { window.localStorage.setItem(FAVORITES_STORAGE_KEY, serializeFavorites(ids)); }
   catch {

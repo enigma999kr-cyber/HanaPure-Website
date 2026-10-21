@@ -14,6 +14,7 @@ import { MAX_FAVORITES } from "@/lib/favorites/favorite-state";
 import { saveCartLineForLater } from "@/lib/cart/save-for-later";
 import { formatCartShoppingList } from "@/lib/cart/cart-shopping-list";
 import { selectedCartLines, readBulkSelection, removeSelectedCartLines } from "@/lib/cart/cart-bulk-actions";
+import { moveCartSelectionToSaved } from "@/lib/cart/shopping-session-bulk";
 import { cartControl } from "./AddToCart";
 
 export type CartProduct = Readonly<{ publicId: string; slug: string; brand: string;
@@ -147,6 +148,19 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
     <section aria-label={labels.selectedItems} className="mt-6 min-w-0">
       <p className="break-words text-sm">{labels.selectedItems}: {selected.length}</p>
       <div className="mt-3 flex min-w-0 flex-wrap gap-3">
+        <button type="button" disabled={!bulkReady || !favorites.ready || favorites.invalid || !favorites.persistent ||
+          selected.some(line => !products.some(product => product.publicId.toLowerCase() === line.publicId.toLowerCase()))}
+          className={`${cartControl} max-w-full break-words disabled:opacity-50`} onClick={() => {
+            if (!bulkReady) return;
+            const result = moveCartSelectionToSaved(cart, checked.ids, products);
+            if (result === "moved" || result === "partial") {
+              setUndo(null); // Never expose cart-only Undo for a cross-key operation.
+              setChecked({ lines: cart.lines, ids: [] });
+              browseRef.current?.focus();
+            }
+            setBulkMessage(result === "moved" ? labels.selectedMoved : result === "partial" ? labels.selectedMovePartial :
+              result === "conflict" ? labels.bulkSelectionChanged : labels.selectedMoveFailed);
+          }}>{labels.moveSelectedToSaved}</button>
         <button type="button" disabled={!bulkReady} className={`${cartControl} max-w-full break-words disabled:opacity-50`}
           onClick={() => {
             if (!bulkReady) return;
