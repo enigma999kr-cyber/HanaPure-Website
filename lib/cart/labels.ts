@@ -1,5 +1,9 @@
 export const cartLabels = {
   en: {
+    selectCartItem: "Select item", selectedItems: "Selected items", removeSelected: "Remove selected items", selectedRemoved: "Selected items removed from the saved cart.",
+    bulkSelectionEmpty: "Select at least one current cart item.", bulkSelectionChanged: "The cart changed. Check the cart and select the items again, or reload.",
+    bulkRemovalFailed: "The selected removal could not be confirmed as saved. Reload and check the cart before trying again.",
+    copySelectedList: "Copy selected shopping list", selectedListCopied: "Selected shopping list copied.", selectedListCopiedOmitted: "Selected shopping list copied. Unavailable entries omitted:",
     inBrowserCart: "Quantity currently saved in your browser cart", notInBrowserCart: "This product is not in your browser cart.",
     setCartQuantity: "Set cart quantity", selectionUpdated: "Saved cart quantity updated.", selectionUnchanged: "The saved quantity is already the same. No change was made.",
     selectionConflict: "Your cart selection changed. Reload and check the cart before trying again.",
@@ -28,6 +32,10 @@ export const cartLabels = {
     invalid: "Enter a positive whole-number quantity.", loading: "Loading cart", updated: "Cart updated",
   },
   hu: {
+    selectCartItem: "Tétel kiválasztása", selectedItems: "Kiválasztott tételek", removeSelected: "Kiválasztott tételek eltávolítása", selectedRemoved: "A kiválasztott tételeket eltávolítottuk a mentett kosárból.",
+    bulkSelectionEmpty: "Válasszon ki legalább egy jelenlegi kosártételt.", bulkSelectionChanged: "A kosár megváltozott. Ellenőrizze, és válassza ki újra a tételeket, vagy töltse újra az oldalt.",
+    bulkRemovalFailed: "A kiválasztott tételek eltávolításának mentését nem tudtuk megerősíteni. Töltse újra és ellenőrizze a kosarat, mielőtt újra próbálkozik.",
+    copySelectedList: "Kiválasztott bevásárlólista másolása", selectedListCopied: "A kiválasztott bevásárlólista másolva.", selectedListCopiedOmitted: "A kiválasztott bevásárlólista másolva. Kihagyott, nem elérhető tételek:",
     inBrowserCart: "A böngésző kosarában jelenleg mentett mennyiség", notInBrowserCart: "Ez a termék nincs a böngésző kosarában.",
     setCartQuantity: "Kosármennyiség beállítása", selectionUpdated: "A mentett kosármennyiség frissítve.", selectionUnchanged: "A mentett mennyiség már ugyanennyi. Nem történt módosítás.",
     selectionConflict: "A kosár tartalma megváltozott. Töltse újra és ellenőrizze a kosarat, mielőtt újra próbálkozik.",
@@ -56,6 +64,10 @@ export const cartLabels = {
     invalid: "Adjon meg pozitív egész mennyiséget.", loading: "Kosár betöltése", updated: "Kosár frissítve",
   },
   ko: {
+    selectCartItem: "항목 선택", selectedItems: "선택한 항목", removeSelected: "선택한 항목 삭제", selectedRemoved: "선택한 항목을 저장된 장바구니에서 삭제했습니다.",
+    bulkSelectionEmpty: "현재 장바구니 항목을 하나 이상 선택해 주세요.", bulkSelectionChanged: "장바구니가 변경되었습니다. 내용을 확인하고 항목을 다시 선택하거나 새로고침해 주세요.",
+    bulkRemovalFailed: "선택 항목 삭제가 저장되었는지 확인할 수 없습니다. 새로고침하여 장바구니를 확인한 뒤 다시 시도해 주세요.",
+    copySelectedList: "선택한 쇼핑 목록 복사", selectedListCopied: "선택한 쇼핑 목록을 복사했습니다.", selectedListCopiedOmitted: "선택한 쇼핑 목록을 복사했습니다. 제외된 이용 불가 항목 수:",
     inBrowserCart: "이 브라우저 장바구니에 현재 저장된 수량", notInBrowserCart: "이 상품은 브라우저 장바구니에 없습니다.",
     setCartQuantity: "장바구니 수량 설정", selectionUpdated: "저장된 장바구니 수량을 변경했습니다.", selectionUnchanged: "이미 같은 수량이 저장되어 있어 변경하지 않았습니다.",
     selectionConflict: "장바구니 선택이 변경되었습니다. 새로고침하여 장바구니를 확인한 뒤 다시 시도해 주세요.",

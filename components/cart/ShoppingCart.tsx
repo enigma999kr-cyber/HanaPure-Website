@@ -13,6 +13,7 @@ import { useBrowserFavorites } from "@/lib/favorites/browser-favorites";
 import { MAX_FAVORITES } from "@/lib/favorites/favorite-state";
 import { saveCartLineForLater } from "@/lib/cart/save-for-later";
 import { formatCartShoppingList } from "@/lib/cart/cart-shopping-list";
+import { selectedCartLines, readBulkSelection, removeSelectedCartLines } from "@/lib/cart/cart-bulk-actions";
 import { cartControl } from "./AddToCart";
 
 export type CartProduct = Readonly<{ publicId: string; slug: string; brand: string;
@@ -49,6 +50,15 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
   const [copying, setCopying] = useState(false);
   const [copyMessage, setCopyMessage] = useState("");
   const copyPending = useRef(false);
+  const [checked, setChecked] = useState<{ lines: readonly CartLine[]; ids: readonly string[] }>({ lines: cart.lines, ids: [] });
+  const [bulkMessage, setBulkMessage] = useState("");
+  const [selectedCopyMessage, setSelectedCopyMessage] = useState("");
+  const [copyingSelected, setCopyingSelected] = useState(false);
+  const selectedCopyPending = useRef(false);
+  const coherentSelection = checked.lines === cart.lines;
+  const selected = coherentSelection ? selectedCartLines(cart.lines, checked.ids) ?? [] : [];
+  const bulkReady = coherentSelection && cart.ready && !cart.invalid && cart.persistent && selected.length > 0;
+  const selectedPublic = reconcileCart(selected, products).some(item => item.product !== null);
   const browseRef = useRef<HTMLAnchorElement>(null);
   const removeRefs = useRef(new Map<string, HTMLButtonElement>());
   const restoredFocus = useRef<string | null>(null);
@@ -85,6 +95,20 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
         {items.map(({ line, product }, index) => {
           const name = product?.names[locale] ?? storefrontLabels[locale].details;
           return <li key={line.publicId} className="min-w-0 rounded-2xl border border-hanapure-border bg-hanapure-white p-5">
+            <label className="mb-3 flex min-h-11 min-w-0 items-center gap-3 break-words">
+              <input type="checkbox" checked={selected.some(item => item.publicId.toLowerCase() === line.publicId.toLowerCase())}
+                disabled={!cart.ready || cart.invalid || !cart.persistent}
+                className="h-5 w-5 shrink-0 accent-hanapure-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text"
+                onChange={event => {
+                  const enabled = event.target.checked;
+                  setChecked(previous => {
+                    const remaining = (previous.lines === cart.lines ? previous.ids : []).filter(id => id.toLowerCase() !== line.publicId.toLowerCase());
+                    return { lines: cart.lines, ids: enabled ? [...remaining, line.publicId] : remaining };
+                  });
+                  setBulkMessage(""); setSelectedCopyMessage("");
+                }} />
+              <span className="min-w-0 break-words">{labels.selectCartItem}: {product ? name : `${labels.unavailable} (${index + 1})`}</span>
+            </label>
             {product ? <>
               <p className="text-sm text-hanapure-muted">{product.brand}</p>
               <Link href={storefrontHref(`/products/${product.slug}`, routeLocale)} className={`${cartControl} mt-2 block max-w-full break-words text-xl`}>{name}</Link>
@@ -120,6 +144,48 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
       </ul>
       <button type="button" className={`${cartControl} mt-6`} onClick={() => { browseRef.current?.focus(); removeSelection(() => [], labels.cleared); }}>{labels.clear}</button>
     </>}
+    <section aria-label={labels.selectedItems} className="mt-6 min-w-0">
+      <p className="break-words text-sm">{labels.selectedItems}: {selected.length}</p>
+      <div className="mt-3 flex min-w-0 flex-wrap gap-3">
+        <button type="button" disabled={!bulkReady} className={`${cartControl} max-w-full break-words disabled:opacity-50`}
+          onClick={() => {
+            if (!bulkReady) return;
+            const result = removeSelectedCartLines(cart, checked.ids);
+            if (result.status === "removed") {
+              setUndo(result.plan);
+              setChecked({ lines: result.plan.after, ids: [] });
+              setBulkMessage(labels.selectedRemoved);
+              const survivor = result.plan.after[0];
+              (survivor ? removeRefs.current.get(survivor.publicId) : browseRef.current)?.focus();
+            } else {
+              setChecked({ lines: cart.lines, ids: [] });
+              setBulkMessage(result.status === "conflict" ? labels.bulkSelectionChanged :
+                result.status === "empty" ? labels.bulkSelectionEmpty : labels.bulkRemovalFailed);
+            }
+          }}>{labels.removeSelected}</button>
+        <button type="button" disabled={!bulkReady || !selectedPublic || copyingSelected}
+          className={`${cartControl} max-w-full break-words disabled:opacity-50`} onClick={async () => {
+            if (selectedCopyPending.current || !bulkReady) return;
+            const selection = readBulkSelection(cart, checked.ids);
+            if (selection.status !== "ready") {
+              setSelectedCopyMessage(selection.status === "conflict" ? labels.bulkSelectionChanged : labels.shoppingListFailed); return;
+            }
+            const list = formatCartShoppingList(selection.lines, products, locale);
+            if (list.status !== "ready") {
+              setSelectedCopyMessage(list.status === "empty" ? labels.shoppingListEmpty : list.status === "too-large" ? labels.shoppingListTooLarge : labels.shoppingListFailed); return;
+            }
+            selectedCopyPending.current = true; setCopyingSelected(true); setSelectedCopyMessage("");
+            try {
+              if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+              await navigator.clipboard.writeText(list.text);
+              setSelectedCopyMessage(list.omitted ? `${labels.selectedListCopiedOmitted} ${list.omitted}.` : labels.selectedListCopied);
+            } catch { setSelectedCopyMessage(labels.shoppingListFailed); }
+            finally { selectedCopyPending.current = false; setCopyingSelected(false); }
+          }}>{labels.copySelectedList}</button>
+      </div>
+      <p role="status" className="mt-3 break-words text-sm">{checked.ids.length > 0 && !coherentSelection ? labels.bulkSelectionChanged : bulkMessage}</p>
+      <p role="status" className="mt-3 break-words text-sm">{selectedCopyMessage}</p>
+    </section>
     <button type="button" className={`${cartControl} mt-4 max-w-full break-words disabled:opacity-50`}
       disabled={copying || !cart.ready || cart.invalid || !cart.persistent || !items.some(item => item.product !== null)}
       onClick={async () => {

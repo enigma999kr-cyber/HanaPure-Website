@@ -121,7 +121,7 @@ test("copy action source contract awaits native clipboard success, catches failu
   assert.match(action, /catch \{\s*setCopyMessage\(labels.shoppingListFailed\)/);
   assert.match(action, /finally \{\s*copyPending.current = false; setCopying\(false\)/);
   assert.doesNotMatch(action, /changeBrowserCart|changeBrowserFavorite|resetBrowser|setUndo|execCommand|textarea|fetch\(/);
-  assert.equal((source.match(/navigator.clipboard.writeText\(/g) ?? []).length, 1);
+  assert.equal((action.match(/navigator.clipboard.writeText\(/g) ?? []).length, 1);
   assert.match(source, /<p role="status"[^>]*>\{copyMessage\}<\/p>/);
   assert.match(source, /max-w-full break-words disabled:opacity-50/);
   for (const locale of ["en", "hu", "ko"]) for (const key of ["copyShoppingList", "shoppingListCopied", "shoppingListCopiedOmitted",
