@@ -1,5 +1,9 @@
 export const cartLabels = {
   en: {
+    saveForLater: "Save for later", savedForLater: "Saved for later and removed from your cart. Find it in Saved products on the product list.",
+    saveForLaterBlocked: "Could not move this item safely. Check browser storage, your saved products limit and the published catalogue, then reload and try again.",
+    saveForLaterConflict: "Your saved cart changed. Reload the cart before trying again.",
+    saveForLaterPartial: "The item was saved for later, but its removal from the cart could not be confirmed safely. Reload and check both lists before trying again.",
     undo: "Undo", removed: "Item removed from cart.", cleared: "Cart emptied.", restored: "Previous cart selection restored.",
     undoChanged: "Undo is no longer available because the cart changed.",
     undoStorage: "Undo could not be saved safely. Check browser storage or reload the cart.",
@@ -14,6 +18,10 @@ export const cartLabels = {
     invalid: "Enter a positive whole-number quantity.", loading: "Loading cart", updated: "Cart updated",
   },
   hu: {
+    saveForLater: "Mentés későbbre", savedForLater: "Elmentettük későbbre, és eltávolítottuk a kosárból. A terméklistán a mentett termékek között találja.",
+    saveForLaterBlocked: "A termék nem helyezhető át biztonságosan. Ellenőrizze a böngésző tárhelyét, a mentett termékek korlátját és a közzétett katalógust, majd töltse újra az oldalt és próbálja újra.",
+    saveForLaterConflict: "A mentett kosár megváltozott. Újabb próbálkozás előtt töltse újra a kosarat.",
+    saveForLaterPartial: "A terméket elmentettük későbbre, de a kosárból való eltávolítását nem tudtuk biztonságosan megerősíteni. Töltse újra az oldalt, és ellenőrizze mindkét listát, mielőtt újra próbálkozik.",
     undo: "Visszavonás", removed: "A terméket eltávolítottuk a kosárból.", cleared: "A kosarat kiürítettük.", restored: "A korábbi kosártartalom visszaállítva.",
     undoChanged: "A kosár megváltozott, ezért a művelet már nem vonható vissza.",
     undoStorage: "A visszavonás nem menthető biztonságosan. Ellenőrizze a böngésző tárhelyét, vagy töltse újra a kosarat.",
@@ -28,6 +36,10 @@ export const cartLabels = {
     invalid: "Adjon meg pozitív egész mennyiséget.", loading: "Kosár betöltése", updated: "Kosár frissítve",
   },
   ko: {
+    saveForLater: "나중을 위해 저장", savedForLater: "관심 상품에 저장하고 장바구니에서 삭제했습니다. 상품 목록의 저장한 상품에서 확인할 수 있습니다.",
+    saveForLaterBlocked: "이 상품을 안전하게 옮길 수 없습니다. 브라우저 저장소, 저장한 상품의 개수 제한과 공개 카탈로그를 확인한 뒤 새로고침하고 다시 시도해 주세요.",
+    saveForLaterConflict: "저장된 장바구니가 변경되었습니다. 장바구니를 새로고침한 뒤 다시 시도해 주세요.",
+    saveForLaterPartial: "관심 상품에 저장했지만 장바구니에서 안전하게 삭제되었는지 확인할 수 없습니다. 새로고침하여 두 목록을 확인한 뒤 다시 시도해 주세요.",
     undo: "실행 취소", removed: "장바구니에서 상품을 삭제했습니다.", cleared: "장바구니를 비웠습니다.", restored: "이전 장바구니 선택을 복원했습니다.",
     undoChanged: "장바구니가 변경되어 실행을 취소할 수 없습니다.",
     undoStorage: "실행 취소를 안전하게 저장할 수 없습니다. 브라우저 저장소를 확인하거나 장바구니를 새로고침해 주세요.",

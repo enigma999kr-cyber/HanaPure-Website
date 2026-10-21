@@ -9,6 +9,9 @@ import { reconcileCart, updateCartLine, validQuantity } from "@/lib/cart/cart-st
 import type { CartLine } from "@/lib/cart/cart-state";
 import { changeBrowserCart, resetBrowserCart, restoreBrowserCart, useBrowserCart } from "@/lib/cart/browser-cart";
 import { canUndoCart, createCartUndoPlan, type CartUndoPlan } from "@/lib/cart/cart-undo";
+import { useBrowserFavorites } from "@/lib/favorites/browser-favorites";
+import { MAX_FAVORITES } from "@/lib/favorites/favorite-state";
+import { saveCartLineForLater } from "@/lib/cart/save-for-later";
 import { cartControl } from "./AddToCart";
 
 export type CartProduct = Readonly<{ publicId: string; slug: string; brand: string;
@@ -38,6 +41,7 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
   products: readonly CartProduct[]; locale: EditorialLocale; routeLocale: EditorialLocale | null;
 }) {
   const cart = useBrowserCart();
+  const favorites = useBrowserFavorites();
   const labels = cartLabels[locale];
   const [message, setMessage] = useState("");
   const [undo, setUndo] = useState<CartUndoPlan | null>(null);
@@ -84,6 +88,20 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
             </> : <p>{labels.unavailable}</p>}
             {product ? <QuantityForm {...line} name={name} locale={locale} announce={value => { setUndo(null); setMessage(value); }} />
               : <p className="mt-4">{labels.quantity}: {line.quantity}</p>}
+            {product && <button type="button" className={`${cartControl} mt-4 max-w-full break-words disabled:opacity-50`}
+              aria-label={`${labels.saveForLater}: ${name}`}
+              disabled={!cart.ready || cart.invalid || !cart.persistent || !favorites.ready || favorites.invalid || !favorites.persistent ||
+                (favorites.ids.length >= MAX_FAVORITES && !favorites.ids.some(id => id.toLowerCase() === line.publicId.toLowerCase()))}
+              onClick={() => {
+                setUndo(null);
+                const result = saveCartLineForLater(line.publicId, cart, products);
+                setMessage(result === "moved" ? labels.savedForLater : result === "partial" ? labels.saveForLaterPartial :
+                  result === "conflict" ? labels.saveForLaterConflict : labels.saveForLaterBlocked);
+                if (result === "moved" || result === "partial") {
+                  const neighbour = cart.lines[index + 1] ?? cart.lines[index - 1];
+                  (neighbour ? removeRefs.current.get(neighbour.publicId) : browseRef.current)?.focus();
+                }
+              }}>{labels.saveForLater}</button>}
             <button ref={button => {
               if (button) removeRefs.current.set(line.publicId, button);
               else removeRefs.current.delete(line.publicId);
