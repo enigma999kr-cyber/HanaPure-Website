@@ -57,7 +57,8 @@ const { default: QuickAdd } = await import("../components/cart/QuickAdd.tsx");
 const { default: SaveProductButton } = await import("../components/catalogue/SaveProductButton.tsx");
 const { default: SavedProductsBar } = await import("../components/catalogue/SavedProductsBar.tsx");
 const { default: ProductComparison } = await import("../components/catalogue/ProductComparison.tsx");
-const { default: SearchSuggestions } = await import("../components/catalogue/SearchSuggestions.tsx");
+const { default: SearchSuggestions, suggestionDetailHref } = await import("../components/catalogue/SearchSuggestions.tsx");
+const { default: CopySearchLink, canonicalSearchLink } = await import("../components/catalogue/CopySearchLink.tsx");
 const { default: RecentlyViewedProducts, ProductVisitTracker, recentlyViewedLabels } = await import("../components/catalogue/RecentlyViewedProducts.tsx");
 // Expand the actual pure server views, preserving host-element attributes/text.
 function elements(node) {
@@ -69,7 +70,7 @@ function elements(node) {
   if (node.type === SearchSuggestions) return [node, ...elements(node.props.children)];
   if (node.type === ProductImage || node.type === ProductMediaGallery || node.type === AddToCart || node.type === QuickAdd ||
     node.type === SaveProductButton || node.type === SavedProductsBar || node.type === ProductComparison ||
-    node.type === RecentlyViewedProducts || node.type === ProductVisitTracker) return [node];
+    node.type === RecentlyViewedProducts || node.type === ProductVisitTracker || node.type === CopySearchLink) return [node];
   if (typeof node.type === "function") return elements(node.type(node.props));
   return [node, ...elements(node.props?.children)];
 }
@@ -83,6 +84,106 @@ const product = (patch = {}) => ({ publicId: "12345678-abcd-1234-abcd-123456789a
 const reader = (...records) => createLocalCatalogueReader(records);
 const { readCatalogueCriteria, catalogueQueryString } = await import("../lib/catalog/catalogue-discovery.ts");
 const { productMetadata } = await import("../lib/storefront/seo.ts");
+
+test("search batch A: copy shares only canonical applied criteria with bounded same-origin validation and honest clipboard source contract", async () => {
+  const { storefrontLabels } = await import("../lib/storefront/localization.ts");
+  const { renderToStaticMarkup } = require(join(dirname(require.resolve("react-dom/package.json")), "server.node.js"));
+  for (const routeLocale of [null, "en", "hu", "ko"]) {
+    const locale = routeLocale ?? "en";
+    const root = routeLocale ? `/${locale}/products` : "/products";
+    for (const params of [{}, { q: "  árvíz 한국 & ?/#  " }, { brand: "Round Lab" }, { sort: "name-asc" },
+      { q: "submitted value", brand: "Dr. Althea", sort: "name-desc" }, { sort: "price-asc" }]) {
+      const criteria = readCatalogueCriteria(params);
+      const nodes = elements(ProductListing({ criteria, locale, routeLocale }));
+      const controls = nodes.filter(node => node.type === CopySearchLink);
+      const active = Boolean(criteria.query || criteria.brand || criteria.sort);
+      assert.equal(controls.length, active ? 1 : 0);
+      if (!active) continue;
+      const copy = controls[0];
+      assert.deepEqual(Object.keys(copy.props).sort(), ["locale", "relativeHref"]);
+      assert.equal(copy.props.relativeHref, root + catalogueQueryString(criteria));
+      assert.equal(copy.props.locale, locale);
+      assert.equal(canonicalSearchLink(copy.props.relativeHref, "https://test.invalid"), "https://test.invalid" + copy.props.relativeHref);
+      const form = nodes.find(node => node.type === "form" && node.props.method === "get");
+      assert.ok(form && !elements(form).some(node => node.type === CopySearchLink));
+      assert.equal(typeof window, "undefined");
+      const html = renderToStaticMarkup(copy);
+      assert.ok(html.includes(storefrontLabels[locale].copySearchLink));
+      assert.match(html, /<button type="button"/);
+      assert.match(html, /min-h-11/);
+      assert.match(html, /focus-visible:outline-2/);
+      assert.match(html, /max-w-full break-words/);
+      assert.equal((html.match(/role="status"/g) ?? []).length, 1);
+      assert.ok(!html.includes("<form"));
+    }
+  }
+  for (const href of ["https://evil.invalid/products?q=x", "//evil.invalid/products?q=x", "/products/one?q=x", "/hu/../products?q=x",
+    "/products?q=x#bad", "/products?q=x&returnUrl=evil", "/products?q=x&q=y", "/products?brand=x&q=y", "/products?q=%zz",
+    "/products?sort=price-asc", "/products?sort=name-asc&sort=name-desc", "/products?", "/products", "/products?q= x",
+    "/products?q=x\n", "/products?q=x\\", "/products?q=" + "x".repeat(8192)]) {
+    assert.equal(canonicalSearchLink(href, "https://test.invalid"), null, href.slice(0, 100));
+  }
+  for (const origin of ["not-a-url", "javascript:alert(1)", "https://user:pass@test.invalid", "https://test.invalid/other"]) {
+    assert.equal(canonicalSearchLink("/products?q=x", origin), null);
+  }
+  const source = readFileSync(join(repo, "components/catalogue/CopySearchLink.tsx"), "utf8");
+  assert.match(source, /onClick=\{async \(\) =>/);
+  assert.match(source, /if \(pending.current\) return/);
+  assert.match(source, /disabled=\{copying\}/);
+  assert.match(source, /await navigator.clipboard.writeText\(href\);\s*setMessage\(labels.searchLinkCopied\)/);
+  assert.match(source, /catch \{\s*setMessage\(labels.searchLinkFailed\)/);
+  assert.match(source, /finally \{\s*pending.current = false; setCopying\(false\)/);
+  assert.match(source, /!navigator.clipboard\?\.writeText/);
+  assert.doesNotMatch(source, /useEffect|execCommand|localStorage|sessionStorage|fetch\(|history\./);
+});
+
+test("search batch B: typed suggestion context wins over applied q and existing detail Back restores the encoded locale criteria", async () => {
+  const { renderToStaticMarkup } = require(join(dirname(require.resolve("react-dom/package.json")), "server.node.js"));
+  const record = product({ brand: "Round Lab" });
+  const draft = product({ publicId: "22345678-abcd-1234-abcd-123456789abc", slug: "private-suggestion", state: "draft" });
+  const catalogue = reader(record, draft);
+  for (const routeLocale of [null, "en", "hu", "ko"]) {
+    const locale = routeLocale ?? "en";
+    const root = routeLocale ? `/${locale}/products` : "/products";
+    const applied = readCatalogueCriteria({ q: "Round Lab", brand: "Dr. Althea", sort: "name-desc" });
+    const nodes = elements(ProductListing({ catalogue, locale, routeLocale, criteria: applied }));
+    const suggestion = nodes.find(node => node.type === SearchSuggestions);
+    const copy = nodes.find(node => node.type === CopySearchLink);
+    assert.deepEqual(suggestion.props.appliedCriteria, { brand: applied.brand, sort: applied.sort });
+    assert.equal(suggestion.props.initialQuery, applied.query);
+    assert.deepEqual(suggestion.props.products.map(item => item.publicId), [record.publicId]);
+    assert.equal(copy.props.relativeHref, root + catalogueQueryString(applied));
+    // Actual initial SearchSuggestions JSX invokes the same callable helper.
+    const html = renderToStaticMarkup(suggestion);
+    assert.ok(html.includes(suggestionDetailHref(record.slug, routeLocale, applied.query, applied.brand, applied.sort).replaceAll("&", "&amp;")));
+    assert.ok(!html.includes(draft.slug));
+    for (const typed of ["  árv íz 한국 & ?/#  ", "", "   ", "Round Lab"]) {
+      for (const sort of ["name-asc", "name-desc", "invalid-sort", undefined]) {
+        const href = suggestionDetailHref(record.slug, routeLocale, typed, applied.brand, sort);
+        const url = new URL(href, "https://test.invalid");
+        assert.equal(url.pathname, `${root}/${record.slug}`);
+        assert.equal(url.searchParams.get("q"), typed.trim() || null);
+        assert.equal(url.searchParams.get("brand"), applied.brand);
+        assert.equal(url.searchParams.get("sort"), sort === "name-asc" || sort === "name-desc" ? sort : null);
+        const restored = readCatalogueCriteria(Object.fromEntries(url.searchParams));
+        const detail = elements(ProductDetail({ catalogue, slug: record.slug, locale, routeLocale, criteria: restored }));
+        assert.ok(detail.some(node => node.props?.href === root + catalogueQueryString(restored)));
+        assert.equal(copy.props.relativeHref, root + catalogueQueryString(applied));
+      }
+    }
+    const clean = `${root}/${record.slug}`;
+    assert.equal(suggestionDetailHref(record.slug, routeLocale, "", "", "bad"), clean);
+    for (const query of ["x".repeat(4097), "한".repeat(2000)]) assert.equal(suggestionDetailHref(record.slug, routeLocale, query, applied.brand), clean);
+    assert.equal(suggestionDetailHref(record.slug, routeLocale, "x", "x".repeat(4097)), clean);
+    assert.equal(suggestionDetailHref("../../unsafe", routeLocale, "x"), root);
+    assert.throws(() => ProductDetail({ catalogue, slug: draft.slug, locale, routeLocale }));
+  }
+  const source = readFileSync(join(repo, "components/catalogue/SearchSuggestions.tsx"), "utf8");
+  assert.match(source, /href=\{suggestionDetailHref\(product.slug, routeLocale, query, appliedCriteria.brand, appliedCriteria.sort\)\}/);
+  assert.match(source, /setQuery\(event.target.value\)/);
+  assert.match(source, /event.key === "Escape"/);
+  assert.doesNotMatch(source, /localStorage|sessionStorage|returnUrl|history\.|catalogue-discovery["']/);
+});
 
 test("batch A: published-brand shortcuts apply/toggle only brand, retain query/sort/locale and never depend on results", () => {
   const first = product({ brand: "Round Lab" });
@@ -320,7 +421,8 @@ test("instant suggestions receive full published selected-locale projection whil
     const nodes = elements(ProductListing({ catalogue: reader(first, second, draft), locale, routeLocale, criteria }));
     const island = nodes.find(node => node.type === SearchSuggestions);
     assert.equal(nodes.filter(node => node.type === SearchSuggestions).length, 1);
-    assert.deepEqual(Object.keys(island.props).sort(), ["children", "initialQuery", "locale", "products", "routeLocale"]);
+    assert.deepEqual(Object.keys(island.props).sort(), ["appliedCriteria", "children", "initialQuery", "locale", "products", "routeLocale"]);
+    assert.deepEqual(island.props.appliedCriteria, { brand: criteria.brand, sort: criteria.sort });
     assert.equal(island.props.initialQuery, criteria.query);
     assert.equal(island.props.locale, locale);
     assert.equal(island.props.routeLocale, routeLocale);

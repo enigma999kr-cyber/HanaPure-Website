@@ -11,6 +11,7 @@ import SaveProductButton from "./SaveProductButton";
 import SavedProductsBar from "./SavedProductsBar";
 import ProductComparison from "./ProductComparison";
 import SearchSuggestions from "./SearchSuggestions";
+import CopySearchLink from "./CopySearchLink";
 import RecentlyViewedProducts, { ProductVisitTracker } from "./RecentlyViewedProducts";
 import type { ComparisonProduct } from "@/lib/comparison/compare-selection";
 import { cartLabels } from "@/lib/cart/labels";
@@ -74,7 +75,8 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
         className="mt-8 grid gap-4 rounded-2xl border border-hanapure-border bg-hanapure-white p-5 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
         <div className="min-w-0">
           <label htmlFor="catalogue-search" className="mb-2 block text-sm font-medium">{labels.searchProducts}</label>
-          <SearchSuggestions products={suggestions} initialQuery={criteria.query} locale={locale} routeLocale={routeLocale}>
+          <SearchSuggestions products={suggestions} initialQuery={criteria.query} locale={locale} routeLocale={routeLocale}
+            appliedCriteria={{ brand: criteria.brand, ...(criteria.sort ? { sort: criteria.sort } : {}) }}>
             <input id="catalogue-search" name="q" type="search" defaultValue={criteria.query} autoComplete="off"
               placeholder={labels.searchHint} className={`${controlStyle} scroll-mt-24`} />
           </SearchSuggestions>
@@ -120,6 +122,8 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
           </li>)}
         </ul>
       </section>}
+      {appliedCriteria.length > 0 && <CopySearchLink key={`${locale}-${catalogueQueryString(criteria)}`} locale={locale}
+        relativeHref={listingHref + catalogueQueryString(criteria)} />}
       <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2">
         <p role="status" className="text-sm text-hanapure-muted">{labels.results}: {products.length}</p>
         {(active || criteria.sort) && <Link href={listingHref} className={linkStyle}>{labels.clear}</Link>}

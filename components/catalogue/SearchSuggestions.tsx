@@ -7,9 +7,26 @@ import { searchSuggestions, type SearchSuggestionProduct } from "@/lib/catalog/s
 import { searchSuggestionLabels } from "@/lib/catalog/search-suggestion-labels";
 import { storefrontHref, storefrontLabels } from "@/lib/storefront/localization";
 
-export default function SearchSuggestions({ products, initialQuery, locale, routeLocale, children }: {
+/** Live input wins over submitted q; unsafe/oversized context keeps a clean detail link. */
+export function suggestionDetailHref(slug: string, routeLocale: EditorialLocale | null, query: string, brand = "", sort?: string): string {
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) return storefrontHref("/products", routeLocale);
+  const base = storefrontHref(`/products/${slug}`, routeLocale);
+  try {
+    if (query.length > 4096 || brand.length > 4096) return base;
+    const params = new URLSearchParams();
+    if (query.trim()) params.set("q", query.trim());
+    if (brand.trim()) params.set("brand", brand.trim());
+    if (sort === "name-asc" || sort === "name-desc") params.set("sort", sort);
+    const value = params.toString();
+    const href = base + (value ? `?${value}` : "");
+    return href.length <= 8192 ? href : base;
+  } catch { return base; }
+}
+
+export default function SearchSuggestions({ products, initialQuery, locale, routeLocale, appliedCriteria, children }: {
   products: readonly SearchSuggestionProduct[]; initialQuery: string;
   locale: EditorialLocale; routeLocale: EditorialLocale | null; children: ReactNode;
+  appliedCriteria: Readonly<{ brand: string; sort?: "name-asc" | "name-desc" }>;
 }) {
   const [query, setQuery] = useState(initialQuery);
   const [dismissed, setDismissed] = useState(false);
@@ -38,7 +55,7 @@ export default function SearchSuggestions({ products, initialQuery, locale, rout
       </p>
       {matches.length > 0 && <ul aria-label={labels.heading} className="mt-2 max-h-64 space-y-1 overflow-y-auto">
         {matches.map(product => <li key={product.publicId} className="min-w-0">
-          <Link href={storefrontHref(`/products/${product.slug}`, routeLocale)}
+          <Link href={suggestionDetailHref(product.slug, routeLocale, query, appliedCriteria.brand, appliedCriteria.sort)}
             className="block min-h-11 min-w-0 max-w-full rounded-lg px-2 py-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text">
             <span className="block break-words">{product.name ?? `${existing.details}: ${product.brand} (${product.slug})`}</span>
             <span className="block break-words text-hanapure-muted">{product.brand}</span>
