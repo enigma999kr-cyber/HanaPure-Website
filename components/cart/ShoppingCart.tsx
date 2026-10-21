@@ -22,6 +22,7 @@ import { stepQuantityDraft } from "@/lib/cart/quantity-draft-controls";
 import { cartReviewView, EMPTY_CART_REVIEW, CART_REVIEW_QUERY_LIMIT, CART_REVIEW_BRAND_LIMIT, type CartReviewCriteria } from "@/lib/cart/cart-review-view";
 import { COMPARISON_DESTINATION, comparisonHref, publishedComparison } from "@/lib/comparison/compare-selection";
 import ProductImage from "@/components/catalogue/ProductImage";
+import { cartRowId, cartRowFromHash } from "@/lib/cart/quick-add-continuity";
 
 export type CartProduct = Readonly<{ publicId: string; slug: string; brand: string;
   names: Readonly<Record<EditorialLocale, string | null>>; image?: EditorialImage | null }>;
@@ -91,6 +92,8 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
   const browseRef = useRef<HTMLAnchorElement>(null);
   const removeRefs = useRef(new Map<string, HTMLButtonElement>());
   const restoredFocus = useRef<string | null>(null);
+  const rowRefs = useRef(new Map<string, HTMLLIElement>());
+  const handledRowHash = useRef("");
   const items = reconcileCart(cart.lines, products);
   const undoAvailable = undo && cart.ready && cart.persistent && !cart.invalid && canUndoCart(undo, cart.lines);
   function changeReview(next: CartReviewCriteria) {
@@ -105,6 +108,22 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
       restoredFocus.current = null;
     }
   }, [cart.lines]);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    function focusRequestedRow() {
+      if (!cart.ready || cart.invalid || !cart.persistent || !window.location) return;
+      const hash = window.location.hash;
+      if (handledRowHash.current === hash) return;
+      handledRowHash.current = hash;
+      const target = cartRowFromHash(hash);
+      const row = target ? rowRefs.current.get(target) : null;
+      if (row) { row.scrollIntoView({ block: "nearest" }); row.focus({ preventScroll: true }); }
+    }
+    focusRequestedRow();
+    const onHashChange = () => { handledRowHash.current = ""; focusRequestedRow(); };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, [cart.ready, cart.invalid, cart.persistent, cart.lines, products, review]);
   function removeSelection(change: (lines: readonly CartLine[]) => readonly CartLine[], success: string) {
     if (!cart.ready || cart.invalid || !cart.persistent) return;
     let plan: CartUndoPlan | null = null;
@@ -174,7 +193,10 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
         {view.rows.map(({ line, product, originalIndex }, visibleIndex) => {
           const name = product?.names[locale] ?? storefrontLabels[locale].details;
           const image = product ? products.find(item => item.publicId.toLowerCase() === line.publicId.toLowerCase())?.image : null;
-          return <li key={line.publicId} className="min-w-0 rounded-2xl border border-hanapure-border bg-hanapure-white p-5">
+          const rowId = product && viewReady ? cartRowId(product.publicId) : null;
+          return <li key={line.publicId} id={rowId ?? undefined} tabIndex={rowId ? -1 : undefined}
+            ref={node => { if (rowId) { if (node) rowRefs.current.set(rowId, node); else rowRefs.current.delete(rowId); } }}
+            className="min-w-0 scroll-mt-24 rounded-2xl border border-hanapure-border bg-hanapure-white p-5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-hanapure-text">
             <label className="mb-3 flex min-h-11 min-w-0 items-center gap-3 break-words">
               <input type="checkbox" checked={selected.some(item => item.publicId.toLowerCase() === line.publicId.toLowerCase())}
                 disabled={!cart.ready || cart.invalid || !cart.persistent}

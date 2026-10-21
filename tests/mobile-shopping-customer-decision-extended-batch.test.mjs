@@ -316,7 +316,13 @@ test("F5 valid Cart links reach instance-local rows/actions; empty, invalid, unr
       assert.equal(links.length, 2);
       for (const link of links) assert.equal(nodes(tree).filter(node => node.props?.id === link.props.href.slice(1)).length, 1);
     }
-    const allIds = [...nodes(first), ...nodes(second)].filter(node => node.props?.id).map(node => node.props.id);
+    // Public deep-link row IDs are identity-stable; navigation/control IDs remain instance-local.
+    for (const tree of [first, second]) {
+      const ids = nodes(tree).filter(node => node.props?.id).map(node => node.props.id);
+      assert.equal(new Set(ids).size, ids.length);
+      assert.equal(ids.filter(value => value === `cart-item-${id}`).length, 1);
+    }
+    const allIds = [...nodes(first), ...nodes(second)].filter(node => node.props?.id && !node.props.id.startsWith("cart-item-")).map(node => node.props.id);
     assert.equal(new Set(allIds).size, allIds.length);
     for (const raw of [serializeCart([]), "{"]) {
       values.set(CART_STORAGE_KEY, raw); notify(CART_STORAGE_KEY);

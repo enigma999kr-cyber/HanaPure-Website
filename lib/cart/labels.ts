@@ -1,5 +1,6 @@
 export const cartLabels = {
   en: {
+    addQuantity: "Quantity to add", reviewCartItem: "Review this cart item", addOverflow: "The resulting quantity is too large. Nothing was added.",
     review: "Review browser cart", find: "Find cart items", reviewBrand: "Filter cart by brand", allReviewBrands: "All cart brands",
     reviewSort: "Cart view order", originalOrder: "Original cart order", nameOrder: "Product name A–Z", quantityOrder: "Stored quantity: highest first",
     resetReview: "Clear cart view filters", noReviewResults: "No cart items match this view. Your saved cart has not been emptied.",
@@ -47,6 +48,7 @@ export const cartLabels = {
     invalid: "Enter a positive whole-number quantity.", loading: "Loading cart", updated: "Cart updated",
   },
   hu: {
+    addQuantity: "Hozzáadandó mennyiség", reviewCartItem: "A kosártétel megtekintése", addOverflow: "Az eredményül kapott mennyiség túl nagy. Nem adtunk hozzá semmit.",
     review: "A böngésző kosarának áttekintése", find: "Kosártételek keresése", reviewBrand: "Kosár szűrése márka szerint", allReviewBrands: "Minden kosárban szereplő márka",
     reviewSort: "Kosárnézet sorrendje", originalOrder: "Eredeti kosársorrend", nameOrder: "Terméknév A–Z", quantityOrder: "Mentett mennyiség: csökkenő",
     resetReview: "Kosárnézet szűrőinek törlése", noReviewResults: "Nincs a nézetnek megfelelő kosártétel. A mentett kosár nem ürült ki.",
@@ -94,6 +96,7 @@ export const cartLabels = {
     invalid: "Adjon meg pozitív egész mennyiséget.", loading: "Kosár betöltése", updated: "Kosár frissítve",
   },
   ko: {
+    addQuantity: "추가할 수량", reviewCartItem: "이 장바구니 항목 확인", addOverflow: "추가 후 수량이 너무 커서 상품을 추가하지 않았습니다.",
     review: "브라우저 장바구니 검토", find: "장바구니 항목 검색", reviewBrand: "장바구니 브랜드 필터", allReviewBrands: "장바구니의 모든 브랜드",
     reviewSort: "장바구니 표시 순서", originalOrder: "원래 장바구니 순서", nameOrder: "상품명 오름차순", quantityOrder: "저장 수량 많은 순",
     resetReview: "장바구니 보기 필터 초기화", noReviewResults: "이 보기 조건에 맞는 항목이 없습니다. 저장된 장바구니가 비워진 것은 아닙니다.",
