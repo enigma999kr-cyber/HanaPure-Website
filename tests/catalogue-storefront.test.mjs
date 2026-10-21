@@ -13,10 +13,17 @@ const require = createRequire(import.meta.url);
 const reactEntry = pathToFileURL(join(dirname(require.resolve("react/package.json")), "index.js")).href;
 const jsxEntry = pathToFileURL(join(dirname(require.resolve("react/package.json")), "jsx-runtime.js")).href;
 const repo = dirname(dirname(fileURLToPath(import.meta.url)));
+// Existing subscription-hook pattern: simulate only the Favorites snapshot read.
+// Real React still renders components; this is not browser hydration evidence.
+const favoriteSnapshotReact = "data:text/javascript," + encodeURIComponent(
+  "export function useSyncExternalStore(subscribe,getSnapshot,getServerSnapshot){return typeof window==='undefined'?getServerSnapshot():getSnapshot();}");
 registerHooks({
   resolve(specifier, context, nextResolve) {
     // Native Node does not provide Next's client-reference bundling. Load real
     // React/Link for their element references; do not execute client hooks here.
+    if (specifier === "react" && context.parentURL?.endsWith("/lib/favorites/browser-favorites.ts")) {
+      return { url: favoriteSnapshotReact, shortCircuit: true };
+    }
     if (specifier === "react") return { url: reactEntry, shortCircuit: true };
     if (specifier === "react/jsx-runtime") return { url: jsxEntry, shortCircuit: true };
     if (specifier === "react-dom") return { url: pathToFileURL(join(dirname(require.resolve("react-dom/package.json")), "index.js")).href, shortCircuit: true };
@@ -233,6 +240,89 @@ test("Saved controls use only published identity and the full minimal locale pro
   const empty = elements(ProductListing());
   assert.equal(empty.filter(node => node.type === SaveProductButton).length, 0);
   assert.deepEqual(empty.find(node => node.type === SavedProductsBar).props.products, []);
+});
+
+test("saved published products reuse quantity-aware QuickAdd without unsaving, hidden identities or nested search forms", async () => {
+  const { createElement } = await import("react");
+  const { renderToStaticMarkup } = require(join(dirname(require.resolve("react-dom/package.json")), "server.node.js"));
+  const { subscribeFavorites } = await import("../lib/favorites/browser-favorites.ts");
+  const { FAVORITES_STORAGE_KEY, serializeFavorites } = await import("../lib/favorites/favorite-state.ts");
+  const { cartLabels } = await import("../lib/cart/labels.ts");
+  const { favoriteLabels } = await import("../lib/favorites/labels.ts");
+  const first = product({ translations: { en: content(), hu: { ...content(), name: "Szintetikus teszttermék" }, ko: { ...content(), name: "가상 테스트 상품" } } });
+  const second = product({ publicId: "22345678-abcd-1234-abcd-123456789abc", slug: "saved-second" });
+  const unsaved = product({ publicId: "32345678-abcd-1234-abcd-123456789abc", slug: "unsaved-public" });
+  const draft = product({ publicId: "42345678-abcd-1234-abcd-123456789abc", slug: "private-saved-draft", state: "draft" });
+  const unknown = "52345678-abcd-1234-abcd-123456789abc";
+  const raw = serializeFavorites([second.publicId.toUpperCase(), first.publicId.toUpperCase(), draft.publicId, unknown]);
+  const source = readFileSync(join(repo, "components/catalogue/SavedProductsBar.tsx"), "utf8");
+  assert.match(source, /<QuickAdd publicId=\{product.publicId\} locale=\{locale\} name=\{product.name\} \/>/);
+  assert.doesNotMatch(source, /changeBrowserCart|changeBrowserFavorite|setFavorite|localStorage|onSubmit/);
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "window");
+  assert.equal(typeof window, "undefined");
+  const initial = renderToStaticMarkup(createElement(SavedProductsBar, { products: [], locale: "en", routeLocale: null }));
+  assert.ok(initial.includes(favoriteLabels.en.loading));
+  assert.ok(!initial.includes("<form"));
+  const events = new Set();
+  let stored = raw, blocked = false, writes = 0, unsubscribe;
+  Object.defineProperty(globalThis, "window", { configurable: true, value: {
+    localStorage: {
+      getItem(key) { assert.equal(key, FAVORITES_STORAGE_KEY); if (blocked) throw new Error("synthetic read denial"); return stored; },
+      setItem() { writes++; throw new Error("Favorites must not be written while composing QuickAdd"); },
+    },
+    addEventListener(type, listener) { if (type === "storage") events.add(listener); },
+    removeEventListener(type, listener) { if (type === "storage") events.delete(listener); },
+  } });
+  const refresh = () => events.forEach(listener => listener({ key: FAVORITES_STORAGE_KEY }));
+  try {
+    unsubscribe = subscribeFavorites(() => {});
+    for (const routeLocale of [null, "en", "hu", "ko"]) {
+      const locale = routeLocale ?? "en";
+      const nodes = elements(ProductListing({ catalogue: reader(first, second, unsaved, draft), locale, routeLocale,
+        criteria: { query: "no-match", brand: "Anua", sort: "name-desc" } }));
+      const bar = nodes.find(node => node.type === SavedProductsBar);
+      assert.deepEqual(Object.keys(bar.props).sort(), ["locale", "products", "routeLocale"]);
+      assert.deepEqual(bar.props.products.map(item => Object.keys(item).sort()), Array(3).fill(["name", "publicId", "slug"]));
+      assert.deepEqual(bar.props.products.map(item => item.publicId), [first.publicId, second.publicId, unsaved.publicId]);
+      const searchForm = nodes.find(node => node.type === "form" && node.props.method === "get");
+      assert.ok(searchForm);
+      assert.ok(!elements(searchForm).some(node => node.type === SavedProductsBar));
+      const html = renderToStaticMarkup(bar);
+      const rows = [...html.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/g)].map(match => match[1]);
+      assert.equal(rows.length, 2);
+      for (const [index, item] of [second, first].entries()) {
+        const name = bar.props.products.find(entry => entry.publicId === item.publicId).name;
+        const encodedName = renderToStaticMarkup(createElement("span", null, `${cartLabels[locale].quantity}: ${name}`));
+        assert.ok(rows[index].includes(encodedName.slice(6, -7)));
+        assert.ok(rows[index].includes(`href="${routeLocale ? `/${locale}` : ""}/products/${item.slug}"`));
+        assert.equal((rows[index].match(/<form\b/g) ?? []).length, 1);
+        assert.ok(rows[index].indexOf("</a>") < rows[index].indexOf("<form"));
+        assert.match(rows[index], /type="number" min="1" step="1" required=""[^>]*value="1"/);
+        assert.match(rows[index], /<button type="submit"[^>]*disabled=""/);
+        assert.match(rows[index], /min-h-11/);
+        assert.match(rows[index], /flex-wrap/);
+      }
+      for (const item of [draft, unsaved]) assert.ok(!html.includes(item.slug));
+      assert.ok(!html.includes(unknown));
+      for (const bad of ["corrupt-test-only", serializeFavorites([]), null]) {
+        stored = bad; refresh();
+        const hidden = renderToStaticMarkup(bar);
+        assert.ok(!hidden.includes("<form"));
+        assert.ok(hidden.includes(bad === "corrupt-test-only" ? favoriteLabels[locale].invalid : favoriteLabels[locale].empty));
+      }
+      stored = raw; blocked = true; refresh();
+      const unavailable = renderToStaticMarkup(bar);
+      assert.ok(!unavailable.includes("<form"));
+      assert.ok(unavailable.includes(favoriteLabels[locale].storage));
+      blocked = false; refresh();
+      assert.equal(stored, raw);
+    }
+    assert.equal(writes, 0);
+  } finally {
+    unsubscribe?.();
+    if (previous) Object.defineProperty(globalThis, "window", previous);
+    else delete globalThis.window;
+  }
 });
 
 test("Quick Add receives published editorial identity only and respects missing-locale content", () => {

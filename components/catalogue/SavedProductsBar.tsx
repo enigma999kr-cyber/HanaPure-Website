@@ -7,6 +7,7 @@ import { storefrontHref } from "@/lib/storefront/localization";
 import { savedPublishedProducts } from "@/lib/favorites/favorite-state";
 import { useBrowserFavorites, resetBrowserFavorites } from "@/lib/favorites/browser-favorites";
 import { favoriteLabels } from "@/lib/favorites/labels";
+import QuickAdd from "@/components/cart/QuickAdd";
 
 export default function SavedProductsBar({ products, locale, routeLocale }: {
   products: readonly Readonly<{ publicId: string; slug: string; name: string }>[];
@@ -27,6 +28,7 @@ export default function SavedProductsBar({ products, locale, routeLocale }: {
           className="inline-flex min-h-11 max-w-full items-center break-words rounded-xl border border-hanapure-border bg-hanapure-white px-4 py-3 text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text">
           <span className="min-w-0 break-words">{product.name}</span>
         </Link>
+        <QuickAdd publicId={product.publicId} locale={locale} name={product.name} />
       </li>)}</ul>}
     {state.invalid && <button type="button" onClick={() => resetBrowserFavorites()}
       className="mt-3 min-h-11 max-w-full break-words rounded-xl border border-hanapure-border px-4 py-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text">{labels.reset}</button>}
