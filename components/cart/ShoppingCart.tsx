@@ -15,6 +15,7 @@ import { saveCartLineForLater } from "@/lib/cart/save-for-later";
 import { formatCartShoppingList } from "@/lib/cart/cart-shopping-list";
 import { selectedCartLines, readBulkSelection, removeSelectedCartLines } from "@/lib/cart/cart-bulk-actions";
 import { moveCartSelectionToSaved } from "@/lib/cart/shopping-session-bulk";
+import { cartSelectionSummary, savedProductOverlap } from "@/lib/cart/cart-selection-summary";
 import { cartControl } from "./AddToCart";
 
 export type CartProduct = Readonly<{ publicId: string; slug: string; brand: string;
@@ -60,6 +61,7 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
   const selected = coherentSelection ? selectedCartLines(cart.lines, checked.ids) ?? [] : [];
   const bulkReady = coherentSelection && cart.ready && !cart.invalid && cart.persistent && selected.length > 0;
   const selectedPublic = reconcileCart(selected, products).some(item => item.product !== null);
+  const summary = cartSelectionSummary(cart, checked.lines, checked.ids, products);
   const browseRef = useRef<HTMLAnchorElement>(null);
   const removeRefs = useRef(new Map<string, HTMLButtonElement>());
   const restoredFocus = useRef<string | null>(null);
@@ -114,6 +116,7 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
               <p className="text-sm text-hanapure-muted">{product.brand}</p>
               <Link href={storefrontHref(`/products/${product.slug}`, routeLocale)} className={`${cartControl} mt-2 block max-w-full break-words text-xl`}>{name}</Link>
               {!product.names[locale] && <p className="mt-3">{storefrontLabels[locale].missing}</p>}
+              {savedProductOverlap(favorites, line.publicId) && <p className="mt-3 break-words text-sm">{labels.alsoSaved}</p>}
             </> : <p>{labels.unavailable}</p>}
             {product ? <QuantityForm {...line} name={name} locale={locale} announce={value => { setUndo(null); setMessage(value); }} />
               : <p className="mt-4">{labels.quantity}: {line.quantity}</p>}
@@ -146,7 +149,11 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
       <button type="button" className={`${cartControl} mt-6`} onClick={() => { browseRef.current?.focus(); removeSelection(() => [], labels.cleared); }}>{labels.clear}</button>
     </>}
     <section aria-label={labels.selectedItems} className="mt-6 min-w-0">
-      <p className="break-words text-sm">{labels.selectedItems}: {selected.length}</p>
+      <p className="break-words text-sm">{labels.selectedItems}: {summary ? summary.lines : labels.selectionUnknown}</p>
+      {summary && <dl aria-label={labels.selectionOverview} className="mt-2 min-w-0 space-y-2 break-words text-sm" aria-live="polite">
+        <div><dt>{labels.selectedUnits}</dt><dd>{summary.units}</dd></div>
+        <div><dt>{labels.selectedUnavailable}</dt><dd>{summary.unavailable}</dd></div>
+      </dl>}
       <div className="mt-3 flex min-w-0 flex-wrap gap-3">
         <button type="button" disabled={!bulkReady || !favorites.ready || favorites.invalid || !favorites.persistent ||
           selected.some(line => !products.some(product => product.publicId.toLowerCase() === line.publicId.toLowerCase()))}

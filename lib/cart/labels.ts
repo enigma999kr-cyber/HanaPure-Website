@@ -1,5 +1,7 @@
 export const cartLabels = {
   en: {
+    selectionOverview: "Browser cart selection overview", selectedUnits: "Selected units", selectedUnavailable: "Selected lines not in the published catalogue",
+    selectionUnknown: "Selection not confirmed", alsoSaved: "Also in Saved Products",
     moveSelectedToSaved: "Move selected to saved products", selectedMoved: "Selected products saved and removed from the cart.",
     selectedMovePartial: "The move was partially completed or could not be confirmed. Reload and check both your cart and saved products before trying again.",
     selectedMoveFailed: "Selected products could not be moved safely. Check browser storage, saved-products limit and the current catalogue, then reload.",
@@ -35,6 +37,8 @@ export const cartLabels = {
     invalid: "Enter a positive whole-number quantity.", loading: "Loading cart", updated: "Cart updated",
   },
   hu: {
+    selectionOverview: "A böngésző kosarában kiválasztott tételek áttekintése", selectedUnits: "Kiválasztott darabszám", selectedUnavailable: "Kiválasztott, a közzétett katalógusban nem szereplő tételek",
+    selectionUnknown: "A kiválasztás nem megerősített", alsoSaved: "A mentett termékek között is szerepel",
     moveSelectedToSaved: "Kiválasztott termékek áthelyezése a mentettek közé", selectedMoved: "A kiválasztott termékeket elmentettük és eltávolítottuk a kosárból.",
     selectedMovePartial: "Az áthelyezés részben történt meg, vagy nem igazolható. Töltse újra az oldalt, és ellenőrizze a kosarat és a mentett termékeket, mielőtt újra próbálkozik.",
     selectedMoveFailed: "A termékek nem helyezhetők át biztonságosan. Ellenőrizze a böngésző tárhelyét, a mentett termékek korlátját és a katalógust, majd töltse újra az oldalt.",
@@ -70,6 +74,8 @@ export const cartLabels = {
     invalid: "Adjon meg pozitív egész mennyiséget.", loading: "Kosár betöltése", updated: "Kosár frissítve",
   },
   ko: {
+    selectionOverview: "브라우저 장바구니 선택 요약", selectedUnits: "선택한 총 수량", selectedUnavailable: "공개 카탈로그에 없는 선택 항목 수",
+    selectionUnknown: "선택 내역 확인 불가", alsoSaved: "저장한 상품에도 포함됨",
     moveSelectedToSaved: "선택한 상품을 관심 상품으로 이동", selectedMoved: "선택한 상품을 저장하고 장바구니에서 삭제했습니다.",
     selectedMovePartial: "이동이 일부만 완료되었거나 확인되지 않았습니다. 새로고침하여 장바구니와 저장한 상품을 모두 확인한 뒤 다시 시도해 주세요.",
     selectedMoveFailed: "선택한 상품을 안전하게 옮길 수 없습니다. 브라우저 저장소, 저장 개수 제한과 현재 카탈로그를 확인하고 새로고침해 주세요.",

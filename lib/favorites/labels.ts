@@ -1,5 +1,9 @@
 export const favoriteLabels = {
   en: {
+    searchSaved: "Search saved products", savedBrand: "Saved product brand", allSavedBrands: "All saved brands",
+    sortSaved: "Sort saved products", savedOrder: "Saved order", nameAscending: "Name A–Z", nameDescending: "Name Z–A",
+    resetView: "Reset view", matches: "Matching saved products", noMatches: "No saved products match this view.",
+    compareSelected: "Compare two selected products", inBrowserCart: "Already in browser cart — quantity",
     select: "Select saved product", selectedCount: "Selected saved products", addSelected: "Add selected to cart (+1 each)", removeSelected: "Remove selected saved products",
     bulkAdded: "One unit of each selected product was added to the saved cart.", bulkRemoved: "Selected saved products removed.",
     bulkChanged: "The selection changed. Reload and select the products again.", bulkFailed: "The change could not be confirmed safely. Check browser storage and cart quantities, then reload and check both lists.",
@@ -10,6 +14,10 @@ export const favoriteLabels = {
     reset: "Reset saved products", limit: "You can save up to 100 products.",
   },
   hu: {
+    searchSaved: "Keresés a mentett termékek között", savedBrand: "Mentett termék márkája", allSavedBrands: "Minden mentett márka",
+    sortSaved: "Mentett termékek rendezése", savedOrder: "Mentési sorrend", nameAscending: "Név A–Z", nameDescending: "Név Z–A",
+    resetView: "Nézet alaphelyzetbe állítása", matches: "Megfelelő mentett termékek", noMatches: "Nincs a nézetnek megfelelő mentett termék.",
+    compareSelected: "Két kiválasztott termék összehasonlítása", inBrowserCart: "Már a böngésző kosarában — mennyiség",
     select: "Mentett termék kiválasztása", selectedCount: "Kiválasztott mentett termékek", addSelected: "Kiválasztottak a kosárba (+1 darab)", removeSelected: "Kiválasztott mentett termékek eltávolítása",
     bulkAdded: "Minden kiválasztott termékből egy darabot adtunk a mentett kosárhoz.", bulkRemoved: "A kiválasztott mentett termékeket eltávolítottuk.",
     bulkChanged: "A kiválasztás megváltozott. Töltse újra az oldalt, és válassza ki újra a termékeket.", bulkFailed: "A módosítást nem tudtuk biztonságosan megerősíteni. Ellenőrizze a böngésző tárhelyét és a kosármennyiségeket, majd töltse újra az oldalt, és ellenőrizze mindkét listát.",
@@ -20,6 +28,10 @@ export const favoriteLabels = {
     reset: "Mentett termékek alaphelyzetbe állítása", limit: "Legfeljebb 100 terméket menthet.",
   },
   ko: {
+    searchSaved: "저장한 상품에서 검색", savedBrand: "저장한 상품 브랜드", allSavedBrands: "저장한 모든 브랜드",
+    sortSaved: "저장한 상품 정렬", savedOrder: "저장 순서", nameAscending: "이름 오름차순", nameDescending: "이름 내림차순",
+    resetView: "보기 초기화", matches: "조건에 맞는 저장 상품", noMatches: "현재 보기 조건에 맞는 저장 상품이 없습니다.",
+    compareSelected: "선택한 두 상품 비교", inBrowserCart: "브라우저 장바구니에 담긴 수량",
     select: "저장한 상품 선택", selectedCount: "선택한 저장 상품", addSelected: "선택한 상품을 장바구니에 담기 (각 1개)", removeSelected: "선택한 저장 상품 해제",
     bulkAdded: "선택한 상품을 각각 1개씩 저장된 장바구니에 추가했습니다.", bulkRemoved: "선택한 저장 상품을 해제했습니다.",
     bulkChanged: "선택 내역이 변경되었습니다. 새로고침한 뒤 상품을 다시 선택해 주세요.", bulkFailed: "변경사항을 안전하게 확인할 수 없습니다. 브라우저 저장소와 장바구니 수량을 확인한 뒤 새로고침하여 두 목록을 확인해 주세요.",

@@ -53,6 +53,10 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
     publicId: product.publicId, slug: product.slug,
     name: product.translations[locale]?.name ?? `${labels.details}: ${product.brand} (${product.slug})`,
   }));
+  const savedProducts = comparison.map(product => ({
+    publicId: product.publicId, slug: product.slug, brand: product.brand,
+    name: product.name ?? `${labels.details}: ${product.brand} (${product.slug})`,
+  }));
   const listingHref = storefrontHref("/products", routeLocale);
   const appliedCriteria = [
     ...(criteria.query ? [{ key: "q", label: `${labels.searchProducts}: ${criteria.query}`,
@@ -68,7 +72,7 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
   return (
     <Container className="pb-20 pt-32 sm:pt-36">
       <h1 id="main-content" tabIndex={-1} className="text-4xl font-light text-hanapure-text sm:text-5xl">{labels.heading}</h1>
-      <SavedProductsBar locale={locale} routeLocale={routeLocale} products={quickProducts} />
+      <SavedProductsBar locale={locale} routeLocale={routeLocale} products={savedProducts} comparisonProducts={comparison} />
       <RecentlyViewedProducts locale={locale} routeLocale={routeLocale} products={quickProducts} />
       <form key={JSON.stringify([locale, criteria.query, criteria.brand, criteria.sort])}
         action={listingHref} method="get" autoComplete="off" role="search" aria-label={labels.searchProducts}

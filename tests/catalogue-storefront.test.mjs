@@ -299,7 +299,7 @@ test("recent quick return reuses only the full public locale projection and reco
     assert.deepEqual(Object.keys(bar.props).sort(), ["locale", "products", "routeLocale"]);
     assert.equal(bar.props.locale, locale);
     assert.equal(bar.props.routeLocale, routeLocale);
-    assert.strictEqual(bar.props.products, nodes.find(node => node.type === SavedProductsBar).props.products);
+    assert.deepEqual(bar.props.products, nodes.find(node => node.type === SavedProductsBar).props.products.map(({ publicId, slug, name }) => ({ publicId, slug, name })));
     assert.deepEqual(bar.props.products.map(item => item.publicId), [first.publicId, second.publicId]);
     assert.deepEqual(bar.props.products.map(item => Object.keys(item).sort()), [
       ["name", "publicId", "slug"], ["name", "publicId", "slug"],
@@ -511,12 +511,14 @@ test("Saved controls use only published identity and the full minimal locale pro
       criteria: { query: "", brand: "beplain", sort: "name-desc" } }));
     const bar = nodes.find(node => node.type === SavedProductsBar);
     assert.equal(nodes.filter(node => node.type === SavedProductsBar).length, 1);
-    assert.deepEqual(Object.keys(bar.props).sort(), ["locale", "products", "routeLocale"]);
+    assert.deepEqual(Object.keys(bar.props).sort(), ["comparisonProducts", "locale", "products", "routeLocale"]);
+    assert.deepEqual(bar.props.comparisonProducts, nodes.find(node => node.type === ProductComparison).props.products);
     assert.equal(bar.props.routeLocale, routeLocale);
     assert.equal(bar.props.locale, locale);
     assert.deepEqual(bar.props.products.map(item => item.publicId), [published.publicId, second.publicId]);
     for (const item of bar.props.products) {
-      assert.deepEqual(Object.keys(item).sort(), ["name", "publicId", "slug"]);
+      assert.deepEqual(Object.keys(item).sort(), ["brand", "name", "publicId", "slug"]);
+      assert.equal(item.brand, item.publicId === published.publicId ? published.brand : second.brand);
       assert.ok(locale === "en" ? item.name === "Fictional fixture" : item.name.includes(item.slug));
       if (locale !== "en") assert.ok(!item.name.includes("Fictional fixture"));
     }
@@ -574,8 +576,8 @@ test("saved published products reuse quantity-aware QuickAdd without unsaving, h
       const nodes = elements(ProductListing({ catalogue: reader(first, second, unsaved, draft), locale, routeLocale,
         criteria: { query: "no-match", brand: "Anua", sort: "name-desc" } }));
       const bar = nodes.find(node => node.type === SavedProductsBar);
-      assert.deepEqual(Object.keys(bar.props).sort(), ["locale", "products", "routeLocale"]);
-      assert.deepEqual(bar.props.products.map(item => Object.keys(item).sort()), Array(3).fill(["name", "publicId", "slug"]));
+      assert.deepEqual(Object.keys(bar.props).sort(), ["comparisonProducts", "locale", "products", "routeLocale"]);
+      assert.deepEqual(bar.props.products.map(item => Object.keys(item).sort()), Array(3).fill(["brand", "name", "publicId", "slug"]));
       assert.deepEqual(bar.props.products.map(item => item.publicId), [first.publicId, second.publicId, unsaved.publicId]);
       const searchForm = nodes.find(node => node.type === "form" && node.props.method === "get");
       assert.ok(searchForm);
@@ -604,7 +606,7 @@ test("saved published products reuse quantity-aware QuickAdd without unsaving, h
       assert.ok(!html.includes(unknown));
       assert.ok(html.includes(favoriteLabels[locale].addSelected));
       assert.ok(html.includes(favoriteLabels[locale].removeSelected));
-      assert.equal((html.match(/<button type="button" disabled=""/g) ?? []).length, 2);
+      assert.equal((html.match(/<button type="button" disabled=""/g) ?? []).length, 3);
       for (const bad of ["corrupt-test-only", serializeFavorites([]), null]) {
         stored = bad; refresh();
         const hidden = renderToStaticMarkup(bar);
