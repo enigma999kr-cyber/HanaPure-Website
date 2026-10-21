@@ -19,6 +19,7 @@ registerHooks({
     // React/Link for their element references; do not execute client hooks here.
     if (specifier === "react") return { url: reactEntry, shortCircuit: true };
     if (specifier === "react/jsx-runtime") return { url: jsxEntry, shortCircuit: true };
+    if (specifier === "react-dom") return { url: pathToFileURL(join(dirname(require.resolve("react-dom/package.json")), "index.js")).href, shortCircuit: true };
     if (specifier === "next/link") return nextResolve("next/link.js", context);
     if (specifier === "next/navigation") return nextResolve("next/dist/client/components/navigation.react-server.js", context);
     if (specifier.startsWith("@/")) specifier = pathToFileURL(join(repo, specifier.slice(2))).href;
@@ -248,6 +249,42 @@ test("Quick Add receives published editorial identity only and respects missing-
     assert.equal(nodes.find(node => node.type === "li").props.children.some(child => child?.type === QuickAdd), true);
   }
   assert.equal(elements(ProductListing()).filter(node => node.type === QuickAdd).length, 0);
+});
+
+test("listing and comparison reuse localized native Quick Add quantity forms without exposing drafts", async () => {
+  const { createElement } = await import("react");
+  const { cartLabels } = await import("../lib/cart/labels.ts");
+  // Real React SSR only: this verifies initial markup, not hydrated event handling.
+  const { renderToStaticMarkup } = require(join(dirname(require.resolve("react-dom/package.json")), "server.node.js"));
+  const first = product();
+  const second = product({ publicId: "22345678-abcd-1234-abcd-123456789abc", slug: "second-quantity-fixture" });
+  const draft = product({ publicId: "32345678-abcd-1234-abcd-123456789abc", slug: "private-quantity-draft", state: "draft" });
+  for (const locale of ["en", "hu", "ko"]) {
+    const nodes = elements(ProductListing({ catalogue: reader(first, second, draft), locale, routeLocale: locale }));
+    const controls = nodes.filter(node => node.type === QuickAdd);
+    assert.deepEqual(controls.map(node => node.props.publicId), [first.publicId, second.publicId]);
+    const board = nodes.find(node => node.type === ProductComparison);
+    assert.deepEqual(board.props.products.map(item => item.publicId), [first.publicId, second.publicId]);
+    const boardHtml = renderToStaticMarkup(board);
+    assert.equal((boardHtml.match(/<form\b/g) ?? []).length, 2);
+    assert.ok(!boardHtml.includes(draft.slug));
+    for (const control of controls) {
+      assert.deepEqual(Object.keys(control.props).sort(), ["locale", "name", "publicId"]);
+      const html = renderToStaticMarkup(createElement(QuickAdd, control.props));
+      for (const markup of [html, boardHtml]) {
+        assert.ok(markup.includes(`${cartLabels[locale].quantity}: ${control.props.name}`));
+        assert.match(markup, /type="number" min="1" step="1" required=""[^>]*value="1"/);
+        assert.match(markup, /<button type="submit"[^>]*disabled=""/);
+        assert.match(markup, /min-h-11/);
+        assert.match(markup, /focus-visible:outline-2/);
+        assert.match(markup, /flex-wrap/);
+      }
+      assert.equal((html.match(/role="status"/g) ?? []).length, 1);
+      assert.equal((html.match(/<form\b/g) ?? []).length, 1);
+      const inputId = html.match(/<input id="([^"]+)"/)[1];
+      assert.ok(html.includes(`<label for="${inputId}"`));
+    }
+  }
 });
 
 test("same-brand detail discovery limits only other published identities and preserves original Back criteria", () => {
