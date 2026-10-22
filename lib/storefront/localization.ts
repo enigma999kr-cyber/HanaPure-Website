@@ -34,6 +34,13 @@ export function switchLocalePath(path: string, locale: EditorialLocale): string 
 
 export const storefrontLabels = {
   en: {
+    planSearch: "Search planned products", planBrand: "Planned product brand", planSort: "Plan display order", planOriginal: "Original plan order", planResetView: "Clear plan view",
+    planSelected: "Selected planned lines", planSelectDisplayed: "Select displayed planned lines", planClearSelection: "Clear planned-line selection", planSelectLine: "Select planned line",
+    planRemoveSelected: "Remove selected from plan", planBulkQuantity: "Quantity for selected planned lines", planSetSelected: "Set quantity for selected",
+    planMoveUp: "Move planned line up", planMoveDown: "Move planned line down", planReorderHint: "Clear search and filters and return to original order to move planned lines.",
+    planNewOnlyNotice: "Whole overlapping lines to remove / new lines to retain; quantities are not subtracted",
+    planNewOnly: "Create plan with only products not currently in Cart", planAllOverlap: "Every planned product is already in the cart. This action will not clear your plan. Use Clear plan only if that is intended.",
+    planCartResume: "Continue current cart as an editable shopping plan", planCartResumeFailed: "The complete saved cart cannot be continued safely as a plan. Check the public catalogue and browser storage, then reload.",
     planAddCollection: "Add selected products to shopping plan", planAddPair: "Add these compared products to my shopping plan",
     planChanged: "The selection or context changed. Review it and try again. Nothing was added to the plan.",
     planCopy: "Copy shopping plan link", planCopied: "Shopping plan link copied. This temporary URL does not synchronize browser carts or accounts.", planCopyFailed: "The complete shopping plan link could not be copied.",
@@ -73,6 +80,13 @@ export const storefrontLabels = {
     sortBy: "Sort by", defaultOrder: "Default order", nameAscending: "Name A–Z", nameDescending: "Name Z–A",
   },
   hu: {
+    planSearch: "Tervezett termékek keresése", planBrand: "Tervezett termék márkája", planSort: "Terv megjelenítési sorrendje", planOriginal: "A terv eredeti sorrendje", planResetView: "Tervnézet szűrőinek törlése",
+    planSelected: "Kiválasztott tervezett tételek", planSelectDisplayed: "Megjelenített tervezett tételek kiválasztása", planClearSelection: "Tervezett tételek kijelölésének törlése", planSelectLine: "Tervezett tétel kiválasztása",
+    planRemoveSelected: "Kiválasztott tételek eltávolítása a tervből", planBulkQuantity: "Kiválasztott tervezett tételek mennyisége", planSetSelected: "Kiválasztott tételek mennyiségének beállítása",
+    planMoveUp: "Tervezett tétel mozgatása felfelé", planMoveDown: "Tervezett tétel mozgatása lefelé", planReorderHint: "A tételek mozgatásához törölje a keresést és a szűrőket, és térjen vissza az eredeti sorrendhez.",
+    planNewOnlyNotice: "Eltávolítandó teljes átfedő tételek / megtartandó új tételek; nincs mennyiségi kivonás",
+    planNewOnly: "Terv létrehozása csak a kosárban még nem szereplő termékekkel", planAllOverlap: "Minden tervezett termék már a kosárban van. Ez a művelet nem üríti ki a tervet. Csak szándékosan használja a terv törlését.",
+    planCartResume: "Jelenlegi kosár folytatása szerkeszthető vásárlási tervként", planCartResumeFailed: "A teljes mentett kosár nem folytatható biztonságosan tervként. Ellenőrizze a nyilvános katalógust és a böngésző tárhelyét, majd töltse újra.",
     planAddCollection: "Kiválasztott termékek hozzáadása a vásárlási tervhez", planAddPair: "Az összehasonlított termékek hozzáadása a vásárlási tervemhez",
     planChanged: "A kiválasztás vagy a környezet megváltozott. Ellenőrizze, és próbálja újra. Semmit sem adtunk a tervhez.",
     planCopy: "Vásárlási terv hivatkozásának másolása", planCopied: "A vásárlási terv hivatkozását másoltuk. Ez az ideiglenes URL nem szinkronizál kosarakat vagy fiókokat.", planCopyFailed: "A teljes vásárlási terv hivatkozását nem sikerült másolni.",
@@ -112,6 +126,13 @@ export const storefrontLabels = {
     sortBy: "Rendezés", defaultOrder: "Alapértelmezett sorrend", nameAscending: "Név A–Z", nameDescending: "Név Z–A",
   },
   ko: {
+    planSearch: "계획한 상품 검색", planBrand: "계획한 상품 브랜드", planSort: "계획 표시 순서", planOriginal: "계획 원래 순서", planResetView: "계획 보기 초기화",
+    planSelected: "선택한 계획 항목", planSelectDisplayed: "표시된 계획 항목 선택", planClearSelection: "계획 항목 선택 해제", planSelectLine: "계획 항목 선택",
+    planRemoveSelected: "선택 항목을 계획에서 제거", planBulkQuantity: "선택한 계획 항목 수량", planSetSelected: "선택 항목 수량 설정",
+    planMoveUp: "계획 항목 위로 이동", planMoveDown: "계획 항목 아래로 이동", planReorderHint: "계획 항목을 이동하려면 검색과 필터를 지우고 원래 순서로 돌아가 주세요.",
+    planNewOnlyNotice: "제거할 중복 전체 항목 / 유지할 새 항목 수입니다. 수량을 차감하지 않습니다",
+    planNewOnly: "현재 장바구니에 없는 상품만 담은 계획 만들기", planAllOverlap: "계획한 모든 상품이 이미 장바구니에 있습니다. 이 동작으로 계획을 비우지 않습니다. 의도한 경우에만 계획 비우기를 사용해 주세요.",
+    planCartResume: "현재 장바구니를 편집 가능한 쇼핑 계획으로 이어가기", planCartResumeFailed: "저장된 장바구니 전체를 계획으로 안전하게 이어갈 수 없습니다. 공개 카탈로그와 브라우저 저장소를 확인하고 새로고침해 주세요.",
     planAddCollection: "선택한 상품을 쇼핑 계획에 담기", planAddPair: "비교 중인 두 상품을 내 쇼핑 계획에 담기",
     planChanged: "선택 항목이나 탐색 상태가 바뀌었습니다. 확인 후 다시 시도해 주세요. 계획에 추가하지 않았습니다.",
     planCopy: "쇼핑 계획 링크 복사", planCopied: "쇼핑 계획 링크를 복사했습니다. 이 임시 URL은 브라우저 장바구니나 계정을 동기화하지 않습니다.", planCopyFailed: "전체 쇼핑 계획 링크를 복사하지 못했습니다.",

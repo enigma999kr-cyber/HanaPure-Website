@@ -6,6 +6,9 @@ import { storefrontHref, storefrontLabels } from "@/lib/storefront/localization"
 import { addPlanProducts, setPlanQuantity, shoppingPlanHref, shoppingPlanCartHref, planIntakeHref, shoppingPlanShareLink, type PlanIntakeContext, type ShoppingPlan, type PlanChange } from "@/lib/catalog/catalogue-shopping-plan";
 import { resolvePortableLines } from "@/lib/cart/cart-portable-handoff";
 import { validCartId, type CartLine } from "@/lib/cart/cart-state";
+import { useBrowserCart } from "@/lib/cart/browser-cart";
+import { cartDraftImpact } from "@/lib/cart/cart-draft-impact";
+import { plannedReview, changePlannedLines, readFreshPlanCart, EMPTY_PLAN_VIEW, type PlanReviewView } from "@/lib/catalog/shopping-plan-workspace";
 
 export type PlanProduct = Readonly<{ publicId: string; slug: string; brand: string; name: string | null }>;
 const control = "min-h-11 max-w-full break-words rounded-xl border border-hanapure-border px-4 py-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text disabled:opacity-50";
@@ -42,6 +45,28 @@ export default function CatalogueShoppingPlan({ plan, products, publishedIds, vi
   const [message, setMessage] = useState("");
   const pending = useRef(false);
   const currentHref = valid ? shoppingPlanHref(path, query, plan.lines) : null;
+  const ready = useSyncExternalStore(subscribeReady, clientReady, serverReady);
+  const cart = useBrowserCart();
+  const [view, setView] = useState<PlanReviewView>(EMPTY_PLAN_VIEW);
+  const review = plannedReview(valid ? plan : { status: "invalid", lines: [] }, products, locale, view);
+  const reviewWitness = JSON.stringify([path, query, plan, products, publishedIds, locale, view]);
+  const [checked, setChecked] = useState<{ witness: string; ids: readonly string[] }>({ witness: reviewWitness, ids: [] });
+  const checkedIds = checked.witness === reviewWitness ? checked.ids.filter(id => review.rows.some(row => row.line.publicId === id)) : [];
+  const [bulkDraft, setBulkDraft] = useState("1");
+  const fresh = valid && plan.status === "ready" ? readFreshPlanCart(cart) : null;
+  const impact = fresh && plan.status === "ready" ? cartDraftImpact(fresh, plan.lines, publicProducts) : null;
+  const fullOrder = !view.query && !view.brand && view.sort === "order";
+  const attempt = { reviewWitness, cart };
+  const active = useRef<{ attempt: typeof attempt; location: string } | null>(null);
+  useEffect(() => { active.current = { attempt, location: typeof window === "undefined" ? "" : window.location.href }; return () => { active.current = null; }; });
+  function currentWorkspace() {
+    return ready && valid && currentHref && active.current?.attempt === attempt && active.current.location === window.location.href;
+  }
+  function bulk(action: Parameters<typeof changePlannedLines>[4], ids = checkedIds) {
+    if (!currentWorkspace()) return;
+    change(changePlannedLines(plan, ids, review.rows.map(row => row.line.publicId), publicProducts, action));
+  }
+  function changeView(next: PlanReviewView) { setView(next); setChecked({ witness: "", ids: [] }); }
   function navigate(next: readonly CartLine[]) {
     const href = shoppingPlanHref(path, query, next);
     if (!href || !currentHref) { setMessage(labels.planLimit); return; }
@@ -78,22 +103,76 @@ export default function CatalogueShoppingPlan({ plan, products, publishedIds, vi
             onClick={() => change(addPlanProducts(plan, visibleIds.filter(id => ids.includes(id)), visibleIds, publicProducts))}>{labels.planAddSelected}</button>
         </div>}
         <p className="mt-4 break-words text-sm">{labels.planLines}: {plan.lines.length} · {labels.planUnits}: {plan.lines.reduce((sum, line) => sum + BigInt(line.quantity), BigInt(0)).toString()}</p>
+        {plan.status === "ready" && <div className="mt-4 min-w-0 space-y-3">
+          <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+            <label className="min-w-0 break-words">{labels.planSearch}<input type="search" maxLength={200} value={view.query} className={`${control} mt-2 w-full`}
+              onChange={event => changeView({ ...view, query: event.target.value.slice(0, 200) })} /></label>
+            <label className="min-w-0 break-words">{labels.planBrand}<select value={view.brand} className={`${control} mt-2 w-full`} onChange={event => changeView({ ...view, brand: event.target.value })}>
+              <option value="">{labels.allBrands}</option>{review.brands.map(brand => <option key={brand} value={brand}>{brand}</option>)}</select></label>
+            <label className="min-w-0 break-words">{labels.planSort}<select value={view.sort} className={`${control} mt-2 w-full`} onChange={event => changeView({ ...view, sort: event.target.value === "name" ? "name" : event.target.value === "brand" ? "brand" : "order" })}>
+              <option value="order">{labels.planOriginal}</option><option value="name">{labels.nameAscending}</option><option value="brand">{labels.planBrand}</option></select></label>
+            <button type="button" className={control} onClick={() => changeView(EMPTY_PLAN_VIEW)}>{labels.planResetView}</button>
+          </div>
+          <p role="status" className="break-words text-sm">{labels.visibleResults}: {review.rows.length} / {review.total} · {labels.planSelected}: {checkedIds.length}</p>
+          <div className="flex min-w-0 flex-wrap gap-3">
+            <button type="button" className={control} disabled={!ready || !review.rows.length} onClick={() => { if (currentWorkspace()) setChecked({ witness: reviewWitness, ids: review.rows.map(row => row.line.publicId) }); }}>{labels.planSelectDisplayed}</button>
+            <button type="button" className={control} disabled={!checkedIds.length} onClick={() => setChecked({ witness: reviewWitness, ids: [] })}>{labels.planClearSelection}</button>
+            <button type="button" className={control} disabled={!ready || !checkedIds.length || !currentHref} onClick={() => bulk({ kind: "remove" })}>{labels.planRemoveSelected} ({checkedIds.length})</button>
+          </div>
+          <form className="flex min-w-0 flex-wrap items-end gap-3" onSubmit={event => { event.preventDefault(); bulk({ kind: "set", raw: bulkDraft }); }}>
+            <label className="min-w-0 break-words">{labels.planBulkQuantity}<input type="number" min="1" step="1" required value={bulkDraft} disabled={!ready}
+              className={`${control} mt-2 block w-28`} onChange={event => setBulkDraft(event.target.value)} /></label>
+            <button type="submit" className={control} disabled={!ready || !checkedIds.length || !currentHref}>{labels.planSetSelected}</button>
+          </form>
+          {!fullOrder && <p className="break-words text-sm">{labels.planReorderHint}</p>}
+          <section aria-label={labels.planImpact} className="min-w-0 break-words text-sm">
+            <h3>{labels.planImpact}</h3>
+            {impact?.status === "ready" ? <>
+              <p>{labels.planExistingLines}: {impact.existingLines} · {labels.planNewLines}: {impact.newLines} · {labels.planImpactUnits}: {impact.units}</p>
+              <p>{labels.planNewOnlyNotice}: {impact.existingLines} / {impact.newLines}</p>
+              <button type="button" className={`${control} mt-3`} disabled={!ready || !currentHref || !impact.existingLines || !impact.newLines} onClick={() => {
+                if (!currentWorkspace() || !fresh || impact.status !== "ready") return;
+                const latest = readFreshPlanCart(cart);
+                if (!latest || latest !== fresh) { setMessage(labels.planImpactUnsafe); return; }
+                const checkedImpact = cartDraftImpact(latest, plan.lines, publicProducts);
+                if (checkedImpact.status !== "ready" || !checkedImpact.newLines || !checkedImpact.existingLines) { setMessage(labels.planImpactUnsafe); return; }
+                const next = plan.lines.filter(line => !latest.some(item => item.publicId.toLowerCase() === line.publicId));
+                if (!readFreshPlanCart(cart) || !currentWorkspace()) { setMessage(labels.planImpactUnsafe); return; }
+                navigate(next);
+              }}>{labels.planNewOnly}</button>
+              {!impact.newLines && <p role="status">{labels.planAllOverlap}</p>}
+            </> : <p role="status">{labels.planImpactUnsafe}</p>}
+          </section>
+        </div>}
         {plan.status === "empty" ? <p className="mt-3 break-words">{labels.planEmpty}</p> : <ul className="mt-4 min-w-0 space-y-5">
-          {resolved?.map((product, index) => {
-            const line = plan.lines[index], name = product.name ?? labels.details;
+          {review.rows.map(({ product, line, index }) => {
+            const name = product.name ?? labels.details;
             const detailQuery = new URLSearchParams(query);
             detailQuery.delete("pickFirst"); detailQuery.set("page", detailQuery.get("page") ?? "1");
             const detailHref = shoppingPlanHref(storefrontHref(`/products/${product.slug}`, routeLocale), `?${detailQuery}`, plan.lines);
             return <li key={line.publicId} className="min-w-0 break-words">
+              <label className="flex min-h-11 items-center gap-3 break-words"><input type="checkbox" disabled={!ready} checked={checkedIds.includes(line.publicId)} className="h-5 w-5 shrink-0 accent-hanapure-text focus-visible:outline-2 focus-visible:outline-offset-2"
+                onChange={event => {
+                  const enabled = event.target.checked;
+                  if (currentWorkspace()) setChecked(previous => {
+                    const ids = previous.witness === reviewWitness ? previous.ids.filter(id => id !== line.publicId && review.rows.some(row => row.line.publicId === id)) : [];
+                    return { witness: reviewWitness, ids: enabled ? [...ids, line.publicId] : ids };
+                  });
+                }} />{labels.planSelectLine}: {name}</label>
               <p className="text-sm">{product.brand}</p>
               {detailHref ? <a href={detailHref} className={`${control} inline-flex`}>{name}</a> : <p>{name}</p>}
               <p className="mt-2">{labels.planQuantity}: {line.quantity}</p>
+              {impact?.status === "ready" && <p className="mt-2 break-words text-sm">{labels.planCurrent}: {impact.rows[index].current ?? labels.planAbsent} · {labels.planIncoming}: {impact.rows[index].added} · {labels.planExpected}: {impact.rows[index].expected}</p>}
               <PlannedQuantity key={`${line.publicId}-${line.quantity}`} line={line} name={name} locale={locale} apply={raw => change(setPlanQuantity(plan, line.publicId, raw, publicProducts))} />
               <button type="button" className={`${control} mt-3`} aria-label={`${labels.planRemove}: ${name}`}
                 onClick={() => navigate(plan.lines.filter(item => item.publicId !== line.publicId))}>{labels.planRemove}</button>
+              <div className="mt-3 flex min-w-0 flex-wrap gap-3">{([-1, 1] as const).map(direction => <button key={direction} type="button" className={control}
+                disabled={!ready || !fullOrder || (direction === -1 ? index === 0 : index === plan.lines.length - 1)} aria-label={`${direction === -1 ? labels.planMoveUp : labels.planMoveDown}: ${name}`}
+                onClick={() => { if (fullOrder) bulk({ kind: "move", direction }, [line.publicId]); }}>{direction === -1 ? labels.planMoveUp : labels.planMoveDown}</button>)}</div>
             </li>;
           })}
         </ul>}
+        {plan.status === "ready" && !review.rows.length && <p role="status" className="mt-3 break-words">{labels.noResults}</p>}
         {plan.status === "ready" && <div className="mt-5 flex min-w-0 flex-wrap gap-3">
           <a href={clear} className={control}>{labels.planClear}</a>
           {cartHref && <a href={cartHref} className={control}>{labels.planReviewCart}</a>}

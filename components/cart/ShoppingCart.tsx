@@ -26,6 +26,7 @@ import { cartRowId, cartRowFromHash } from "@/lib/cart/quick-add-continuity";
 import { portableCartLink, readPortableLink, resolvePortableLines, planPortableMerge } from "@/lib/cart/cart-portable-handoff";
 import { shoppingPlanHref } from "@/lib/catalog/catalogue-shopping-plan";
 import { cartDraftImpact } from "@/lib/cart/cart-draft-impact";
+import { currentCartPlanHref } from "@/lib/catalog/shopping-plan-workspace";
 
 export type CartProduct = Readonly<{ publicId: string; slug: string; brand: string;
   names: Readonly<Record<EditorialLocale, string | null>>; image?: EditorialImage | null }>;
@@ -252,6 +253,9 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
   const favorites = useBrowserFavorites();
   const labels = cartLabels[locale];
   const [message, setMessage] = useState("");
+  const resumeWitness = { cart, products, locale, routeLocale };
+  const resumeLive = useRef<{ witness: typeof resumeWitness; href: string } | null>(null);
+  useEffect(() => { resumeLive.current = { witness: resumeWitness, href: portableLocation() }; return () => { resumeLive.current = null; }; });
   const [undo, setUndo] = useState<CartUndoPlan | null>(null);
   const [copying, setCopying] = useState(false);
   const [copyMessage, setCopyMessage] = useState("");
@@ -541,6 +545,15 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
         }
       }}>{labels.copyShoppingList}</button>
     <p role="status" className="mt-3 break-words text-sm text-hanapure-muted">{copyMessage}</p>
+    <button type="button" disabled={!cart.ready || !cart.persistent || cart.invalid || !cart.lines.length} className={`${cartControl} mt-4 max-w-full break-words disabled:opacity-50`}
+      onClick={() => {
+        if (resumeLive.current?.witness !== resumeWitness || resumeLive.current.href !== portableLocation()) return;
+        const fresh = readPortableSnapshot(cart);
+        const href = fresh.status === "ready" ? currentCartPlanHref(storefrontHref("/products", routeLocale), fresh.lines, products) : null;
+        if (!href || readPortableSnapshot(cart).status !== "ready" || resumeLive.current?.witness !== resumeWitness) { setMessage(storefrontLabels[locale].planCartResumeFailed); return; }
+        try { window.location.assign(href); }
+        catch { setMessage(storefrontLabels[locale].planCartResumeFailed); }
+      }}>{storefrontLabels[locale].planCartResume}</button>
     <PortableCartHandoff products={products} cart={cart} locale={locale} routeLocale={routeLocale}
       visiblePublicIds={viewReady ? view.rows.flatMap(row => row.product ? [row.line.publicId.toLowerCase()] : []) : []}
       onMerged={after => { setUndo(null); setChecked({ lines: after, ids: [] }); }}
