@@ -15,10 +15,13 @@ import { browserCartOverlap } from "@/lib/cart/cart-selection-summary";
 import ProductComparison from "./ProductComparison";
 import { savedShoppingList } from "@/lib/favorites/saved-shopping-list";
 import ProductImage from "./ProductImage";
+import { ShoppingPlanIntake } from "./CatalogueShoppingPlan";
+import type { PlanIntakeContext } from "@/lib/catalog/catalogue-shopping-plan";
 
-export default function SavedProductsBar({ products, comparisonProducts = [], locale, routeLocale }: {
+export default function SavedProductsBar({ products, comparisonProducts = [], locale, routeLocale, planContext }: {
   products: readonly (SavedViewProduct & Readonly<{ image?: EditorialImage | null }>)[]; comparisonProducts?: readonly ComparisonProduct[];
   locale: EditorialLocale; routeLocale: EditorialLocale | null;
+  planContext?: PlanIntakeContext;
 }) {
   const state = useBrowserFavorites();
   const labels = favoriteLabels[locale];
@@ -154,8 +157,11 @@ export default function SavedProductsBar({ products, comparisonProducts = [], lo
     </div>
     <p role="status" className="mt-2 break-words text-sm">{checked.ids.length > 0 && !coherent && !bulkMessage ? labels.bulkChanged : bulkMessage}</p>
     <p role="status" className="mt-2 break-words text-sm">{copyResult && sameCopyContext(copyResult.context, copyContext) ? copyResult.message : ""}</p>
+    <ShoppingPlanIntake context={planContext} locale={locale}
+      ids={selected.filter(product => checkedIds.some(id => id.toLowerCase() === product.publicId.toLowerCase())).map(product => product.publicId)}
+      guard={() => healthy && coherent && checkedIds.length > 0 && mutateBrowserFavorites(state.ids, before => before) === "unchanged"} />
     {activePair && <ProductComparison key={`${locale}:${activePair.map(product => product.publicId).join(":")}`} products={activePair}
-      locale={locale} routeLocale={routeLocale} initialPublicId={activePair[0].publicId} />}
+      locale={locale} routeLocale={routeLocale} initialPublicId={activePair[0].publicId} planContext={planContext} />}
     {state.invalid && <button type="button" onClick={() => resetBrowserFavorites()}
       className="mt-3 min-h-11 max-w-full break-words rounded-xl border border-hanapure-border px-4 py-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text">{labels.reset}</button>}
   </section>;

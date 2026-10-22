@@ -34,6 +34,12 @@ export function switchLocalePath(path: string, locale: EditorialLocale): string 
 
 export const storefrontLabels = {
   en: {
+    planAddCollection: "Add selected products to shopping plan", planAddPair: "Add these compared products to my shopping plan",
+    planChanged: "The selection or context changed. Review it and try again. Nothing was added to the plan.",
+    planCopy: "Copy shopping plan link", planCopied: "Shopping plan link copied. This temporary URL does not synchronize browser carts or accounts.", planCopyFailed: "The complete shopping plan link could not be copied.",
+    planImpact: "Possible merge impact — not yet saved", planCurrent: "Current stored quantity", planAbsent: "Not in cart", planIncoming: "Quantity to add", planExpected: "Expected quantity after merge",
+    planNewLines: "New lines", planExistingLines: "Existing lines", planImpactUnits: "Expected units in affected lines", planImpactUnsafe: "The merge impact cannot be checked safely. No result is confirmed.",
+    planEditDraft: "Edit this draft as a shopping plan", planReviewSaved: "Review quantities confirmed as saved", planReviewHidden: "Some affected items are hidden by the current cart view. Reset the view to review them.",
     planHeading: "Personal shopping plan", planNotice: "A temporary URL-only plan, not an order. Prices, stock, acceptance and fulfilment are not confirmed. Adding or editing here does not change your browser cart.",
     planAdd: "Add to shopping plan", planSelect: "Select for shopping plan", planPageSelection: "Selected on this visible page", planAddSelected: "Add selected page items to plan",
     planLines: "Planned products", planUnits: "Planned units", planQuantity: "Planned quantity", planSet: "Set planned quantity",
@@ -67,6 +73,12 @@ export const storefrontLabels = {
     sortBy: "Sort by", defaultOrder: "Default order", nameAscending: "Name A–Z", nameDescending: "Name Z–A",
   },
   hu: {
+    planAddCollection: "Kiválasztott termékek hozzáadása a vásárlási tervhez", planAddPair: "Az összehasonlított termékek hozzáadása a vásárlási tervemhez",
+    planChanged: "A kiválasztás vagy a környezet megváltozott. Ellenőrizze, és próbálja újra. Semmit sem adtunk a tervhez.",
+    planCopy: "Vásárlási terv hivatkozásának másolása", planCopied: "A vásárlási terv hivatkozását másoltuk. Ez az ideiglenes URL nem szinkronizál kosarakat vagy fiókokat.", planCopyFailed: "A teljes vásárlási terv hivatkozását nem sikerült másolni.",
+    planImpact: "Lehetséges összevonási hatás — még nincs mentve", planCurrent: "Jelenleg tárolt mennyiség", planAbsent: "Nincs a kosárban", planIncoming: "Hozzáadandó mennyiség", planExpected: "Várható mennyiség összevonás után",
+    planNewLines: "Új tételek", planExistingLines: "Meglévő tételek", planImpactUnits: "Az érintett tételek várható összmennyisége", planImpactUnsafe: "Az összevonás hatása nem ellenőrizhető biztonságosan. Az eredmény nem megerősített.",
+    planEditDraft: "Piszkozat szerkesztése vásárlási tervként", planReviewSaved: "A megerősítetten mentett mennyiségek áttekintése", planReviewHidden: "Néhány érintett tételt elrejt a kosár jelenlegi nézete. Áttekintésükhöz állítsa vissza a nézetet.",
     planHeading: "Személyes vásárlási terv", planNotice: "Ideiglenes, csak a hivatkozásban tárolt terv, nem rendelés. Az ár, készlet, elfogadás és teljesítés nem megerősített. Az itteni hozzáadás és szerkesztés nem módosítja a böngésző kosarát.",
     planAdd: "Hozzáadás a vásárlási tervhez", planSelect: "Kiválasztás a vásárlási tervhez", planPageSelection: "Kiválasztva ezen a látható oldalon", planAddSelected: "Kiválasztott oldaltételek hozzáadása a tervhez",
     planLines: "Tervezett termékek", planUnits: "Tervezett darabszám", planQuantity: "Tervezett mennyiség", planSet: "Tervezett mennyiség beállítása",
@@ -100,6 +112,12 @@ export const storefrontLabels = {
     sortBy: "Rendezés", defaultOrder: "Alapértelmezett sorrend", nameAscending: "Név A–Z", nameDescending: "Név Z–A",
   },
   ko: {
+    planAddCollection: "선택한 상품을 쇼핑 계획에 담기", planAddPair: "비교 중인 두 상품을 내 쇼핑 계획에 담기",
+    planChanged: "선택 항목이나 탐색 상태가 바뀌었습니다. 확인 후 다시 시도해 주세요. 계획에 추가하지 않았습니다.",
+    planCopy: "쇼핑 계획 링크 복사", planCopied: "쇼핑 계획 링크를 복사했습니다. 이 임시 URL은 브라우저 장바구니나 계정을 동기화하지 않습니다.", planCopyFailed: "전체 쇼핑 계획 링크를 복사하지 못했습니다.",
+    planImpact: "예상 합치기 결과 — 아직 저장되지 않음", planCurrent: "현재 저장 수량", planAbsent: "장바구니에 없음", planIncoming: "추가할 수량", planExpected: "합친 후 예상 수량",
+    planNewLines: "새 항목", planExistingLines: "기존 항목", planImpactUnits: "대상 항목의 예상 총수량", planImpactUnsafe: "합치기 결과를 안전하게 확인할 수 없습니다. 결과가 확정되지 않았습니다.",
+    planEditDraft: "이 초안을 쇼핑 계획으로 편집", planReviewSaved: "저장이 확인된 수량 검토", planReviewHidden: "일부 대상 항목이 현재 장바구니 보기에서 숨겨져 있습니다. 보기를 초기화하여 검토해 주세요.",
     planHeading: "개인 쇼핑 계획", planNotice: "URL에만 담긴 임시 계획이며 주문이 아닙니다. 가격, 재고, 주문 접수와 이행은 확정되지 않았습니다. 여기서 추가하거나 편집해도 브라우저 장바구니는 변경되지 않습니다.",
     planAdd: "쇼핑 계획에 추가", planSelect: "쇼핑 계획용 선택", planPageSelection: "현재 표시된 페이지에서 선택", planAddSelected: "선택한 페이지 상품을 계획에 추가",
     planLines: "계획한 상품 종류 수", planUnits: "계획한 총 수량", planQuantity: "계획 수량", planSet: "계획 수량 설정",

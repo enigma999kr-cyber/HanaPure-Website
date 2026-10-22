@@ -24,6 +24,8 @@ import { COMPARISON_DESTINATION, comparisonHref, publishedComparison } from "@/l
 import ProductImage from "@/components/catalogue/ProductImage";
 import { cartRowId, cartRowFromHash } from "@/lib/cart/quick-add-continuity";
 import { portableCartLink, readPortableLink, resolvePortableLines, planPortableMerge } from "@/lib/cart/cart-portable-handoff";
+import { shoppingPlanHref } from "@/lib/catalog/catalogue-shopping-plan";
+import { cartDraftImpact } from "@/lib/cart/cart-draft-impact";
 
 export type CartProduct = Readonly<{ publicId: string; slug: string; brand: string;
   names: Readonly<Record<EditorialLocale, string | null>>; image?: EditorialImage | null }>;
@@ -80,7 +82,8 @@ function mergePortableDraft(href: string, cart: DetailCartSnapshot, products: re
 }
 
 type PortableCartProps = Readonly<{ products: readonly CartProduct[]; cart: DetailCartSnapshot;
-  locale: EditorialLocale; routeLocale: EditorialLocale | null; onMerged: (after: readonly CartLine[]) => void; onUncertain: () => void }>;
+  locale: EditorialLocale; routeLocale: EditorialLocale | null; visiblePublicIds?: readonly string[];
+  onMerged: (after: readonly CartLine[]) => void; onUncertain: () => void }>;
 
 function PortableCartHandoff(props: PortableCartProps) {
   const href = useSyncExternalStore(subscribePortableLocation, portableLocation, portableServerLocation);
@@ -88,8 +91,9 @@ function PortableCartHandoff(props: PortableCartProps) {
   return <PortableCartPanel key={href.split("#")[0]} {...props} href={href} />;
 }
 
-function PortableCartPanel({ products, cart, locale, routeLocale, href, onMerged, onUncertain }: PortableCartProps & { href: string }) {
+function PortableCartPanel({ products, cart, locale, routeLocale, href, onMerged, onUncertain, visiblePublicIds = [] }: PortableCartProps & { href: string }) {
   const labels = cartLabels[locale], headingId = useId();
+  const planLabels = storefrontLabels[locale];
   const incoming = readPortableLink(href);
   const resolved = incoming.status === "ready" ? resolvePortableLines(incoming.lines, products) : null;
   const healthy = cart.ready && !cart.invalid && cart.persistent;
@@ -98,6 +102,15 @@ function PortableCartPanel({ products, cart, locale, routeLocale, href, onMerged
   const [copyFeedback, setCopyFeedback] = useState("");
   const [mergeFeedback, setMergeFeedback] = useState("");
   const [locked, setLocked] = useState(false);
+  const [mergedReview, setMergedReview] = useState<{ after: readonly CartLine[]; products: readonly CartProduct[];
+    locale: EditorialLocale; routeLocale: EditorialLocale | null; signature: string } | null>(null);
+  const fresh = healthy ? readPortableSnapshot(cart) : null;
+  const impact = !locked && incoming.status === "ready" && resolved && fresh?.status === "ready" ? cartDraftImpact(fresh.lines, incoming.lines, products) : null;
+  const editHref = !locked && incoming.status === "ready" && resolved ? shoppingPlanHref(storefrontHref("/products", routeLocale), "", incoming.lines) : null;
+  const reviewCurrent = mergedReview && healthy && incoming.status === "ready" && resolved &&
+    mergedReview.signature === incoming.signature && mergedReview.after === cart.lines && mergedReview.products === products &&
+    mergedReview.locale === locale && mergedReview.routeLocale === routeLocale && fresh?.status === "ready";
+  const reviewRows = reviewCurrent && incoming.status === "ready" ? incoming.lines.filter(line => visiblePublicIds.includes(line.publicId)) : [];
   const copyPending = useRef(false), confirmationUsed = useRef(false);
   const live = useRef<null | { cart: DetailCartSnapshot; products: readonly CartProduct[]; locale: EditorialLocale; routeLocale: EditorialLocale | null; href: string }>(null);
   useEffect(() => {
@@ -149,6 +162,18 @@ function PortableCartPanel({ products, cart, locale, routeLocale, href, onMerged
             {product.names[locale] ?? storefrontLabels[locale].details} — {labels.quantity}: {incoming.lines[index].quantity}
           </li>)}
         </ul>
+        {!locked && <section aria-label={planLabels.planImpact} className="mt-4 min-w-0 break-words text-sm">
+          <h4>{planLabels.planImpact}</h4>
+          {impact?.status === "ready" ? <>
+            <p>{planLabels.planNewLines}: {impact.newLines} · {planLabels.planExistingLines}: {impact.existingLines} · {planLabels.planImpactUnits}: {impact.units}</p>
+            <ul className="mt-3 min-w-0 space-y-3">{impact.rows.map((row, index) => <li key={row.publicId} className="min-w-0 break-words">
+              <p>{resolved[index].names[locale] ?? planLabels.details}</p>
+              <dl><div><dt>{planLabels.planCurrent}</dt><dd>{row.current ?? planLabels.planAbsent}</dd></div>
+                <div><dt>{planLabels.planIncoming}</dt><dd>{row.added}</dd></div><div><dt>{planLabels.planExpected}</dt><dd>{row.expected}</dd></div></dl>
+            </li>)}</ul>
+          </> : <p role="status">{planLabels.planImpactUnsafe}</p>}
+        </section>}
+        {editHref && <a href={editHref} className={`${cartControl} mt-4 inline-flex max-w-full break-words`}>{planLabels.planEditDraft}</a>}
         <button type="button" disabled={!healthy || locked} className={`${cartControl} mt-4 max-w-full whitespace-normal break-words disabled:opacity-50`}
           onClick={() => {
             if (!healthy || confirmationUsed.current) return;
@@ -158,7 +183,10 @@ function PortableCartPanel({ products, cart, locale, routeLocale, href, onMerged
               const current = live.current;
               return current !== null && current.products === products && current.href === href && current.locale === locale && current.routeLocale === routeLocale;
             });
-            if (result.status === "merged") { onMerged(result.after); setMergeFeedback(labels.portableMerged); }
+            if (result.status === "merged") {
+              setMergedReview({ after: result.after, products, locale, routeLocale, signature: incoming.signature });
+              onMerged(result.after); setMergeFeedback(labels.portableMerged);
+            }
             else {
               if (result.status === "write-failed" || result.status === "unavailable" || result.status === "conflict") onUncertain();
               setMergeFeedback(result.status === "overflow" ? labels.portableOverflow : result.status === "conflict" ? labels.portableConflict :
@@ -166,6 +194,14 @@ function PortableCartPanel({ products, cart, locale, routeLocale, href, onMerged
             }
           }}>{labels.portableMerge}</button>
         <p role="status" className="mt-3 break-words text-sm">{mergeFeedback}</p>
+        {reviewCurrent && incoming.status === "ready" && <nav aria-label={planLabels.planReviewSaved} className="mt-4 flex min-w-0 flex-wrap gap-3">
+          {reviewRows.map(line => {
+            const target = cartRowId(line.publicId), product = products.find(item => item.publicId.toLowerCase() === line.publicId);
+            return target && product ? <a key={line.publicId} href={`#${target}`} className={`${cartControl} max-w-full break-words`}>
+              {product.names[locale] ?? planLabels.details}</a> : null;
+          })}
+          {reviewRows.length < incoming.lines.length && <p role="status" className="w-full break-words text-sm">{planLabels.planReviewHidden}</p>}
+        </nav>}
       </>}
     </div>}
   </section>;
@@ -506,6 +542,7 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
       }}>{labels.copyShoppingList}</button>
     <p role="status" className="mt-3 break-words text-sm text-hanapure-muted">{copyMessage}</p>
     <PortableCartHandoff products={products} cart={cart} locale={locale} routeLocale={routeLocale}
+      visiblePublicIds={viewReady ? view.rows.flatMap(row => row.product ? [row.line.publicId.toLowerCase()] : []) : []}
       onMerged={after => { setUndo(null); setChecked({ lines: after, ids: [] }); }}
       onUncertain={() => { setUndo(null); setQuantityTrusted(false); }} />
     {undoAvailable && <button type="button" className={`${cartControl} mt-4`} onClick={() => {

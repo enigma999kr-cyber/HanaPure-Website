@@ -13,6 +13,8 @@ import { useBrowserFavorites } from "@/lib/favorites/browser-favorites";
 import { browserCartOverlap, savedProductOverlap } from "@/lib/cart/cart-selection-summary";
 import SaveProductButton from "./SaveProductButton";
 import ProductImage from "./ProductImage";
+import { ShoppingPlanIntake } from "./CatalogueShoppingPlan";
+import type { PlanIntakeContext } from "@/lib/catalog/catalogue-shopping-plan";
 
 /** Keyed to the current pair/context: obsolete asynchronous writes cannot announce success. */
 function CopyComparisonLink({ relativeHref, products, locale }: {
@@ -47,12 +49,13 @@ function CopyComparisonLink({ relativeHref, products, locale }: {
   </div>;
 }
 
-export default function ProductComparison({ products, locale, routeLocale, initialPublicId, initialSecondPublicId, destinationId, catalogueQuery = "" }: {
+export default function ProductComparison({ products, locale, routeLocale, initialPublicId, initialSecondPublicId, destinationId, catalogueQuery = "", planContext }: {
   products: readonly ComparisonProduct[]; locale: EditorialLocale; routeLocale: EditorialLocale | null;
   initialPublicId?: string;
   initialSecondPublicId?: string;
   destinationId?: string;
   catalogueQuery?: string;
+  planContext?: PlanIntakeContext;
 }) {
   const [selection, setSelection] = useState<readonly [string, string]>(() => [initialPublicId ?? "", initialSecondPublicId ?? ""]);
   const [focusedPair, setFocusedPair] = useState("");
@@ -101,6 +104,8 @@ export default function ProductComparison({ products, locale, routeLocale, initi
       className="mt-4 min-h-11 max-w-full break-words rounded-xl border border-hanapure-border px-4 py-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text"
       onClick={() => setFocusedPair(focused ? "" : pairKey)}>{focused ? labels.showAll : labels.focusDifferences}</button>
     {shareHref && <CopyComparisonLink key={`${locale}-${shareHref}`} relativeHref={`${shareHref}#${COMPARISON_DESTINATION}`} products={products} locale={locale} />}
+    <ShoppingPlanIntake context={planContext} ids={pair.map(product => product.publicId)} locale={locale} pair
+      guard={() => resolveComparison(products, pair[0].publicId, pair[1].publicId) !== null} />
     <p className="mt-4 break-words text-sm leading-6 text-hanapure-muted">{cartLabels[locale].notice}</p>
     <div className="mt-5 grid min-w-0 gap-4 md:grid-cols-2">
       {pair.map((product, slot) => <article key={product.publicId} id={`${id}-panel-${slot}`} tabIndex={-1} aria-labelledby={`${id}-panel-${slot}-heading`}

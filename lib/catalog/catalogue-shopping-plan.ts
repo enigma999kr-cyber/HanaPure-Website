@@ -6,6 +6,29 @@ export const SHOPPING_PLAN_PARAM = "cartPlan";
 type PublicIdentity = Readonly<{ publicId: string }>;
 export type ShoppingPlan = Readonly<{ status: "empty" | "invalid"; lines: readonly CartLine[] }> |
   Readonly<{ status: "ready"; lines: readonly CartLine[] }>;
+export type PlanIntakeContext = Readonly<{ plan: ShoppingPlan; path: string; query: string; publishedIds: readonly string[] }>;
+
+/** Cross-collection intake composes the existing plan validator and URL boundary. */
+export function planIntakeHref(context: PlanIntakeContext, ids: readonly string[]) {
+  const products = context.publishedIds.map(publicId => ({ publicId }));
+  if (new Set(context.publishedIds.map(id => id.toLowerCase())).size !== products.length ||
+    context.publishedIds.some(id => !validCartId(id))) return { status: "invalid" } as const;
+  const changed = addPlanProducts(context.plan, ids, ids, products);
+  if (changed.status !== "changed") return { status: changed.status } as const;
+  const href = shoppingPlanHref(context.path, context.query, changed.lines);
+  return href ? { status: "changed", href } as const : { status: "limit" } as const;
+}
+
+export function shoppingPlanShareLink(origin: string, context: PlanIntakeContext): string | null {
+  try {
+    const base = new URL(origin);
+    if (base.origin !== origin || !/^https?:$/.test(base.protocol) || context.plan.status !== "ready" ||
+      !resolvePortableLines(context.plan.lines, context.publishedIds.map(publicId => ({ publicId })))) return null;
+    const relative = shoppingPlanHref(context.path, context.query, context.plan.lines);
+    const href = relative && new URL(relative, origin).href;
+    return href && href.length <= MAX_PORTABLE_LINK ? href : null;
+  } catch { return null; }
+}
 
 /** Adapter to the CLOSED Cart protocol, not another parser or merge engine.
  * Loopback base is used only for pure URL parsing, never navigation or networking. */

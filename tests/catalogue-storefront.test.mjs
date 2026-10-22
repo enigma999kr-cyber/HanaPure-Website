@@ -301,7 +301,9 @@ test("recent quick return reuses only the full public locale projection and reco
     const nodes = elements(ProductListing({ catalogue, locale, routeLocale, criteria: { query: "no-match", brand: "beplain" } }));
     const bar = nodes.find(node => node.type === RecentlyViewedProducts);
     assert.equal(nodes.filter(node => node.type === RecentlyViewedProducts).length, 1);
-    assert.deepEqual(Object.keys(bar.props).sort(), ["comparisonProducts", "locale", "products", "routeLocale"]);
+    assert.deepEqual(Object.keys(bar.props).sort(), ["comparisonProducts", "locale", "planContext", "products", "routeLocale"]);
+    assert.deepEqual(bar.props.planContext.publishedIds, [first.publicId, second.publicId]);
+    assert.deepEqual(Object.keys(bar.props.planContext).sort(), ["path", "plan", "publishedIds", "query"]);
     assert.deepEqual(bar.props.comparisonProducts, nodes.find(node => node.type === ProductComparison).props.products);
     assert.equal(bar.props.locale, locale);
     assert.equal(bar.props.routeLocale, routeLocale);
@@ -475,7 +477,8 @@ test("comparison is published-only, independent of filtered results, localized a
       criteria: { query: "", brand: "beplain", sort: "name-desc" } }));
     const board = nodes.find(node => node.type === ProductComparison);
     assert.equal(nodes.filter(node => node.type === ProductComparison).length, 1);
-    assert.deepEqual(Object.keys(board.props).sort(), ["catalogueQuery", "destinationId", "initialPublicId", "initialSecondPublicId", "locale", "products", "routeLocale"]);
+    assert.deepEqual(Object.keys(board.props).sort(), ["catalogueQuery", "destinationId", "initialPublicId", "initialSecondPublicId", "locale", "planContext", "products", "routeLocale"]);
+    assert.deepEqual(board.props.planContext.publishedIds, [first.publicId, second.publicId]);
     assert.equal(board.props.locale, locale);
     assert.equal(board.props.routeLocale, routeLocale);
     assert.equal(board.props.products.length, 2);
@@ -518,7 +521,9 @@ test("Saved controls use only published identity and the full minimal locale pro
       criteria: { query: "", brand: "beplain", sort: "name-desc" } }));
     const bar = nodes.find(node => node.type === SavedProductsBar);
     assert.equal(nodes.filter(node => node.type === SavedProductsBar).length, 1);
-    assert.deepEqual(Object.keys(bar.props).sort(), ["comparisonProducts", "locale", "products", "routeLocale"]);
+    assert.deepEqual(Object.keys(bar.props).sort(), ["comparisonProducts", "locale", "planContext", "products", "routeLocale"]);
+    assert.deepEqual(bar.props.planContext.publishedIds, [published.publicId, second.publicId]);
+    assert.deepEqual(Object.keys(bar.props.planContext).sort(), ["path", "plan", "publishedIds", "query"]);
     assert.deepEqual(bar.props.comparisonProducts, nodes.find(node => node.type === ProductComparison).props.products);
     assert.equal(bar.props.routeLocale, routeLocale);
     assert.equal(bar.props.locale, locale);

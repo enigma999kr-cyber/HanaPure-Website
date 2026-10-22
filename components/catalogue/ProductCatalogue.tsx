@@ -96,6 +96,7 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
   const changedViewHref = (next: CatalogueCriteria, nextView = resetView) => withPlan(catalogueBrowseHref(listingHref, catalogueQueryString(next), nextView));
   const pageHref = (page: number) => withPlan(catalogueBrowseHref(listingHref, query, { ...view, page }));
   const planQuery = catalogueBrowseQuery(query, view) ?? query;
+  const planContext = { plan, path: listingHref, query: planQuery, publishedIds: catalogue.listPublished().map(product => product.publicId.toLowerCase()) };
   const planProducts = planProjection(comparison, [...products.map(product => product.publicId.toLowerCase()), ...plan.lines.map(line => line.publicId)]);
   const comparisonPair = publishedComparison(comparison, comparisonContext);
   const appliedCriteria = [
@@ -116,8 +117,8 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
   return (
     <Container className="pb-20 pt-32 sm:pt-36">
       <h1 id="main-content" tabIndex={-1} className="text-4xl font-light text-hanapure-text sm:text-5xl">{labels.heading}</h1>
-      <SavedProductsBar locale={locale} routeLocale={routeLocale} products={savedProducts} comparisonProducts={comparison} />
-      <RecentlyViewedProducts locale={locale} routeLocale={routeLocale} products={quickProducts} comparisonProducts={comparison} />
+      <SavedProductsBar locale={locale} routeLocale={routeLocale} products={savedProducts} comparisonProducts={comparison} planContext={planContext} />
+      <RecentlyViewedProducts locale={locale} routeLocale={routeLocale} products={quickProducts} comparisonProducts={comparison} planContext={planContext} />
       <ShoppingPlanSearchGuard path={listingHref} locale={locale}>
       <form key={JSON.stringify([locale, criteria.query, criteria.brand, criteria.sort, view.withLocaleInfo, view.withLocaleImage])}
         action={listingHref} method="get" autoComplete="off" role="search" aria-label={labels.searchProducts}
@@ -270,7 +271,7 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
       </CatalogueShoppingPlan>
       {comparison.length >= 2 && <ProductComparison key={`${locale}-${comparisonPair?.map(product => product.publicId).join("-") ?? "default"}-${catalogueQueryString(criteria)}`}
         products={comparison} locale={locale} routeLocale={routeLocale} initialPublicId={comparisonPair?.[0].publicId}
-        initialSecondPublicId={comparisonPair?.[1].publicId} catalogueQuery={catalogueQueryString(criteria)} destinationId={COMPARISON_DESTINATION} />}
+        initialSecondPublicId={comparisonPair?.[1].publicId} catalogueQuery={catalogueQueryString(criteria)} destinationId={COMPARISON_DESTINATION} planContext={planContext} />}
     </Container>
   );
 }
@@ -398,7 +399,9 @@ export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en",
         </ul>
       </section>}
       {hasComparison && <ProductComparison key={`${product.publicId}-${locale}`} products={comparison}
-        locale={locale} routeLocale={routeLocale} initialPublicId={product.publicId} catalogueQuery={catalogueQueryString(criteria)} destinationId="product-comparison" />}
+        locale={locale} routeLocale={routeLocale} initialPublicId={product.publicId} catalogueQuery={catalogueQueryString(criteria)} destinationId="product-comparison"
+        planContext={{ plan, path: storefrontHref("/products", routeLocale), query: catalogueBrowseQuery(browseQuery, cleanView, positioned) ?? browseQuery,
+          publishedIds: catalogue.listPublished().map(item => item.publicId.toLowerCase()) }} />}
     </Container>
   );
 }

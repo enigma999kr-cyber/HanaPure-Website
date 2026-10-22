@@ -1,9 +1,9 @@
 "use client";
 
-import { createContext, useContext, useId, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
 import { storefrontHref, storefrontLabels } from "@/lib/storefront/localization";
-import { addPlanProducts, setPlanQuantity, shoppingPlanHref, shoppingPlanCartHref, type ShoppingPlan, type PlanChange } from "@/lib/catalog/catalogue-shopping-plan";
+import { addPlanProducts, setPlanQuantity, shoppingPlanHref, shoppingPlanCartHref, planIntakeHref, shoppingPlanShareLink, type PlanIntakeContext, type ShoppingPlan, type PlanChange } from "@/lib/catalog/catalogue-shopping-plan";
 import { resolvePortableLines } from "@/lib/cart/cart-portable-handoff";
 import { validCartId, type CartLine } from "@/lib/cart/cart-state";
 
@@ -97,11 +97,69 @@ export default function CatalogueShoppingPlan({ plan, products, publishedIds, vi
         {plan.status === "ready" && <div className="mt-5 flex min-w-0 flex-wrap gap-3">
           <a href={clear} className={control}>{labels.planClear}</a>
           {cartHref && <a href={cartHref} className={control}>{labels.planReviewCart}</a>}
+          <CopyShoppingPlan key={`${witness}:${locale}`} context={{ plan, publishedIds, path: listingPath, query }} locale={locale} />
         </div>}
       </>}
       <p role="status" className="mt-3 break-words text-sm">{message}</p>
     </section>
   </PlanContext.Provider>;
+}
+
+/** Separate explicit action; no Cart/Favorites/Recent mutation or provider dependency. */
+export function ShoppingPlanIntake({ context, ids, guard, locale, pair = false }: {
+  context?: PlanIntakeContext; ids: readonly string[]; guard: () => boolean; locale: EditorialLocale; pair?: boolean;
+}) {
+  const labels = storefrontLabels[locale], ready = useSyncExternalStore(subscribeReady, clientReady, serverReady);
+  const [message, setMessage] = useState("");
+  const pending = useRef(false);
+  const witness = { context, ids, guard, locale };
+  const live = useRef<{ witness: typeof witness; location: string } | null>(null);
+  useEffect(() => { live.current = { witness, location: typeof window === "undefined" ? "" : window.location.href }; return () => { live.current = null; }; });
+  if (!context) return null;
+  return <div className="mt-3 min-w-0">
+    <button type="button" className={control} disabled={!ready || !ids.length || context.plan.status === "invalid"}
+      onClick={() => {
+        if (!ready || pending.current || live.current?.witness !== witness || live.current.location !== window.location.href) return;
+        try {
+          if (!guard()) { setMessage(labels.planChanged); return; }
+          const result = planIntakeHref(context, ids);
+          if (result.status !== "changed") { setMessage(result.status === "unchanged" ? labels.planUnchanged : result.status === "limit" ? labels.planLimit : labels.planInvalid); return; }
+          if (live.current?.witness !== witness || live.current.location !== window.location.href || !guard()) { setMessage(labels.planChanged); return; }
+          pending.current = true;
+          window.location.assign(result.href);
+        } catch { pending.current = false; setMessage(labels.planChanged); }
+      }}>{pair ? labels.planAddPair : labels.planAddCollection}</button>
+    <p role="status" className="mt-2 break-words text-sm">{message}</p>
+  </div>;
+}
+
+function CopyShoppingPlan({ context, locale }: { context: PlanIntakeContext; locale: EditorialLocale }) {
+  const labels = storefrontLabels[locale];
+  const [copying, setCopying] = useState(false), [result, setResult] = useState<{ witness: string; message: string } | null>(null);
+  const witness = JSON.stringify([context, locale]);
+  const owner = useRef<{ witness: string; active: boolean; generation: number }>({ witness, active: false, generation: 0 });
+  const pending = useRef(false);
+  useEffect(() => {
+    const current = owner.current; current.witness = witness; current.active = true; current.generation++;
+    return () => { current.active = false; current.generation++; };
+  }, [witness]);
+  return <div className="min-w-0">
+    <button type="button" disabled={copying} className={control} onClick={async () => {
+      if (pending.current || !owner.current.active || owner.current.witness !== witness) return;
+      const generation = owner.current.generation, location = window.location.href;
+      const current = () => owner.current.active && owner.current.generation === generation && owner.current.witness === witness && window.location.href === location;
+      const href = shoppingPlanShareLink(window.location.origin, context);
+      if (!href) { setResult({ witness, message: labels.planCopyFailed }); return; }
+      pending.current = true; setCopying(true); setResult(null);
+      try {
+        if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+        await navigator.clipboard.writeText(href);
+        if (current() && shoppingPlanShareLink(window.location.origin, context) === href) setResult({ witness, message: labels.planCopied });
+      } catch { if (current()) setResult({ witness, message: labels.planCopyFailed }); }
+      finally { pending.current = false; if (owner.current.active) setCopying(false); }
+    }}>{labels.planCopy}</button>
+    <p role="status" className="mt-2 break-words text-sm">{result?.witness === witness ? result.message : ""}</p>
+  </div>;
 }
 
 export function ShoppingPlanCardActions({ publicId }: { publicId: string }) {

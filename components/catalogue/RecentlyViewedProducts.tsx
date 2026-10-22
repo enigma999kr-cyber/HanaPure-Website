@@ -4,14 +4,16 @@ import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import type { EditorialImage, EditorialLocale } from "@/lib/catalog/editorial-catalogue";
 import { storefrontHref } from "@/lib/storefront/localization";
-import { recentPublishedProducts } from "@/lib/recently-viewed/recent-state";
-import { useBrowserRecent, recordRecentVisit, clearBrowserRecent, removeBrowserRecent } from "@/lib/recently-viewed/browser-recent";
+import { recentPublishedProducts, inspectStoredRecent, RECENT_STORAGE_KEY } from "@/lib/recently-viewed/recent-state";
+import { useBrowserRecent, recordRecentVisit, clearBrowserRecent, removeBrowserRecent, getRecentSnapshot } from "@/lib/recently-viewed/browser-recent";
 import QuickAdd from "@/components/cart/QuickAdd";
 import SaveProductButton from "./SaveProductButton";
 import ProductComparison from "./ProductComparison";
 import type { ComparisonProduct } from "@/lib/comparison/compare-selection";
 import { recentComparisonPair } from "@/lib/recently-viewed/recent-comparison";
 import ProductImage from "./ProductImage";
+import { ShoppingPlanIntake } from "./CatalogueShoppingPlan";
+import type { PlanIntakeContext } from "@/lib/catalog/catalogue-shopping-plan";
 
 export const recentlyViewedLabels = {
   en: {
@@ -46,10 +48,11 @@ export function ProductVisitTracker({ publicId }: { publicId: string }) {
   return null;
 }
 
-export default function RecentlyViewedProducts({ products, comparisonProducts = [], locale, routeLocale }: {
+export default function RecentlyViewedProducts({ products, comparisonProducts = [], locale, routeLocale, planContext }: {
   products: readonly Readonly<{ publicId: string; slug: string; name: string; image?: EditorialImage | null }>[];
   comparisonProducts?: readonly ComparisonProduct[];
   locale: EditorialLocale; routeLocale: EditorialLocale | null;
+  planContext?: PlanIntakeContext;
 }) {
   const state = useBrowserRecent();
   const id = useId();
@@ -114,7 +117,16 @@ export default function RecentlyViewedProducts({ products, comparisonProducts = 
         if (pair) setRequest({ baseline: state.ids, selection: checked.ids, products, comparisonProducts, locale });
       }}>{labels.compareSelected}</button>}
     {activePair && <ProductComparison key={`${locale}:${activePair.map(product => product.publicId).join(":")}`} products={activePair}
-      locale={locale} routeLocale={routeLocale} initialPublicId={activePair[0].publicId} />}
+      locale={locale} routeLocale={routeLocale} initialPublicId={activePair[0].publicId} planContext={planContext} />}
+    <ShoppingPlanIntake context={planContext} locale={locale}
+      ids={healthy && coherent ? selected.filter(product => checked.ids.some(id => id.toLowerCase() === product.publicId.toLowerCase())).map(product => product.publicId) : []}
+      guard={() => {
+        if (!healthy || !coherent || !checked.ids.length || getRecentSnapshot() !== state) return false;
+        try {
+          const fresh = inspectStoredRecent(window.localStorage.getItem(RECENT_STORAGE_KEY));
+          return !fresh.invalid && fresh.ids.length === state.ids.length && fresh.ids.every((id, index) => id === state.ids[index]);
+        } catch { return false; }
+      }} />
     <p role="status" className="mt-2 break-words text-sm">{removalMessage}</p>
     {(state.invalid || state.ids.length > 0) && <button type="button"
       className="mt-3 min-h-11 max-w-full break-words rounded-xl border border-hanapure-border px-4 py-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text"

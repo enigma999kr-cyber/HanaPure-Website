@@ -31,6 +31,8 @@ function subscribe(listener: () => void) {
 export function useBrowserRecent() {
   return useSyncExternalStore(subscribe, () => snapshot, () => serverSnapshot);
 }
+/** Read-only witness for explicit actions; does not read or change persisted history. */
+export function getRecentSnapshot() { return snapshot; }
 /** A successful write only; a repeated newest visit is a deliberate no-op. */
 export function recordRecentVisit(publicId: string): boolean {
   if (!validRecentId(publicId)) return false;

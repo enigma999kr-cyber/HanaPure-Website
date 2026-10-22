@@ -359,7 +359,8 @@ test("F4 stale incoming URL/projection/handler rejected before writes; a deliber
   cart(props("en", "en", [])); stale.props.onClick(); assert.deepEqual(writes, []);
   location.href = linkFor([{ publicId: other, quantity: 1 }]);
   let tree = cart(props()).panel;
-  assert.equal(nodes(tree).filter(node => node.type === "li").length, 1);
+  const incomingPreview = nodes(tree).find(node => node.type === "ul" && node.props["aria-label"] === cartLabels.en.portablePreview);
+  assert.equal(nodes(incomingPreview).filter(node => node.type === "li").length, 1);
   button(tree, cartLabels.en.portableMerge).props.onClick(); tree = cart(props()).panel;
   assert.ok(text(tree).includes(cartLabels.en.portableMerged)); assert.equal(writes.length, 1);
 }));
