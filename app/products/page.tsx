@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
-import { ProductListing } from "@/components/catalogue/ProductCatalogue";
-import { catalogueQueryString, readCatalogueCriteria, type CatalogueSearchParams } from "@/lib/catalog/catalogue-discovery";
+import { ProductListing, catalogueHeaderQuery } from "@/components/catalogue/ProductCatalogue";
+import { readCatalogueCriteria, type CatalogueSearchParams } from "@/lib/catalog/catalogue-discovery";
 import { listingMetadata } from "@/lib/storefront/seo";
 import { readComparisonContext } from "@/lib/comparison/compare-selection";
-import { readCatalogueBrowse, catalogueBrowseQuery } from "@/lib/catalog/catalogue-browse";
+import { readCatalogueBrowse } from "@/lib/catalog/catalogue-browse";
 
 export async function generateMetadata({ searchParams }: { searchParams: Promise<CatalogueSearchParams> }): Promise<Metadata> {
   return listingMetadata("en", await searchParams, { legacy: true });
@@ -15,10 +15,11 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
   const query = await searchParams;
   const criteria = readCatalogueCriteria(query);
   const browse = readCatalogueBrowse(query);
+  const headerQuery = catalogueHeaderQuery(criteria, browse, query.cartPlan);
   return (
     <><main className="min-h-screen bg-hanapure-warm-white text-hanapure-text">
-      <Header catalogueQuery={catalogueBrowseQuery(catalogueQueryString(criteria), { ...browse, pickFirst: undefined }) ?? ""} />
-      <ProductListing criteria={criteria} browse={browse} comparisonContext={readComparisonContext(query)} />
+      <Header catalogueQuery={headerQuery} />
+      <ProductListing criteria={criteria} browse={browse} planHint={query.cartPlan} comparisonContext={readComparisonContext(query)} />
     </main><Footer /></>
   );
 }

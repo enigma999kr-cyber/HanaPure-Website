@@ -2,6 +2,7 @@ import "server-only";
 
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import type { ComponentProps } from "react";
 import Container from "@/components/ui/Container";
 import ProductImage from "./ProductImage";
 import ProductMediaGallery from "./ProductMediaGallery";
@@ -22,7 +23,9 @@ import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
 import { storefrontHref, storefrontLabels } from "@/lib/storefront/localization";
 import { brandNames } from "@/data/brands";
 import { catalogueQueryString, discoverCatalogue, publishedCatalogueBrands, type CatalogueCriteria } from "@/lib/catalog/catalogue-discovery";
-import { catalogueBrowseHref, catalogueCardId, catalogueResultPage, readCatalogueBrowse, CATALOGUE_PAGE_SIZE, type CatalogueBrowse } from "@/lib/catalog/catalogue-browse";
+import { catalogueBrowseHref, catalogueBrowseQuery, catalogueCardId, catalogueResultPage, readCatalogueBrowse, CATALOGUE_PAGE_SIZE, type CatalogueBrowse } from "@/lib/catalog/catalogue-browse";
+import CatalogueShoppingPlan, { ShoppingPlanCardActions, ShoppingPlanSearchGuard, type PlanProduct } from "./CatalogueShoppingPlan";
+import { readShoppingPlan, carryShoppingPlan, shoppingPlanHref } from "@/lib/catalog/catalogue-shopping-plan";
 
 type CatalogueReader = typeof localCatalogue;
 function comparisonProjection(catalogue: CatalogueReader, locale: EditorialLocale): readonly ComparisonProduct[] {
@@ -34,15 +37,34 @@ function comparisonProjection(catalogue: CatalogueReader, locale: EditorialLocal
   });
 }
 const linkStyle = "inline-flex min-h-11 items-center text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-hanapure-text";
+function BrowseLink({ href, refusal, ...props }: Omit<ComponentProps<typeof Link>, "href"> & { href: string | null; refusal: string }) {
+  return href === null ? <span role="status" className="break-words text-sm">{refusal}</span> : <Link href={href} {...props} />;
+}
+/** The shell forwards only fully public, validated plan hints to language links. */
+export function catalogueHeaderQuery(criteria: CatalogueCriteria, browse: CatalogueBrowse, planHint: unknown, catalogue: CatalogueReader = localCatalogue, path = "/products") {
+  const query = catalogueBrowseQuery(catalogueQueryString(criteria), { ...browse, pickFirst: undefined });
+  if (query === null) return null;
+  const plan = readShoppingPlan(planHint, catalogue.listPublished());
+  const href = shoppingPlanHref(path, query, plan.lines);
+  // Reserve the longest locale prefix for all language-switch destinations.
+  return href === null || href.length + 4 > 8192 ? null : href.slice(path.length);
+}
+function planProjection(comparison: readonly ComparisonProduct[], ids: readonly string[]): readonly PlanProduct[] {
+  return comparison.filter(product => ids.includes(product.publicId.toLowerCase())).map(product => ({
+    publicId: product.publicId.toLowerCase(), slug: product.slug, brand: product.brand, name: product.name }));
+}
 
 /** Missing selected-locale content stays explicit. null retains legacy English URLs. */
 export function ProductListing({ catalogue = localCatalogue, locale = "en", routeLocale = null,
-  criteria = { query: "", brand: "" }, comparisonContext = {}, browse = readCatalogueBrowse() }: {
+  criteria = { query: "", brand: "" }, comparisonContext = {}, browse = readCatalogueBrowse(), planHint }: {
   catalogue?: CatalogueReader; locale?: EditorialLocale; routeLocale?: EditorialLocale | null;
   criteria?: CatalogueCriteria;
   comparisonContext?: ComparisonContext;
   browse?: CatalogueBrowse;
+  planHint?: unknown;
 } = {}) {
+  const plan = readShoppingPlan(planHint, catalogue.listPublished());
+  const withPlan = (href: string | null) => carryShoppingPlan(href, plan);
   const resultPage = catalogueResultPage(discoverCatalogue(catalogue, locale, criteria), locale, browse);
   const products = resultPage.items;
   const firstProduct = resultPage.total >= 2 ? resultPage.all.find(product => product.publicId.toLowerCase() === browse.pickFirst) : undefined;
@@ -71,8 +93,10 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
   }));
   const listingHref = storefrontHref("/products", routeLocale);
   const query = catalogueQueryString(criteria);
-  const changedViewHref = (next: CatalogueCriteria, nextView = resetView) => catalogueBrowseHref(listingHref, catalogueQueryString(next), nextView) ?? listingHref;
-  const pageHref = (page: number) => catalogueBrowseHref(listingHref, query, { ...view, page });
+  const changedViewHref = (next: CatalogueCriteria, nextView = resetView) => withPlan(catalogueBrowseHref(listingHref, catalogueQueryString(next), nextView));
+  const pageHref = (page: number) => withPlan(catalogueBrowseHref(listingHref, query, { ...view, page }));
+  const planQuery = catalogueBrowseQuery(query, view) ?? query;
+  const planProducts = planProjection(comparison, [...products.map(product => product.publicId.toLowerCase()), ...plan.lines.map(line => line.publicId)]);
   const comparisonPair = publishedComparison(comparison, comparisonContext);
   const appliedCriteria = [
     ...(criteria.query ? [{ key: "q", label: `${labels.searchProducts}: ${criteria.query}`,
@@ -94,12 +118,15 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
       <h1 id="main-content" tabIndex={-1} className="text-4xl font-light text-hanapure-text sm:text-5xl">{labels.heading}</h1>
       <SavedProductsBar locale={locale} routeLocale={routeLocale} products={savedProducts} comparisonProducts={comparison} />
       <RecentlyViewedProducts locale={locale} routeLocale={routeLocale} products={quickProducts} comparisonProducts={comparison} />
+      <ShoppingPlanSearchGuard path={listingHref} locale={locale}>
       <form key={JSON.stringify([locale, criteria.query, criteria.brand, criteria.sort, view.withLocaleInfo, view.withLocaleImage])}
         action={listingHref} method="get" autoComplete="off" role="search" aria-label={labels.searchProducts}
         className="mt-8 grid gap-4 rounded-2xl border border-hanapure-border bg-hanapure-white p-5 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
+        {plan.status === "ready" && <input type="hidden" name="cartPlan" value={new URLSearchParams(withPlan(listingHref)?.split("?")[1]).get("cartPlan") ?? ""} />}
         <div className="min-w-0">
           <label htmlFor="catalogue-search" className="mb-2 block text-sm font-medium">{labels.searchProducts}</label>
           <SearchSuggestions products={suggestions} initialQuery={criteria.query} locale={locale} routeLocale={routeLocale}
+            {...(plan.status === "ready" ? { plan } : {})}
             appliedCriteria={{ brand: criteria.brand, ...(criteria.sort ? { sort: criteria.sort } : {}) }}>
             <input id="catalogue-search" name="q" type="search" defaultValue={criteria.query} autoComplete="off"
               placeholder={labels.searchHint} className={`${controlStyle} scroll-mt-24`} />
@@ -131,14 +158,15 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
         </fieldset>
         <button type="submit" className="min-h-11 rounded-xl bg-hanapure-text px-5 py-3 text-hanapure-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text">{labels.apply}</button>
       </form>
+      </ShoppingPlanSearchGuard>
       {publishedBrands.length > 0 && <nav aria-labelledby="catalogue-brand-shortcuts" className="mt-6 min-w-0">
         <h2 id="catalogue-brand-shortcuts" className="break-words text-sm font-medium">{labels.quickBrands}</h2>
         <ul className="mt-3 flex min-w-0 flex-wrap gap-3">
           {publishedBrands.map(brand => <li key={brand} className="min-w-0 max-w-full">
-            <Link href={changedViewHref({ ...criteria, brand: criteria.brand === brand ? "" : brand })}
+            <BrowseLink refusal={labels.planLimit} href={changedViewHref({ ...criteria, brand: criteria.brand === brand ? "" : brand })}
               aria-current={criteria.brand === brand ? "true" : undefined}
               aria-label={criteria.brand === brand ? `${labels.removeFilter}: ${labels.filterBrand}: ${brand}` : undefined}
-              className={`${criterionLinkStyle} ${criteria.brand === brand ? "bg-hanapure-beige" : "bg-hanapure-white"}`}>{brand}</Link>
+              className={`${criterionLinkStyle} ${criteria.brand === brand ? "bg-hanapure-beige" : "bg-hanapure-white"}`}>{brand}</BrowseLink>
           </li>)}
         </ul>
       </nav>}
@@ -146,30 +174,33 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
         <h2 id="catalogue-active-filters" className="break-words text-sm font-medium">{labels.activeFilters}</h2>
         <ul className="mt-3 flex min-w-0 flex-wrap gap-3">
           {appliedCriteria.map(criterion => <li key={criterion.key} className="min-w-0 max-w-full">
-            <Link href={criterion.href} aria-label={`${labels.removeFilter}: ${criterion.label}`}
+            <BrowseLink refusal={labels.planLimit} href={criterion.href} aria-label={`${labels.removeFilter}: ${criterion.label}`}
               className={`${criterionLinkStyle} gap-2 bg-hanapure-warm-white`}>
               <span className="min-w-0 break-words">{criterion.label}</span><span aria-hidden="true">×</span>
-            </Link>
+            </BrowseLink>
           </li>)}
         </ul>
       </section>}
-      {appliedCriteria.length > 0 && !view.withLocaleInfo && !view.withLocaleImage && <CopySearchLink key={`${locale}-${catalogueQueryString(criteria)}`} locale={locale}
+      {appliedCriteria.length > 0 && plan.status !== "ready" && !view.withLocaleInfo && !view.withLocaleImage && <CopySearchLink key={`${locale}-${catalogueQueryString(criteria)}`} locale={locale}
         relativeHref={listingHref + catalogueQueryString(criteria)} />}
       <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2">
         <p role="status" className="text-sm text-hanapure-muted">{labels.results}: {resultPage.total}</p>
         <p className="break-words text-sm">{labels.visibleResults}: {resultPage.from}–{resultPage.to} / {resultPage.total}</p>
         {resultPage.total > 0 && <p className="break-words text-sm">{labels.resultPage}: {resultPage.page} / {resultPage.pages}</p>}
-        {(active || criteria.sort) && <Link href={listingHref} className={linkStyle}>{labels.clear}</Link>}
+        {(active || criteria.sort) && <BrowseLink refusal={labels.planLimit} href={withPlan(listingHref)} className={linkStyle}>{labels.clear}</BrowseLink>}
       </div>
       {resultPage.pages > 1 && <nav aria-label={labels.resultPages} className="mt-5 flex min-w-0 flex-wrap gap-4">
-        {resultPage.page > 1 && pageHref(resultPage.page - 1) && <Link rel="prev" href={pageHref(resultPage.page - 1)!} className={`${linkStyle} max-w-full break-words`}>{labels.previousPage}</Link>}
-        {resultPage.page < resultPage.pages && pageHref(resultPage.page + 1) && <Link rel="next" href={pageHref(resultPage.page + 1)!} className={`${linkStyle} max-w-full break-words`}>{labels.nextPage}</Link>}
+        {resultPage.page > 1 && <BrowseLink refusal={labels.planLimit} rel="prev" href={pageHref(resultPage.page - 1)} className={`${linkStyle} max-w-full break-words`}>{labels.previousPage}</BrowseLink>}
+        {resultPage.page < resultPage.pages && <BrowseLink refusal={labels.planLimit} rel="next" href={pageHref(resultPage.page + 1)} className={`${linkStyle} max-w-full break-words`}>{labels.nextPage}</BrowseLink>}
       </nav>}
       {firstProduct && <section aria-label={labels.crossPageComparison} className="mt-5 min-w-0 rounded-xl border border-hanapure-border p-4">
         <p role="status" className="break-words">{labels.firstResultSelected}: {firstProduct.translations[locale]?.name ?? labels.details}</p>
-        <Link href={catalogueBrowseHref(listingHref, query, { ...view, pickFirst: undefined }) ?? listingHref} className={`${linkStyle} max-w-full break-words`}>{labels.cancelFirstResult}</Link>
+        <BrowseLink refusal={labels.planLimit} href={withPlan(catalogueBrowseHref(listingHref, query, { ...view, pickFirst: undefined }))} className={`${linkStyle} max-w-full break-words`}>{labels.cancelFirstResult}</BrowseLink>
       </section>}
       {products.length > 0 && <p className="mt-4 text-sm leading-6 text-hanapure-muted">{cartLabels[locale].notice}</p>}
+      <CatalogueShoppingPlan key={JSON.stringify([locale, routeLocale, plan, view, criteria])} plan={plan} products={planProducts}
+        publishedIds={catalogue.listPublished().map(product => product.publicId.toLowerCase())} visibleIds={products.map(product => product.publicId.toLowerCase())}
+        locale={locale} routeLocale={routeLocale} path={listingHref} query={planQuery}>
       {products.length === 0 ? (
         <div className="mt-10 rounded-2xl border border-hanapure-border bg-hanapure-white p-6 sm:p-8">
           <h2 className="text-2xl font-light">{active ? labels.noResults : labels.empty}</h2>
@@ -184,30 +215,31 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
         <ul className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {products.map((product) => {
             const content = product.translations[locale];
-            const detailHref = catalogueBrowseHref(storefrontHref(`/products/${product.slug}`, routeLocale), query,
-              { ...view, pickFirst: undefined }, { forcePage: positioned }) ?? storefrontHref(`/products/${product.slug}`, routeLocale);
+            const detailHref = withPlan(catalogueBrowseHref(storefrontHref(`/products/${product.slug}`, routeLocale), query,
+              { ...view, pickFirst: undefined }, { forcePage: positioned }));
             const explicitPair = firstProduct && firstProduct.publicId.toLowerCase() !== product.publicId.toLowerCase()
               ? publishedComparison(comparison, { first: firstProduct.publicId, second: product.publicId }) : null;
             const secondHref = explicitPair && comparisonHref(listingHref, explicitPair, query);
-            const firstHref = !firstProduct && resultPage.total >= 2 ? catalogueBrowseHref(listingHref, query, { ...view, pickFirst: product.publicId.toLowerCase() }) : null;
+            const firstHref = !firstProduct && resultPage.total >= 2 ? withPlan(catalogueBrowseHref(listingHref, query, { ...view, pickFirst: product.publicId.toLowerCase() })) : null;
             return (
               <li key={product.publicId} id={catalogueCardId(product.publicId) ?? undefined} tabIndex={-1}
                 className="min-w-0 scroll-mt-24 rounded-2xl border border-hanapure-border bg-hanapure-white p-5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-hanapure-text">
                 <CatalogueResultPairCheckbox publicId={product.publicId} />
-                {firstHref && <Link href={firstHref} className={`${linkStyle} mb-3 max-w-full break-words`} aria-label={`${labels.chooseFirstResult}: ${content?.name ?? labels.details}`}>{labels.chooseFirstResult}</Link>}
+                <ShoppingPlanCardActions publicId={product.publicId.toLowerCase()} />
+                {!firstProduct && resultPage.total >= 2 && <BrowseLink refusal={labels.planLimit} href={firstHref} className={`${linkStyle} mb-3 max-w-full break-words`} aria-label={`${labels.chooseFirstResult}: ${content?.name ?? labels.details}`}>{labels.chooseFirstResult}</BrowseLink>}
                 {secondHref && <Link href={`${secondHref}#${COMPARISON_DESTINATION}`} className={`${linkStyle} mb-3 max-w-full break-words`}
                   aria-label={`${labels.chooseSecondResult}: ${content?.name ?? labels.details}`}>{labels.chooseSecondResult}</Link>}
-                {content?.images[0] && <Link href={detailHref} aria-label={`${labels.details}: ${content.name}`}
+                {content?.images[0] && <BrowseLink refusal={labels.planLimit} href={detailHref} aria-label={`${labels.details}: ${content.name}`}
                   className="block rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-hanapure-text">
                   <ProductImage {...content.images[0]} />
-                </Link>}
+                </BrowseLink>}
                 <p className="mt-4 text-sm text-hanapure-muted">{product.brand}</p>
                 <h2 className="mt-2 break-words text-2xl font-light">
-                  <Link href={detailHref}
+                  <BrowseLink refusal={labels.planLimit} href={detailHref}
                     aria-label={content ? undefined : `${labels.details}: ${product.brand} (${product.slug})`}
                     className="block min-h-11 py-2 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-hanapure-text">
                     {content?.name ?? labels.details}
-                  </Link>
+                  </BrowseLink>
                 </h2>
                 <p className="mt-3 whitespace-pre-line break-words leading-7 text-hanapure-muted">
                   {content?.description ?? labels.missing}
@@ -235,6 +267,7 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
         </ul>
         </CatalogueResultPairPicker>
       )}
+      </CatalogueShoppingPlan>
       {comparison.length >= 2 && <ProductComparison key={`${locale}-${comparisonPair?.map(product => product.publicId).join("-") ?? "default"}-${catalogueQueryString(criteria)}`}
         products={comparison} locale={locale} routeLocale={routeLocale} initialPublicId={comparisonPair?.[0].publicId}
         initialSecondPublicId={comparisonPair?.[1].publicId} catalogueQuery={catalogueQueryString(criteria)} destinationId={COMPARISON_DESTINATION} />}
@@ -243,18 +276,20 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
 }
 
 export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en", routeLocale = null,
-  criteria = { query: "", brand: "" }, comparisonContext = {}, cartReturn = false, browse = readCatalogueBrowse() }: {
+  criteria = { query: "", brand: "" }, comparisonContext = {}, cartReturn = false, browse = readCatalogueBrowse(), planHint }: {
   slug: string; catalogue?: CatalogueReader; locale?: EditorialLocale; routeLocale?: EditorialLocale | null;
   criteria?: CatalogueCriteria;
   comparisonContext?: ComparisonContext;
   cartReturn?: boolean;
   browse?: CatalogueBrowse;
+  planHint?: unknown;
 }) {
   const product = catalogue.findPublishedBySlug(slug);
   // Absent/draft editorial records are not public pages. No ERP absence is inferred.
   if (!product) notFound();
   const content = product.translations[locale];
   const labels = storefrontLabels[locale];
+  const plan = readShoppingPlan(planHint, catalogue.listPublished());
   const brandQuery = catalogueQueryString({ query: "", brand: product.brand });
   const related = catalogue.listPublished().filter(item => item.brand === product.brand && item.publicId !== product.publicId).slice(0, 3);
   const comparison = comparisonProjection(catalogue, locale);
@@ -285,8 +320,8 @@ export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en",
   const detailTargetStyle = "scroll-mt-24 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-hanapure-text";
   return (
     <Container className="pb-20 pt-32 sm:pt-36">
-      <ProductVisitTracker key={product.publicId} publicId={product.publicId} />
-      <Link href={backHref} className={linkStyle}>{labels.back}</Link>
+      {planHint === undefined && <ProductVisitTracker key={product.publicId} publicId={product.publicId} />}
+      <BrowseLink refusal={labels.planLimit} href={carryShoppingPlan(backHref, plan)} className={linkStyle}>{labels.back}</BrowseLink>
       {cartReturn === true && <Link href={storefrontHref("/cart", routeLocale)} className={`${linkStyle} mt-3 block max-w-full break-words`}>{cartLabels[locale].backToCart}</Link>}
       {returnHref && <Link href={`${returnHref}#${COMPARISON_DESTINATION}`} className={`${linkStyle} mt-3 block max-w-full break-words`}>{comparisonLabels[locale].backToComparison}</Link>}
       {adjacent.length > 0 && <nav aria-label={labels.matchingNavigation} className="mt-5 flex min-w-0 flex-wrap gap-4">
@@ -332,6 +367,13 @@ export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en",
             name={content?.name ?? `${labels.details}: ${product.brand} (${product.slug})`} />
         </div>
       </article>
+      {planHint !== undefined && <CatalogueShoppingPlan key={JSON.stringify([product.publicId, locale, plan, criteria, browse])} plan={plan}
+        products={planProjection(comparison, [product.publicId.toLowerCase(), ...plan.lines.map(line => line.publicId)])}
+        publishedIds={catalogue.listPublished().map(item => item.publicId.toLowerCase())} visibleIds={[product.publicId.toLowerCase()]}
+        locale={locale} routeLocale={routeLocale} path={storefrontHref(`/products/${product.slug}`, routeLocale)}
+        query={catalogueBrowseQuery(browseQuery, cleanView, positioned) ?? browseQuery}>
+        <ShoppingPlanCardActions publicId={product.publicId.toLowerCase()} />
+      </CatalogueShoppingPlan>}
       {related.length > 0 && <section className="mt-12" aria-labelledby="same-brand-heading">
         <h2 id="same-brand-heading" className="text-2xl font-light">{product.brand}</h2>
         <ul className="mt-4 grid gap-3 sm:grid-cols-3">

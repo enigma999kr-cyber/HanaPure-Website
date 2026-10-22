@@ -10,11 +10,16 @@ import { cartQuantity } from "@/lib/cart/cart-state";
 import { useBrowserCart } from "@/lib/cart/browser-cart";
 import { localeFromPath, storefrontHref, storefrontLabels } from "@/lib/storefront/localization";
 
-export default function Header({ catalogueQuery = "" }: { catalogueQuery?: string } = {}) {
+export default function Header({ catalogueQuery = "" }: { catalogueQuery?: string | null } = {}) {
   const pathname = usePathname() ?? "/";
   const routeLocale = localeFromPath(pathname);
   const locale = routeLocale ?? "en";
   const labels = storefrontLabels[locale];
+  // null refuses an unrepresentable browse context, not the entire navigation.
+  const listing = storefrontHref("/products", routeLocale);
+  const shopHref = catalogueQuery === null ? undefined : listing +
+    (new URLSearchParams(catalogueQuery).has("cartPlan") ? catalogueQuery : "");
+  const searchHref = catalogueQuery === null ? undefined : `${listing}${catalogueQuery}#catalogue-search`;
   const cart = useBrowserCart();
   const quantity = cartQuantity(cart.lines);
   const cartName = `${cartLabels[locale].cart}: ${cartLabels[locale].selectedQuantity} ${quantity}`;
@@ -103,9 +108,9 @@ export default function Header({ catalogueQuery = "" }: { catalogueQuery?: strin
 
           {/* Desktop Navigation */}
           <nav aria-label={labels.primaryNavigation} className="hidden items-center gap-4 text-sm text-hanapure-muted lg:flex xl:gap-6">
-            <Link ref={desktopShopRef} href={storefrontHref("/products", routeLocale)} className="inline-flex min-h-11 items-center transition hover:text-hanapure-text">
+            <a ref={desktopShopRef} href={shopHref} role={catalogueQuery === null ? "link" : undefined} aria-disabled={catalogueQuery === null || undefined} tabIndex={catalogueQuery === null ? 0 : undefined} className="inline-flex min-h-11 items-center transition hover:text-hanapure-text">
               {labels.shop}
-            </Link>
+            </a>
 
             <Link href={storefrontHref("/brands", routeLocale)} className="inline-flex min-h-11 items-center transition hover:text-hanapure-text">
               {labels.brands}
@@ -115,11 +120,11 @@ export default function Header({ catalogueQuery = "" }: { catalogueQuery?: strin
 
           {/* Right Menu */}
           <div className="hidden items-center gap-5 text-sm text-hanapure-muted lg:flex">
-            <a href={`${storefrontHref("/products", routeLocale)}${catalogueQuery}#catalogue-search`} className="inline-flex min-h-11 items-center transition hover:text-hanapure-text focus-visible:outline-2 focus-visible:outline-hanapure-text">
+            <a href={searchHref} role={catalogueQuery === null ? "link" : undefined} aria-disabled={catalogueQuery === null || undefined} className="inline-flex min-h-11 items-center transition hover:text-hanapure-text focus-visible:outline-2 focus-visible:outline-hanapure-text">
               {labels.search}
             </a>
 
-            <LanguageSwitcher locale={locale} pathname={`${pathname}${catalogueQuery}`} />
+            {catalogueQuery !== null && <LanguageSwitcher locale={locale} pathname={`${pathname}${catalogueQuery}`} />}
 
             <Link href={storefrontHref("/cart", routeLocale)} aria-label={cartName} className="inline-flex min-h-11 items-center gap-1 focus-visible:outline-2 focus-visible:outline-hanapure-text">{cartLabels[locale].cart} <span aria-hidden="true">({quantity})</span></Link>
           </div>
@@ -164,13 +169,15 @@ export default function Header({ catalogueQuery = "" }: { catalogueQuery?: strin
             >
               {labels.home}
             </Link>
-            <Link
-              href={storefrontHref("/products", routeLocale)}
+            <a
+              href={shopHref}
+              role={catalogueQuery === null ? "link" : undefined}
+              aria-disabled={catalogueQuery === null || undefined}
               className="rounded-sm px-2 py-3 hover:bg-hanapure-beige-light focus-visible:outline-2 focus-visible:outline-hanapure-text"
               onClick={closeMenuForNavigation}
             >
               {labels.shop}
-            </Link>
+            </a>
             <Link
               href={storefrontHref("/brands", routeLocale)}
               className="rounded-sm px-2 py-3 hover:bg-hanapure-beige-light focus-visible:outline-2 focus-visible:outline-hanapure-text"
@@ -178,8 +185,8 @@ export default function Header({ catalogueQuery = "" }: { catalogueQuery?: strin
             >
               {labels.brands}
             </Link>
-            <LanguageSwitcher locale={locale} pathname={`${pathname}${catalogueQuery}`} onNavigate={closeMenuForNavigation} />
-            <a href={`${storefrontHref("/products", routeLocale)}${catalogueQuery}#catalogue-search`}
+            {catalogueQuery !== null && <LanguageSwitcher locale={locale} pathname={`${pathname}${catalogueQuery}`} onNavigate={closeMenuForNavigation} />}
+            <a href={searchHref} role={catalogueQuery === null ? "link" : undefined} aria-disabled={catalogueQuery === null || undefined}
               onClick={closeMenuForNavigation}
               className="rounded-sm px-2 py-3 hover:bg-hanapure-beige-light focus-visible:outline-2 focus-visible:outline-hanapure-text">
               {labels.search}
@@ -189,6 +196,7 @@ export default function Header({ catalogueQuery = "" }: { catalogueQuery?: strin
           </div>
         </Container>
       </nav>
+      {catalogueQuery === null && <p role="status" className="break-words px-5 pb-2 text-sm">{labels.planLimit}</p>}
     </header>
     </>
   );

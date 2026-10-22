@@ -6,6 +6,7 @@ import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
 import { searchSuggestions, type SearchSuggestionProduct } from "@/lib/catalog/search-suggestions";
 import { searchSuggestionLabels } from "@/lib/catalog/search-suggestion-labels";
 import { storefrontHref, storefrontLabels } from "@/lib/storefront/localization";
+import { carryShoppingPlan, type ShoppingPlan } from "@/lib/catalog/catalogue-shopping-plan";
 
 /** Live input wins over submitted q; unsafe/oversized context keeps a clean detail link. */
 export function suggestionDetailHref(slug: string, routeLocale: EditorialLocale | null, query: string, brand = "", sort?: string): string {
@@ -23,10 +24,11 @@ export function suggestionDetailHref(slug: string, routeLocale: EditorialLocale 
   } catch { return base; }
 }
 
-export default function SearchSuggestions({ products, initialQuery, locale, routeLocale, appliedCriteria, children }: {
+export default function SearchSuggestions({ products, initialQuery, locale, routeLocale, appliedCriteria, plan, children }: {
   products: readonly SearchSuggestionProduct[]; initialQuery: string;
   locale: EditorialLocale; routeLocale: EditorialLocale | null; children: ReactNode;
   appliedCriteria: Readonly<{ brand: string; sort?: "name-asc" | "name-desc" }>;
+  plan?: ShoppingPlan;
 }) {
   const [query, setQuery] = useState(initialQuery);
   const [dismissed, setDismissed] = useState(false);
@@ -54,14 +56,18 @@ export default function SearchSuggestions({ products, initialQuery, locale, rout
         {matches.length ? `${labels.heading}: ${matches.length}` : labels.none}
       </p>
       {matches.length > 0 && <ul aria-label={labels.heading} className="mt-2 max-h-64 space-y-1 overflow-y-auto">
-        {matches.map(product => <li key={product.publicId} className="min-w-0">
-          <Link href={suggestionDetailHref(product.slug, routeLocale, query, appliedCriteria.brand, appliedCriteria.sort)}
+        {matches.map(product => {
+          const detail = suggestionDetailHref(product.slug, routeLocale, query, appliedCriteria.brand, appliedCriteria.sort);
+          const href = plan ? carryShoppingPlan(detail, plan) : detail;
+          return <li key={product.publicId} className="min-w-0">
+          {href === null ? <span role="status" className="block break-words text-sm">{existing.planLimit}</span> : <Link href={href}
             className="block min-h-11 min-w-0 max-w-full rounded-lg px-2 py-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text">
             <span className="block break-words">{product.name ?? `${existing.details}: ${product.brand} (${product.slug})`}</span>
             <span className="block break-words text-hanapure-muted">{product.brand}</span>
             {product.name === null && <span className="block break-words text-hanapure-muted">{existing.missing}</span>}
-          </Link>
-        </li>)}
+          </Link>}
+        </li>;
+        })}
       </ul>}
     </div>}
   </div>;

@@ -58,6 +58,7 @@ const { default: SaveProductButton } = await import("../components/catalogue/Sav
 const { default: SavedProductsBar } = await import("../components/catalogue/SavedProductsBar.tsx");
 const { default: ProductComparison } = await import("../components/catalogue/ProductComparison.tsx");
 const { default: CatalogueResultPairPicker, CatalogueResultPairCheckbox } = await import("../components/catalogue/CatalogueResultPairPicker.tsx");
+const { default: CatalogueShoppingPlan, ShoppingPlanCardActions, ShoppingPlanSearchGuard } = await import("../components/catalogue/CatalogueShoppingPlan.tsx");
 const { default: SearchSuggestions, suggestionDetailHref } = await import("../components/catalogue/SearchSuggestions.tsx");
 const { default: CopySearchLink, canonicalSearchLink } = await import("../components/catalogue/CopySearchLink.tsx");
 const { default: RecentlyViewedProducts, ProductVisitTracker, recentlyViewedLabels } = await import("../components/catalogue/RecentlyViewedProducts.tsx");
@@ -68,8 +69,8 @@ function elements(node) {
   if (typeof node !== "object") return [node];
   // Client hooks are exercised in the hydrated browser, not called as server functions.
   // This island also carries the actual server-rendered native input as its child.
-  if (node.type === SearchSuggestions || node.type === CatalogueResultPairPicker) return [node, ...elements(node.props.children)];
-  if (node.type === CatalogueResultPairCheckbox) return [node];
+  if (node.type === SearchSuggestions || node.type === CatalogueResultPairPicker || node.type === CatalogueShoppingPlan || node.type === ShoppingPlanSearchGuard) return [node, ...elements(node.props.children)];
+  if (node.type === CatalogueResultPairCheckbox || node.type === ShoppingPlanCardActions) return [node];
   if (node.type === ProductImage || node.type === ProductMediaGallery || node.type === AddToCart || node.type === QuickAdd ||
     node.type === SaveProductButton || node.type === SavedProductsBar || node.type === ProductComparison ||
     node.type === RecentlyViewedProducts || node.type === ProductVisitTracker || node.type === CopySearchLink) return [node];
@@ -181,7 +182,9 @@ test("search batch B: typed suggestion context wins over applied q and existing 
     assert.throws(() => ProductDetail({ catalogue, slug: draft.slug, locale, routeLocale }));
   }
   const source = readFileSync(join(repo, "components/catalogue/SearchSuggestions.tsx"), "utf8");
-  assert.match(source, /href=\{suggestionDetailHref\(product.slug, routeLocale, query, appliedCriteria.brand, appliedCriteria.sort\)\}/);
+  assert.match(source, /const detail = suggestionDetailHref\(product.slug, routeLocale, query, appliedCriteria.brand, appliedCriteria.sort\)/);
+  assert.match(source, /const href = plan \? carryShoppingPlan\(detail, plan\) : detail/);
+  assert.match(source, /<Link href=\{href\}/);
   assert.match(source, /setQuery\(event.target.value\)/);
   assert.match(source, /event.key === "Escape"/);
   assert.doesNotMatch(source, /localStorage|sessionStorage|returnUrl|history\.|catalogue-discovery["']/);
@@ -827,7 +830,8 @@ test("detail route shells pass normalized criteria to Back and locale navigation
   for (const path of ["app/products/[slug]/page.tsx", "app/[locale]/products/[slug]/page.tsx"]) {
     const source = readFileSync(join(repo, path), "utf8");
     assert.match(source, /const query = await searchParams;\s*const criteria = readCatalogueCriteria\(query\)/);
-    assert.match(source, /<Header catalogueQuery=\{catalogueBrowseQuery\(catalogueQueryString\(criteria\), \{ \.\.\.browse, pickFirst: undefined \}\) \?\? ""\}/);
+    assert.match(source, /const headerQuery = catalogueHeaderQuery\(criteria, browse, query.cartPlan/);
+    assert.match(source, /^\s*<Header catalogueQuery=\{headerQuery\} \/>/m);
     const metadata = source.slice(source.indexOf("export async function generateMetadata"), source.indexOf("export default"));
     assert.doesNotMatch(metadata, /searchParams|criteria|catalogueQuery/);
   }
@@ -911,10 +915,10 @@ test("invalid publication data cannot enter storefront through the existing cata
 
 test("route wiring uses the authoritative reader and promised slug; Header Shop reaches the real listing", () => {
   const source = (path) => readFileSync(join(repo, path), "utf8");
-  assert.match(source("app/products/page.tsx"), /<ProductListing criteria=\{criteria\} browse=\{browse\} comparisonContext=\{readComparisonContext\(query\)\}\s*\/>/);
+  assert.match(source("app/products/page.tsx"), /<ProductListing criteria=\{criteria\} browse=\{browse\} planHint=\{query.cartPlan\} comparisonContext=\{readComparisonContext\(query\)\}\s*\/>/);
   const detail = source("app/products/[slug]/page.tsx");
   assert.match(detail, /await params/);
-  assert.match(detail, /ProductDetail\(\{ slug, criteria, browse, comparisonContext: readComparisonContext\(query\), cartReturn: readCartReturn\(query.cartReturn\) \}\)/);
+  assert.match(detail, /ProductDetail\(\{ slug, criteria, browse, planHint: query.cartPlan, comparisonContext: readComparisonContext\(query\), cartReturn: readCartReturn\(query.cartReturn\) \}\)/);
   assert.match(detail, /productMetadata\(slug, "en", \{ legacy: true \}\)/);
   const header = source("components/layout/Header.tsx");
   assert.equal((header.match(/storefrontHref\("\/products", routeLocale\)/g) ?? []).length, 4);
