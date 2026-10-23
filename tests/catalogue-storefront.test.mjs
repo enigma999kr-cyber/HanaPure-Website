@@ -131,13 +131,15 @@ test("search batch A: copy shares only canonical applied criteria with bounded s
   }
   const source = readFileSync(join(repo, "components/catalogue/CopySearchLink.tsx"), "utf8");
   assert.match(source, /onClick=\{async \(\) =>/);
-  assert.match(source, /if \(pending.current\) return/);
+  assert.match(source, /if \(pending.current \|\| !live.current \|\| live.current.context !== context\) return/);
   assert.match(source, /disabled=\{copying\}/);
-  assert.match(source, /await navigator.clipboard.writeText\(href\);\s*setMessage\(labels.searchLinkCopied\)/);
-  assert.match(source, /catch \{\s*setMessage\(labels.searchLinkFailed\)/);
-  assert.match(source, /finally \{\s*pending.current = false; setCopying\(false\)/);
+  assert.match(source, /await navigator.clipboard.writeText\(href\);\s*if \(current\(\)\) setMessage\(labels.searchLinkCopied\)/);
+  assert.match(source, /catch \{\s*if \(current\(\)\) setMessage\(labels.searchLinkFailed\)/);
+  assert.match(source, /finally \{\s*pending.current = false; if \(live.current\) setCopying\(false\)/);
   assert.match(source, /!navigator.clipboard\?\.writeText/);
-  assert.doesNotMatch(source, /useEffect|execCommand|localStorage|sessionStorage|fetch\(|history\./);
+  assert.match(source, /return \(\) => \{ live.current = null; \}/);
+  assert.match(source, /live.current === owner && owner.location === window.location.href/);
+  assert.doesNotMatch(source, /execCommand|localStorage|sessionStorage|fetch\(|history\./);
 });
 
 test("search batch B: typed suggestion context wins over applied q and existing detail Back restores the encoded locale criteria", async () => {

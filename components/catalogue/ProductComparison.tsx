@@ -59,6 +59,7 @@ export default function ProductComparison({ products, locale, routeLocale, initi
 }) {
   const [selection, setSelection] = useState<readonly [string, string]>(() => [initialPublicId ?? "", initialSecondPublicId ?? ""]);
   const [focusedPair, setFocusedPair] = useState("");
+  const [announcement, setAnnouncement] = useState<{ key: string; text: string } | null>(null);
   const id = useId();
   const cart = useBrowserCart();
   const favorites = useBrowserFavorites();
@@ -71,7 +72,10 @@ export default function ProductComparison({ products, locale, routeLocale, initi
   const focused = focusedPair === pairKey;
   const shareHref = comparisonHref(storefrontHref("/products", routeLocale), pair, catalogueQuery);
   const selectPair = (next: readonly [ComparisonProduct, ComparisonProduct]) => {
+    if (next[0].publicId === pair[0].publicId && next[1].publicId === pair[1].publicId) return;
     setFocusedPair(""); setSelection([next[0].publicId, next[1].publicId]);
+    setAnnouncement({ key: JSON.stringify([locale, next.map(product => product.publicId)]),
+      text: `${labels.first}: ${displayName(next[0])}; ${labels.second}: ${displayName(next[1])}.` });
   };
   const displayName = (product: ComparisonProduct) => product.name ?? `${existing.details}: ${product.brand} (${product.slug})`;
   const controlStyle = "min-h-11 w-full min-w-0 max-w-full rounded-xl border border-hanapure-border bg-hanapure-white px-3 py-3 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text";
@@ -102,7 +106,11 @@ export default function ProductComparison({ products, locale, routeLocale, initi
       onClick={() => selectPair([pair[1], pair[0]])}>{labels.swap}</button>
     <button type="button" aria-pressed={focused}
       className="mt-4 min-h-11 max-w-full break-words rounded-xl border border-hanapure-border px-4 py-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text"
-      onClick={() => setFocusedPair(focused ? "" : pairKey)}>{focused ? labels.showAll : labels.focusDifferences}</button>
+      onClick={() => {
+        setFocusedPair(focused ? "" : pairKey);
+        setAnnouncement({ key: JSON.stringify([locale, pair.map(product => product.publicId)]), text: focused ? labels.allDetailsShown : labels.differencesShown });
+      }}>{focused ? labels.showAll : labels.focusDifferences}</button>
+    <p role="status" className="sr-only">{announcement?.key === JSON.stringify([locale, pair.map(product => product.publicId)]) ? announcement.text : ""}</p>
     {shareHref && <CopyComparisonLink key={`${locale}-${shareHref}`} relativeHref={`${shareHref}#${COMPARISON_DESTINATION}`} products={products} locale={locale} />}
     <ShoppingPlanIntake context={planContext} ids={pair.map(product => product.publicId)} locale={locale} pair
       guard={() => resolveComparison(products, pair[0].publicId, pair[1].publicId) !== null} />

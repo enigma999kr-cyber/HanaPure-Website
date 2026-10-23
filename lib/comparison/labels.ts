@@ -1,5 +1,6 @@
 export const comparisonLabels = {
   en: {
+    allDetailsShown: "All details are shown.", differencesShown: "Differences are highlighted.",
     compare: "Compare", copyLink: "Copy comparison link", copied: "Comparison link copied.", copyFailed: "Could not copy this comparison link. Please try again.",
     focusDifferences: "Focus on differences", showAll: "Show all details", different: "Different text", same: "Same text", unknown: "Information unavailable", backToComparison: "Back to this comparison",
     panelNavigation: "Compared product navigation", jumpFirst: "Go to first product", jumpSecond: "Go to second product",
@@ -9,6 +10,7 @@ export const comparisonLabels = {
     requiresJs: "Enable JavaScript to change the products being compared.",
   },
   hu: {
+    allDetailsShown: "Minden adat látható.", differencesShown: "A különbségek kiemelve láthatók.",
     compare: "Összehasonlítás", copyLink: "Összehasonlítási hivatkozás másolása", copied: "Összehasonlítási hivatkozás másolva.", copyFailed: "Az összehasonlítási hivatkozás nem másolható. Próbálja újra.",
     focusDifferences: "Különbségek kiemelése", showAll: "Minden adat megjelenítése", different: "Eltérő szöveg", same: "Azonos szöveg", unknown: "Az információ nem érhető el", backToComparison: "Vissza ehhez az összehasonlításhoz",
     panelNavigation: "Összehasonlított termékek navigációja", jumpFirst: "Ugrás az első termékhez", jumpSecond: "Ugrás a második termékhez",
@@ -18,6 +20,7 @@ export const comparisonLabels = {
     requiresJs: "Az összehasonlított termékek módosításához engedélyezze a JavaScriptet.",
   },
   ko: {
+    allDetailsShown: "모든 정보를 표시합니다.", differencesShown: "차이점을 강조하여 표시합니다.",
     compare: "비교", copyLink: "비교 링크 복사", copied: "비교 링크를 복사했습니다.", copyFailed: "비교 링크를 복사할 수 없습니다. 다시 시도해 주세요.",
     focusDifferences: "차이점 중심으로 보기", showAll: "모든 정보 보기", different: "다른 문구", same: "같은 문구", unknown: "정보 없음", backToComparison: "이 비교로 돌아가기",
     panelNavigation: "비교 상품 바로가기", jumpFirst: "첫 번째 상품으로 이동", jumpSecond: "두 번째 상품으로 이동",

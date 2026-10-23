@@ -266,6 +266,21 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
   const [copyingSelected, setCopyingSelected] = useState(false);
   const selectedCopyPending = useRef(false);
   const coherentSelection = checked.lines === cart.lines && checked.ids.every(id => visibleIds.has(id.toLowerCase()));
+  const copyLocation = useSyncExternalStore(subscribePortableLocation, portableLocation, portableServerLocation);
+  const copyWitness = JSON.stringify([cart, products, locale, routeLocale, review, checked.ids, coherentSelection, copyLocation]);
+  const [messageContext, setMessageContext] = useState(copyWitness);
+  if (messageContext !== copyWitness) {
+    setMessageContext(copyWitness);
+    setCopyMessage(""); setSelectedCopyMessage("");
+  }
+  const copyLive = useRef<{ witness: string; location: string } | null>(null);
+  useEffect(() => {
+    copyLive.current = { witness: copyWitness, location: portableLocation() };
+    return () => { copyLive.current = null; };
+  }, [copyWitness]);
+  function currentCopy(owner: typeof copyLive.current) {
+    return owner !== null && copyLive.current === owner && owner.location === portableLocation() && readPortableSnapshot(cart).status === "ready";
+  }
   const selected = coherentSelection ? selectedCartLines(cart.lines, checked.ids) ?? [] : [];
   const bulkReady = coherentSelection && cart.ready && !cart.invalid && cart.persistent && selected.length > 0;
   const selectedPublic = reconcileCart(selected, products).some(item => item.product !== null);
@@ -327,7 +342,10 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
     {cart.invalid && <div className="mt-4">
       <p role="status">{labels.invalidStorage}</p>
       <button type="button" className={`${cartControl} mt-3`} onClick={() => {
-        browseRef.current?.focus(); setUndo(null); resetBrowserCart(); setMessage(labels.updated);
+        browseRef.current?.focus(); setUndo(null);
+        const confirmed = resetBrowserCart();
+        setQuantityTrusted(confirmed);
+        setMessage(confirmed ? labels.updated : labels.selectionUnavailable);
       }}>{labels.reset}</button>
     </div>}
     <section aria-labelledby={`${navigationId}-review`} className="mt-6 min-w-0 rounded-2xl border border-hanapure-border p-4">
@@ -495,6 +513,8 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
         <button type="button" disabled={!bulkReady || !selectedPublic || copyingSelected}
           className={`${cartControl} max-w-full break-words disabled:opacity-50`} onClick={async () => {
             if (selectedCopyPending.current || !bulkReady) return;
+            const owner = copyLive.current;
+            if (!currentCopy(owner)) { setSelectedCopyMessage(labels.bulkSelectionChanged); return; }
             const selection = readBulkSelection(cart, checked.ids);
             if (selection.status !== "ready") {
               setSelectedCopyMessage(selection.status === "conflict" ? labels.bulkSelectionChanged : labels.shoppingListFailed); return;
@@ -507,9 +527,9 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
             try {
               if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
               await navigator.clipboard.writeText(list.text);
-              setSelectedCopyMessage(list.omitted ? `${labels.selectedListCopiedOmitted} ${list.omitted}.` : labels.selectedListCopied);
-            } catch { setSelectedCopyMessage(labels.shoppingListFailed); }
-            finally { selectedCopyPending.current = false; setCopyingSelected(false); }
+              if (currentCopy(owner)) setSelectedCopyMessage(list.omitted ? `${labels.selectedListCopiedOmitted} ${list.omitted}.` : labels.selectedListCopied);
+            } catch { if (currentCopy(owner)) setSelectedCopyMessage(labels.shoppingListFailed); }
+            finally { selectedCopyPending.current = false; if (copyLive.current) setCopyingSelected(false); }
           }}>{labels.copySelectedList}</button>
       </div>
       <p role="status" className="mt-3 break-words text-sm">{checked.ids.length > 0 && !coherentSelection ? labels.bulkSelectionChanged : bulkMessage}</p>
@@ -528,6 +548,8 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
       disabled={copying || !cart.ready || cart.invalid || !cart.persistent || !items.some(item => item.product !== null)}
       onClick={async () => {
         if (copyPending.current || !cart.ready || cart.invalid || !cart.persistent) return;
+        const owner = copyLive.current;
+        if (!currentCopy(owner)) { setCopyMessage(labels.bulkSelectionChanged); return; }
         const list = formatCartShoppingList(cart.lines, products, locale);
         if (list.status !== "ready") {
           setCopyMessage(list.status === "empty" ? labels.shoppingListEmpty : list.status === "too-large" ? labels.shoppingListTooLarge : labels.shoppingListFailed);
@@ -537,11 +559,11 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
         try {
           if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
           await navigator.clipboard.writeText(list.text);
-          setCopyMessage(list.omitted ? `${labels.shoppingListCopiedOmitted} ${list.omitted}.` : labels.shoppingListCopied);
+          if (currentCopy(owner)) setCopyMessage(list.omitted ? `${labels.shoppingListCopiedOmitted} ${list.omitted}.` : labels.shoppingListCopied);
         } catch {
-          setCopyMessage(labels.shoppingListFailed);
+          if (currentCopy(owner)) setCopyMessage(labels.shoppingListFailed);
         } finally {
-          copyPending.current = false; setCopying(false);
+          copyPending.current = false; if (copyLive.current) setCopying(false);
         }
       }}>{labels.copyShoppingList}</button>
     <p role="status" className="mt-3 break-words text-sm text-hanapure-muted">{copyMessage}</p>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
 import { storefrontLabels } from "@/lib/storefront/localization";
 
@@ -32,21 +32,34 @@ export default function CopySearchLink({ relativeHref, locale }: { relativeHref:
   const [copying, setCopying] = useState(false);
   const [message, setMessage] = useState("");
   const pending = useRef(false);
+  const live = useRef<{ context: string; location: string } | null>(null);
+  const context = JSON.stringify([relativeHref, locale]);
+  const [messageContext, setMessageContext] = useState(context);
+  if (messageContext !== context) {
+    setMessageContext(context);
+    setMessage("");
+  }
+  useEffect(() => {
+    live.current = { context, location: window.location.href };
+    return () => { live.current = null; };
+  }, [context]);
   return <div className="mt-4 min-w-0">
     <button type="button" disabled={copying}
       className="min-h-11 max-w-full break-words rounded-xl border border-hanapure-border px-4 py-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text disabled:opacity-50"
       onClick={async () => {
-        if (pending.current) return;
+        if (pending.current || !live.current || live.current.context !== context) return;
+        const owner = live.current;
+        const current = () => live.current === owner && owner.location === window.location.href;
         pending.current = true; setCopying(true); setMessage("");
         try {
           const href = canonicalSearchLink(relativeHref, window.location.origin);
           if (!href || typeof navigator === "undefined" || !navigator.clipboard?.writeText) throw new Error("Search link copy unavailable");
           await navigator.clipboard.writeText(href);
-          setMessage(labels.searchLinkCopied);
+          if (current()) setMessage(labels.searchLinkCopied);
         } catch {
-          setMessage(labels.searchLinkFailed);
+          if (current()) setMessage(labels.searchLinkFailed);
         } finally {
-          pending.current = false; setCopying(false);
+          pending.current = false; if (live.current) setCopying(false);
         }
       }}>{labels.copySearchLink}</button>
     <p role="status" className="mt-2 break-words text-sm text-hanapure-muted">{message}</p>

@@ -62,19 +62,25 @@ export default function CatalogueShoppingPlan({ plan, products, publishedIds, vi
   function currentWorkspace() {
     return ready && valid && currentHref && active.current?.attempt === attempt && active.current.location === window.location.href;
   }
+  function allowAction() {
+    if (!currentWorkspace() || pending.current) { if (active.current) setMessage(labels.planChanged); return false; }
+    return true;
+  }
   function bulk(action: Parameters<typeof changePlannedLines>[4], ids = checkedIds) {
-    if (!currentWorkspace()) return;
+    if (!allowAction()) return;
     change(changePlannedLines(plan, ids, review.rows.map(row => row.line.publicId), publicProducts, action));
   }
   function changeView(next: PlanReviewView) { setView(next); setChecked({ witness: "", ids: [] }); }
   function navigate(next: readonly CartLine[]) {
+    if (!allowAction()) return;
     const href = shoppingPlanHref(path, query, next);
     if (!href || !currentHref) { setMessage(labels.planLimit); return; }
     if (pending.current) return;
     try { pending.current = true; window.location.assign(href); }
-    catch { pending.current = false; setMessage(labels.planLimit); }
+    catch { pending.current = false; setMessage(labels.planChanged); }
   }
   function change(result: PlanChange) {
+    if (!allowAction()) return;
     if (result.status === "invalid") setMessage(labels.planInvalidQuantity);
     else if (result.status === "limit") setMessage(labels.planLimit);
     else if (result.status === "unchanged") setMessage(labels.planUnchanged);
@@ -160,7 +166,7 @@ export default function CatalogueShoppingPlan({ plan, products, publishedIds, vi
                   });
                 }} /><span className="min-w-0 break-words">{labels.planSelectLine}: {name}</span></label>
               <p className="text-sm">{product.brand}</p>
-              {detailHref ? <a href={detailHref} className={`${control} inline-flex`}>{name}</a> : <p>{name}</p>}
+              {detailHref ? <a href={detailHref} className={`${control} inline-flex`} onClick={event => { if (!allowAction()) event.preventDefault(); }}>{name}</a> : <p>{name}</p>}
               <p className="mt-2">{labels.planQuantity}: {line.quantity}</p>
               {impact?.status === "ready" && <p className="mt-2 break-words text-sm">{labels.planCurrent}: {impact.rows[index].current ?? labels.planAbsent} · {labels.planIncoming}: {impact.rows[index].added} · {labels.planExpected}: {impact.rows[index].expected}</p>}
               <PlannedQuantity key={`${line.publicId}-${line.quantity}`} line={line} name={name} locale={locale} apply={raw => change(setPlanQuantity(plan, line.publicId, raw, publicProducts))} />
@@ -174,8 +180,8 @@ export default function CatalogueShoppingPlan({ plan, products, publishedIds, vi
         </ul>}
         {plan.status === "ready" && !review.rows.length && <p role="status" className="mt-3 break-words">{labels.noResults}</p>}
         {plan.status === "ready" && <div className="mt-5 flex min-w-0 flex-wrap gap-3">
-          <a href={clear} className={control}>{labels.planClear}</a>
-          {cartHref && <a href={cartHref} className={control}>{labels.planReviewCart}</a>}
+          <a href={clear} className={control} onClick={event => { if (!allowAction()) event.preventDefault(); }}>{labels.planClear}</a>
+          {cartHref && <a href={cartHref} className={control} onClick={event => { if (!allowAction()) event.preventDefault(); }}>{labels.planReviewCart}</a>}
           <CopyShoppingPlan key={`${witness}:${locale}`} context={{ plan, publishedIds, path: listingPath, query }} locale={locale} />
         </div>}
       </>}

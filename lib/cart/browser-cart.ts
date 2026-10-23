@@ -37,7 +37,24 @@ export function changeBrowserCart(change: (lines: readonly CartLine[]) => readon
   if (snapshot.invalid) return null;
   return saveSelection(change(snapshot.lines));
 }
-export function resetBrowserCart() { saveSelection([]); }
+export function resetBrowserCart() {
+  // Explicit corrupt-storage recovery only; do not overwrite a newly changed cart.
+  if (!snapshot.ready || !snapshot.invalid) return false;
+  try {
+    const before = window.localStorage.getItem(CART_STORAGE_KEY);
+    if (!inspectStoredCart(before).invalid || window.localStorage.getItem(CART_STORAGE_KEY) !== before) return false;
+    const empty = serializeCart([]);
+    window.localStorage.setItem(CART_STORAGE_KEY, empty);
+    if (window.localStorage.getItem(CART_STORAGE_KEY) !== empty) throw new Error("Reset not confirmed");
+    snapshot = { lines: [], ready: true, persistent: true, invalid: false };
+    emit();
+    return true;
+  } catch {
+    snapshot = { ...snapshot, persistent: false };
+    emit();
+    return false;
+  }
+}
 /** No atomic cross-tab CAS is available: keep the final read and write synchronous and adjacent. */
 export function restoreBrowserCart(plan: CartUndoPlan): "restored" | "changed" | "unavailable" {
   if (!snapshot.ready || snapshot.invalid || !snapshot.persistent || !createCartUndoPlan(plan.before, plan.after)) return "unavailable";
