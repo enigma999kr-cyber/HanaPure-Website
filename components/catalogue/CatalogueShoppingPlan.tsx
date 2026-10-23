@@ -11,7 +11,7 @@ import { cartDraftImpact } from "@/lib/cart/cart-draft-impact";
 import { plannedReview, changePlannedLines, readFreshPlanCart, EMPTY_PLAN_VIEW, type PlanReviewView } from "@/lib/catalog/shopping-plan-workspace";
 
 export type PlanProduct = Readonly<{ publicId: string; slug: string; brand: string; name: string | null }>;
-const control = "min-h-11 max-w-full break-words rounded-xl border border-hanapure-border px-4 py-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text disabled:opacity-50";
+const control = "min-h-11 max-w-full break-words min-w-0 rounded-xl border border-hanapure-border px-4 py-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text disabled:opacity-50";
 type Selection = { ids: readonly string[]; visible: readonly PlanProduct[]; locale: EditorialLocale; disabled: boolean;
   toggle: (id: string, checked: boolean) => void; add: (ids: readonly string[]) => void };
 const PlanContext = createContext<Selection | null>(null);
@@ -158,7 +158,7 @@ export default function CatalogueShoppingPlan({ plan, products, publishedIds, vi
                     const ids = previous.witness === reviewWitness ? previous.ids.filter(id => id !== line.publicId && review.rows.some(row => row.line.publicId === id)) : [];
                     return { witness: reviewWitness, ids: enabled ? [...ids, line.publicId] : ids };
                   });
-                }} />{labels.planSelectLine}: {name}</label>
+                }} /><span className="min-w-0 break-words">{labels.planSelectLine}: {name}</span></label>
               <p className="text-sm">{product.brand}</p>
               {detailHref ? <a href={detailHref} className={`${control} inline-flex`}>{name}</a> : <p>{name}</p>}
               <p className="mt-2">{labels.planQuantity}: {line.quantity}</p>
@@ -249,7 +249,7 @@ export function ShoppingPlanCardActions({ publicId }: { publicId: string }) {
   return <div className="mb-4 min-w-0">
     <label className="flex min-h-11 items-center gap-3 break-words"><input type="checkbox" checked={context.ids.includes(publicId)}
       className="h-5 w-5 shrink-0 accent-hanapure-text focus-visible:outline-2 focus-visible:outline-offset-2"
-      onChange={event => context.toggle(publicId, event.target.checked)} />{labels.planSelect}: {name}</label>
+      onChange={event => context.toggle(publicId, event.target.checked)} /><span className="min-w-0 break-words">{labels.planSelect}: {name}</span></label>
     <button type="button" className={`${control} mt-2`} aria-label={`${labels.planAdd}: ${name}`} onClick={() => context.add([publicId])}>{labels.planAdd}</button>
   </div>;
 }

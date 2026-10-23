@@ -1085,13 +1085,14 @@ test("Header disclosure keeps explicit focus recovery, cleanup, bounded scrollin
   const source = path => readFileSync(join(repo, path), "utf8");
   const header = source("components/layout/Header.tsx");
   assert.match(header, /href="#main-content"/);
-  assert.match(header, /<a href=\{`\$\{storefrontHref\("\/products", routeLocale\)\}\$\{catalogueQuery\}#catalogue-search`\}/);
+  assert.match(header, /const searchHref = catalogueQuery === null \? undefined : `\$\{listing\}\$\{catalogueQuery\}#catalogue-search`/);
+  assert.match(header, /<a href=\{searchHref\}/);
   assert.match(header, /aria-expanded=\{isMenuOpen\}/);
   assert.match(header, /aria-controls="mobile-navigation"/);
   assert.match(header, /hidden=\{!isMenuOpen\}/);
   assert.match(header, /max-h-\[calc\(100dvh-5rem\)\] overflow-y-auto/);
   assert.match(header, /event\.key === "Escape"[\s\S]*?menuButtonRef\.current\?\.focus\(\)/);
-  assert.match(header, /desktopShopRef\.current\?\.focus\(\)/);
+  assert.match(header, /\(desktopShopRef\.current \?\? desktopBrandsRef\.current\)\?\.focus\(\)/);
   assert.match(header, /event\.currentTarget\.contains\(event\.relatedTarget\)/);
   for (const event of ["keydown", "pointerdown"]) {
     assert.ok(header.includes(`document.addEventListener("${event}"`));

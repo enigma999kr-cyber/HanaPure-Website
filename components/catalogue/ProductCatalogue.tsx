@@ -113,7 +113,7 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
       href: changedViewHref(criteria, { ...resetView, withLocaleImage: false }) }] : []),
   ];
   const criterionLinkStyle = `${linkStyle} min-w-0 max-w-full break-words rounded-xl border border-hanapure-border px-4 py-3`;
-  const controlStyle = "min-h-11 w-full rounded-xl border border-hanapure-border bg-hanapure-warm-white px-3 py-3 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text";
+  const controlStyle = "min-h-11 w-full min-w-0 max-w-full break-words rounded-xl border border-hanapure-border bg-hanapure-warm-white px-3 py-3 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text";
   return (
     <Container className="pb-20 pt-32 sm:pt-36">
       <h1 id="main-content" tabIndex={-1} className="text-4xl font-light text-hanapure-text sm:text-5xl">{labels.heading}</h1>

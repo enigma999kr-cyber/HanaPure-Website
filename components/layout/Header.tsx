@@ -24,9 +24,15 @@ export default function Header({ catalogueQuery = "" }: { catalogueQuery?: strin
   const quantity = cartQuantity(cart.lines);
   const cartName = `${cartLabels[locale].cart}: ${cartLabels[locale].selectedQuantity} ${quantity}`;
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [menuPath, setMenuPath] = useState(pathname);
+  if (menuPath !== pathname) {
+    setMenuPath(pathname);
+    setIsMenuOpen(false);
+  }
   const headerRef = useRef<HTMLElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const desktopShopRef = useRef<HTMLAnchorElement>(null);
+  const desktopBrandsRef = useRef<HTMLAnchorElement>(null);
 
   function closeMenuForNavigation() {
     setIsMenuOpen(false);
@@ -52,7 +58,7 @@ export default function Header({ catalogueQuery = "" }: { catalogueQuery?: strin
         // CSS may already have blurred a newly hidden mobile control.
         if (active === document.body || active === menuButtonRef.current ||
           headerRef.current?.querySelector("#mobile-navigation")?.contains(active)) {
-          desktopShopRef.current?.focus();
+          (desktopShopRef.current ?? desktopBrandsRef.current)?.focus();
         }
         setIsMenuOpen(false);
       }
@@ -90,7 +96,7 @@ export default function Header({ catalogueQuery = "" }: { catalogueQuery?: strin
             event.currentTarget.querySelector("#mobile-navigation")?.contains(event.target);
           if (event.relatedTarget === null && fromMobile &&
             window.matchMedia("(min-width: 64rem)").matches) {
-            desktopShopRef.current?.focus();
+            (desktopShopRef.current ?? desktopBrandsRef.current)?.focus();
           }
           setIsMenuOpen(false);
         }
@@ -108,11 +114,11 @@ export default function Header({ catalogueQuery = "" }: { catalogueQuery?: strin
 
           {/* Desktop Navigation */}
           <nav aria-label={labels.primaryNavigation} className="hidden items-center gap-4 text-sm text-hanapure-muted lg:flex xl:gap-6">
-            <a ref={desktopShopRef} href={shopHref} role={catalogueQuery === null ? "link" : undefined} aria-disabled={catalogueQuery === null || undefined} tabIndex={catalogueQuery === null ? 0 : undefined} className="inline-flex min-h-11 items-center transition hover:text-hanapure-text">
+            {shopHref === undefined ? <button type="button" disabled className="inline-flex min-h-11 items-center opacity-50">{labels.shop}</button> : <a ref={desktopShopRef} href={shopHref} className="inline-flex min-h-11 items-center transition hover:text-hanapure-text">
               {labels.shop}
-            </a>
+            </a>}
 
-            <Link href={storefrontHref("/brands", routeLocale)} className="inline-flex min-h-11 items-center transition hover:text-hanapure-text">
+            <Link ref={desktopBrandsRef} href={storefrontHref("/brands", routeLocale)} className="inline-flex min-h-11 items-center transition hover:text-hanapure-text">
               {labels.brands}
             </Link>
 
@@ -120,9 +126,9 @@ export default function Header({ catalogueQuery = "" }: { catalogueQuery?: strin
 
           {/* Right Menu */}
           <div className="hidden items-center gap-5 text-sm text-hanapure-muted lg:flex">
-            <a href={searchHref} role={catalogueQuery === null ? "link" : undefined} aria-disabled={catalogueQuery === null || undefined} className="inline-flex min-h-11 items-center transition hover:text-hanapure-text focus-visible:outline-2 focus-visible:outline-hanapure-text">
+            {searchHref === undefined ? <button type="button" disabled className="inline-flex min-h-11 items-center opacity-50">{labels.search}</button> : <a href={searchHref} className="inline-flex min-h-11 items-center transition hover:text-hanapure-text focus-visible:outline-2 focus-visible:outline-hanapure-text">
               {labels.search}
-            </a>
+            </a>}
 
             {catalogueQuery !== null && <LanguageSwitcher locale={locale} pathname={`${pathname}${catalogueQuery}`} />}
 
@@ -169,15 +175,13 @@ export default function Header({ catalogueQuery = "" }: { catalogueQuery?: strin
             >
               {labels.home}
             </Link>
-            <a
+            {shopHref === undefined ? <button type="button" disabled className="min-h-11 rounded-sm px-2 py-3 text-left opacity-50">{labels.shop}</button> : <a
               href={shopHref}
-              role={catalogueQuery === null ? "link" : undefined}
-              aria-disabled={catalogueQuery === null || undefined}
               className="rounded-sm px-2 py-3 hover:bg-hanapure-beige-light focus-visible:outline-2 focus-visible:outline-hanapure-text"
               onClick={closeMenuForNavigation}
             >
               {labels.shop}
-            </a>
+            </a>}
             <Link
               href={storefrontHref("/brands", routeLocale)}
               className="rounded-sm px-2 py-3 hover:bg-hanapure-beige-light focus-visible:outline-2 focus-visible:outline-hanapure-text"
@@ -186,18 +190,18 @@ export default function Header({ catalogueQuery = "" }: { catalogueQuery?: strin
               {labels.brands}
             </Link>
             {catalogueQuery !== null && <LanguageSwitcher locale={locale} pathname={`${pathname}${catalogueQuery}`} onNavigate={closeMenuForNavigation} />}
-            <a href={searchHref} role={catalogueQuery === null ? "link" : undefined} aria-disabled={catalogueQuery === null || undefined}
+            {searchHref === undefined ? <button type="button" disabled className="min-h-11 rounded-sm px-2 py-3 text-left opacity-50">{labels.search}</button> : <a href={searchHref}
               onClick={closeMenuForNavigation}
               className="rounded-sm px-2 py-3 hover:bg-hanapure-beige-light focus-visible:outline-2 focus-visible:outline-hanapure-text">
               {labels.search}
-            </a>
+            </a>}
             <Link href={storefrontHref("/cart", routeLocale)} aria-label={cartName} onClick={closeMenuForNavigation}
               className="rounded-sm px-2 py-3 focus-visible:outline-2 focus-visible:outline-hanapure-text">{cartLabels[locale].cart} <span aria-hidden="true">({quantity})</span></Link>
           </div>
         </Container>
       </nav>
-      {catalogueQuery === null && <p role="status" className="break-words px-5 pb-2 text-sm">{labels.planLimit}</p>}
     </header>
+    {catalogueQuery === null && <p role="status" className="mx-auto max-w-7xl break-words px-5 pt-24 text-sm">{labels.planLimit}</p>}
     </>
   );
 }

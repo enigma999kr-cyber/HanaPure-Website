@@ -404,8 +404,8 @@ test("Correction: null header context retains skip/menu/Home/Brands/Cart and exp
     assert.ok(links(tree).some(link => link.props.href === "#main-content"));
     for (const path of ["/", "/brands", "/cart"]) assert.ok(links(tree).some(link => link.props.href === storefrontHref(path, prefix ? locale : null)));
     for (const label of [labels.shop, labels.search]) {
-      const refused = all.filter(node => node.type === "a" && text(node) === label);
-      assert.equal(refused.length, 2); assert.ok(refused.every(node => node.props.href === undefined && node.props["aria-disabled"] === true && node.props.role === "link"));
+      const refused = all.filter(node => node.type === "button" && text(node) === label);
+      assert.equal(refused.length, 2); assert.ok(refused.every(node => node.props.href === undefined && node.props.disabled === true && node.props.role !== "link"));
     }
     assert.ok(all.some(node => node.props?.role === "status" && text(node) === labels.planLimit));
     assert.ok(!links(tree).some(link => link.props.href.includes("null")));

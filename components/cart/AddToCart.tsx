@@ -9,7 +9,7 @@ import { addCartLine, validQuantity } from "@/lib/cart/cart-state";
 import { changeBrowserCart, useBrowserCart } from "@/lib/cart/browser-cart";
 import { detailCartQuantity, detailSelectionNeedsReload, setDetailCartQuantity, type DetailCartSnapshot, type DetailSelectionResult } from "@/lib/cart/detail-cart-selection";
 
-export const cartControl = "min-h-11 rounded-xl border border-hanapure-border px-4 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text";
+export const cartControl = "min-h-11 min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] rounded-xl border border-hanapure-border px-4 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text";
 function ExistingQuantityForm({ publicId, quantity, cart, locale, announce }: {
   publicId: string; quantity: number; cart: DetailCartSnapshot; locale: EditorialLocale; announce: (result: DetailSelectionResult) => void;
 }) {
@@ -39,9 +39,9 @@ export default function AddToCart({ publicId, locale, routeLocale }: {
   const [selectionMessage, setSelectionMessage] = useState("");
   const [selectionTrusted, setSelectionTrusted] = useState(true);
   const selectedQuantity = detailCartQuantity(publicId, cart, selectionTrusted);
-  return <section className="mt-8 rounded-xl border border-hanapure-border p-4">
+  return <section className="mt-8 min-w-0 rounded-xl border border-hanapure-border p-4">
     <p className="text-sm leading-6 text-hanapure-muted">{labels.notice}</p>
-    <form className="mt-4 flex flex-wrap items-end gap-3" onSubmit={event => {
+    <form className="mt-4 flex min-w-0 flex-wrap items-end gap-3" onSubmit={event => {
       event.preventDefault();
       const value = Number(quantity);
       if (!validQuantity(value)) { setMessage(labels.invalid); return; }
@@ -53,7 +53,7 @@ export default function AddToCart({ publicId, locale, routeLocale }: {
       });
       setMessage(!accepted ? labels.invalid : result?.persistent ? labels.added : labels.storage);
     }}>
-      <div><label htmlFor={id} className="mb-2 block text-sm">{labels.quantity}</label>
+      <div className="min-w-0 max-w-full"><label htmlFor={id} className="mb-2 block break-words text-sm">{labels.quantity}</label>
         <input id={id} type="number" min="1" step="1" required value={quantity}
           onChange={event => setQuantity(event.target.value)} className={`${cartControl} w-28 bg-hanapure-white`} />
       </div>
