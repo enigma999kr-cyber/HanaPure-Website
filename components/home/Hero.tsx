@@ -13,12 +13,12 @@ export default function Hero({ locale = "en", routeLocale = null }: {
 
       <div className="absolute left-1/2 top-24 h-80 w-80 -translate-x-1/2 rounded-full bg-hanapure-beige-light opacity-40 blur-3xl sm:top-20 sm:h-[520px] sm:w-[520px]" />
 
-      <div className="relative z-10 mx-auto w-full max-w-5xl">
-        <p className="mb-4 text-xs uppercase tracking-[0.3em] text-hanapure-muted sm:text-sm">
+      <div className="relative z-10 mx-auto w-full min-w-0 max-w-5xl break-words">
+        <p className="mb-4 text-xs uppercase tracking-[0.15em] text-hanapure-muted sm:text-sm sm:tracking-[0.3em]">
           {copy.eyebrow}
         </p>
 
-        <h1 id="main-content" tabIndex={-1} className="mx-auto mb-6 max-w-4xl text-4xl font-light leading-[1.08] text-hanapure-text sm:text-5xl md:text-7xl">
+        <h1 id="main-content" tabIndex={-1} className="mx-auto mb-6 min-w-0 max-w-4xl break-words text-3xl font-light leading-[1.08] text-hanapure-text sm:text-5xl md:text-7xl">
           {copy.heading}
         </h1>
 

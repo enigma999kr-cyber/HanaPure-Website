@@ -38,16 +38,32 @@ export default function SearchSuggestions({ products, initialQuery, locale, rout
   const labels = searchSuggestionLabels[locale];
   const existing = storefrontLabels[locale];
   return <div ref={field} className="min-w-0" onChange={event => {
-    if (event.target instanceof HTMLInputElement && event.target.name === "q") {
+    if (event.target instanceof HTMLInputElement && event.target === field.current?.querySelector("#catalogue-search")) {
       setQuery(event.target.value);
       setDismissed(false);
     }
   }} onKeyDown={event => {
+    if (!visible || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.nativeEvent.isComposing) return;
+    const input = field.current?.querySelector<HTMLInputElement>("#catalogue-search");
+    const allowed = new Set(matches.map(product => {
+      const detail = suggestionDetailHref(product.slug, routeLocale, query, appliedCriteria.brand, appliedCriteria.sort);
+      return plan ? carryShoppingPlan(detail, plan) : detail;
+    }).filter(href => href !== null));
+    const links = Array.from(field.current?.querySelectorAll<HTMLAnchorElement>("a[data-search-suggestion]") ?? [])
+      .filter(link => allowed.has(link.getAttribute("href") ?? "") && link.getAttribute("aria-disabled") !== "true");
+    const index = links.findIndex(link => link === event.target);
+    if (event.target !== input && index < 0) return;
     if (event.key === "Escape") {
       // Native search inputs may clear on Escape: preserve the query and return from a link.
       event.preventDefault();
       setDismissed(true);
-      field.current?.querySelector<HTMLInputElement>("#catalogue-search")?.focus();
+      input?.focus();
+    } else if (event.key === "ArrowDown") {
+      const next = links[index + 1];
+      if (next) { event.preventDefault(); next.focus(); }
+    } else if (event.key === "ArrowUp" && index >= 0) {
+      const previous = index === 0 ? input : links[index - 1];
+      if (previous) { event.preventDefault(); previous.focus(); }
     }
   }}>
     {children}
@@ -60,7 +76,7 @@ export default function SearchSuggestions({ products, initialQuery, locale, rout
           const detail = suggestionDetailHref(product.slug, routeLocale, query, appliedCriteria.brand, appliedCriteria.sort);
           const href = plan ? carryShoppingPlan(detail, plan) : detail;
           return <li key={product.publicId} className="min-w-0">
-          {href === null ? <span role="status" className="block break-words text-sm">{existing.planLimit}</span> : <Link href={href}
+          {href === null ? <span role="status" className="block break-words text-sm">{existing.planLimit}</span> : <Link href={href} data-search-suggestion=""
             className="block min-h-11 min-w-0 max-w-full rounded-lg px-2 py-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text">
             <span className="block break-words">{product.name ?? `${existing.details}: ${product.brand} (${product.slug})`}</span>
             <span className="block break-words text-hanapure-muted">{product.brand}</span>

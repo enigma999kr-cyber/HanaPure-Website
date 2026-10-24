@@ -52,12 +52,12 @@ export default function BrandDirectory({ labels, catalogueLinks, emptyState }: {
             <p className="mb-3 text-sm font-medium text-hanapure-text">
               {labels.alphabet}
             </p>
-            <div className="grid grid-cols-7 gap-1.5 sm:grid-cols-10 md:grid-cols-14 lg:grid-cols-[repeat(27,minmax(0,1fr))]">
+            <div className="flex min-w-0 flex-wrap gap-1.5">
               <button
                 type="button"
                 aria-pressed={selectedLetter === null}
                 onClick={() => setSelectedLetter(null)}
-                className="min-h-10 break-words rounded-lg px-1 text-sm font-medium transition hover:bg-hanapure-beige-light focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text aria-pressed:bg-hanapure-text aria-pressed:text-hanapure-white"
+                className="min-h-11 min-w-11 max-w-full break-words rounded-lg px-2 text-sm font-medium transition-colors hover:bg-hanapure-beige-light focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text aria-pressed:bg-hanapure-text aria-pressed:text-hanapure-white"
               >
                 {labels.all}
               </button>
@@ -68,7 +68,7 @@ export default function BrandDirectory({ labels, catalogueLinks, emptyState }: {
                   disabled={!availableLetters.has(letter)}
                   aria-pressed={selectedLetter === letter}
                   onClick={() => setSelectedLetter(letter)}
-                  className="min-h-10 rounded-lg text-sm font-medium transition hover:bg-hanapure-beige-light focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text aria-pressed:bg-hanapure-text aria-pressed:text-hanapure-white disabled:cursor-not-allowed disabled:text-hanapure-border disabled:hover:bg-transparent"
+                  className="min-h-11 min-w-11 rounded-lg text-sm font-medium transition-colors hover:bg-hanapure-beige-light focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text aria-pressed:bg-hanapure-text aria-pressed:text-hanapure-white disabled:cursor-not-allowed disabled:text-hanapure-border disabled:hover:bg-transparent"
                 >
                   {letter}
                 </button>

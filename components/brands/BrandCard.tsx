@@ -24,10 +24,10 @@ export default function BrandCard({
   routeLocale = null,
 }: BrandCardProps) {
   return (
-    <article className="group overflow-hidden rounded-[2rem] border border-hanapure-border bg-hanapure-warm-white shadow-sm transition duration-300 hover:-translate-y-1 hover:bg-hanapure-white hover:shadow-lg">
+    <article className="min-w-0 overflow-hidden rounded-[2rem] border border-hanapure-border bg-hanapure-warm-white shadow-sm transition-colors hover:bg-hanapure-white">
       <div className={`h-40 ${accent}`} />
 
-      <div className="p-8">
+      <div className="min-w-0 break-words p-5 sm:p-8">
         <h3 className="mb-3 text-2xl font-light text-hanapure-text">{name}</h3>
 
         <p className="mb-6 text-sm font-medium text-hanapure-text">{tagline}</p>
@@ -37,7 +37,7 @@ export default function BrandCard({
         <div className="min-h-5">
         {hasPublishedProduct && <Link
           href={storefrontHref("/products", routeLocale) + catalogueQueryString({ query: "", brand: name })}
-          className="text-sm font-medium text-hanapure-text transition group-hover:tracking-wide"
+          className="inline-flex min-h-11 min-w-11 max-w-full items-center break-words rounded-sm py-2 text-sm font-medium text-hanapure-text underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text"
         >
           {discover} →
         </Link>}

@@ -31,15 +31,15 @@ export default function FeaturedBrands({ locale = "en", routeLocale = null, cata
   const copy = marketingCopy[locale].featured;
   const publishedBrands = publishedCatalogueBrands(catalogue);
   return (
-    <section className="bg-hanapure-ivory py-28">
-      <div className="mx-auto max-w-7xl px-6">
-        <p className="mb-4 text-center text-sm uppercase tracking-[0.3em] text-hanapure-muted">
+    <section className="bg-hanapure-ivory py-16 sm:py-28">
+      <div className="mx-auto min-w-0 max-w-7xl break-words px-5 sm:px-6">
+        <p className="mb-4 text-center text-sm uppercase tracking-[0.15em] text-hanapure-muted sm:tracking-[0.3em]">
           {copy.eyebrow}
         </p>
 
-        <h2 className="mx-auto mb-6 max-w-3xl text-center text-5xl font-light text-hanapure-text">
+        <h2 className="mx-auto mb-6 min-w-0 max-w-3xl break-words text-center text-3xl font-light text-hanapure-text sm:text-5xl">
           {copy.heading}
-          <br />
+          <br className="hidden sm:block" />{" "}
           {copy.headingEnd}
         </h2>
 

@@ -5,14 +5,14 @@ import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
 export default function WhyHanaPure({ locale = "en" }: { locale?: EditorialLocale }) {
   const copy = marketingCopy[locale].why;
   return (
-    <section className="bg-hanapure-beige-light py-28">
+    <section className="bg-hanapure-beige-light py-16 sm:py-28">
       <Container>
-        <div className="mx-auto max-w-3xl text-center">
-          <p className="mb-4 text-sm uppercase tracking-[0.3em] text-hanapure-muted">
+        <div className="mx-auto min-w-0 max-w-3xl break-words text-center">
+          <p className="mb-4 text-sm uppercase tracking-[0.15em] text-hanapure-muted sm:tracking-[0.3em]">
             {copy.eyebrow}
           </p>
 
-          <h2 className="mb-6 text-4xl font-light text-hanapure-text md:text-5xl">
+          <h2 className="mb-6 break-words text-3xl font-light text-hanapure-text sm:text-4xl md:text-5xl">
             {copy.heading}
           </h2>
 
@@ -25,7 +25,7 @@ export default function WhyHanaPure({ locale = "en" }: { locale?: EditorialLocal
           {copy.points.map((point) => (
             <div
               key={point.title}
-              className="rounded-3xl bg-hanapure-white p-8 shadow-sm"
+              className="min-w-0 break-words rounded-3xl bg-hanapure-white p-5 shadow-sm sm:p-8"
             >
               <h3 className="mb-4 text-xl font-medium text-hanapure-text">
                 {point.title}

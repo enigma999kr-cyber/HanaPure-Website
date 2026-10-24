@@ -19,9 +19,9 @@ export default function BrandsContent({ locale = "en", routeLocale = null, catal
     <><main lang={locale} className="min-h-screen bg-hanapure-warm-white text-hanapure-text">
       <Header />
       <div className="bg-gradient-to-b from-hanapure-ivory to-hanapure-warm-white px-5 pb-12 pt-36 sm:px-6 sm:pb-16 sm:pt-40">
-        <div className="mx-auto max-w-7xl">
-          <p className="mb-4 text-xs uppercase tracking-[0.3em] text-hanapure-muted sm:text-sm">{copy.brands.eyebrow}</p>
-          <h1 id="main-content" tabIndex={-1} className="max-w-3xl text-5xl font-light leading-tight sm:text-6xl">{copy.brands.heading}</h1>
+        <div className="mx-auto min-w-0 max-w-7xl break-words">
+          <p className="mb-4 text-xs uppercase tracking-[0.15em] text-hanapure-muted sm:text-sm sm:tracking-[0.3em]">{copy.brands.eyebrow}</p>
+          <h1 id="main-content" tabIndex={-1} className="min-w-0 max-w-3xl break-words text-3xl font-light leading-tight sm:text-6xl">{copy.brands.heading}</h1>
           <p className="mt-6 max-w-2xl text-base leading-8 text-hanapure-muted sm:text-lg">{copy.brands.description}</p>
         </div>
       </div>

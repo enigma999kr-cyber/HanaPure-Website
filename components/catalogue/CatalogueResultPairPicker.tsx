@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
 import { comparisonHref, comparisonOptions, publishedComparison, COMPARISON_DESTINATION } from "@/lib/comparison/compare-selection";
@@ -23,6 +23,14 @@ export default function CatalogueResultPairPicker({ products, locale, routeLocal
   const pair = ids.length === 2 ? publishedComparison(options, { first: ids[0], second: ids[1] }) : null;
   const href = pair ? comparisonHref(storefrontHref("/products", routeLocale), pair, catalogueQuery) : null;
   const labels = storefrontLabels[locale];
+  const [message, setMessage] = useState("");
+  const pending = useRef(false);
+  const attempt = {};
+  const live = useRef<{ attempt: object; location: string } | null>(null);
+  useEffect(() => {
+    live.current = { attempt, location: window.location.href };
+    return () => { live.current = null; };
+  });
   if (options.length < 2) return <>{children}</>;
   const toggle = (publicId: string, checked: boolean) => {
     const id = publicId.toLowerCase();
@@ -41,7 +49,17 @@ export default function CatalogueResultPairPicker({ products, locale, routeLocal
       <p role="status" className="break-words text-sm">{labels.resultComparisonCount}: {ids.length} / 2</p>
       <button type="button" disabled={!href}
         className="mt-3 min-h-11 max-w-full break-words rounded-xl border border-hanapure-border px-4 py-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text disabled:opacity-50"
-        onClick={() => { if (href) window.location.assign(`${href}#${COMPARISON_DESTINATION}`); }}>{labels.compareSelectedResults}</button>
+        onClick={() => {
+          if (!href || pending.current) return;
+          if (live.current?.attempt !== attempt || live.current.location !== window.location.href) {
+            if (live.current) setMessage(labels.comparisonSelectionChanged);
+            return;
+          }
+          setMessage("");
+          try { pending.current = true; window.location.assign(`${href}#${COMPARISON_DESTINATION}`); }
+          catch { pending.current = false; setMessage(labels.comparisonNavigationFailed); }
+        }}>{labels.compareSelectedResults}</button>
+      <p role="status" className="mt-2 break-words text-sm">{message}</p>
     </div>
   </PairSelection.Provider>;
 }

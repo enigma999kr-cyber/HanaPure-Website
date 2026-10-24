@@ -34,6 +34,8 @@ export function switchLocalePath(path: string, locale: EditorialLocale): string 
 
 export const storefrontLabels = {
   en: {
+    comparisonSelectionChanged: "The results or selection changed. Review the pair and try again.",
+    comparisonNavigationFailed: "Could not open the comparison. Please try again.",
     planSearch: "Search planned products", planBrand: "Planned product brand", planSort: "Plan display order", planOriginal: "Original plan order", planResetView: "Clear plan view",
     planSelected: "Selected planned lines", planSelectDisplayed: "Select displayed planned lines", planClearSelection: "Clear planned-line selection", planSelectLine: "Select planned line",
     planRemoveSelected: "Remove selected from plan", planBulkQuantity: "Quantity for selected planned lines", planSetSelected: "Set quantity for selected",
@@ -80,6 +82,8 @@ export const storefrontLabels = {
     sortBy: "Sort by", defaultOrder: "Default order", nameAscending: "Name A–Z", nameDescending: "Name Z–A",
   },
   hu: {
+    comparisonSelectionChanged: "A találatok vagy a kiválasztás megváltozott. Ellenőrizze a termékpárt, és próbálja újra.",
+    comparisonNavigationFailed: "Az összehasonlítás nem nyitható meg. Próbálja újra.",
     planSearch: "Tervezett termékek keresése", planBrand: "Tervezett termék márkája", planSort: "Terv megjelenítési sorrendje", planOriginal: "A terv eredeti sorrendje", planResetView: "Tervnézet szűrőinek törlése",
     planSelected: "Kiválasztott tervezett tételek", planSelectDisplayed: "Megjelenített tervezett tételek kiválasztása", planClearSelection: "Tervezett tételek kijelölésének törlése", planSelectLine: "Tervezett tétel kiválasztása",
     planRemoveSelected: "Kiválasztott tételek eltávolítása a tervből", planBulkQuantity: "Kiválasztott tervezett tételek mennyisége", planSetSelected: "Kiválasztott tételek mennyiségének beállítása",
@@ -126,6 +130,8 @@ export const storefrontLabels = {
     sortBy: "Rendezés", defaultOrder: "Alapértelmezett sorrend", nameAscending: "Név A–Z", nameDescending: "Név Z–A",
   },
   ko: {
+    comparisonSelectionChanged: "검색 결과나 선택 항목이 바뀌었습니다. 비교할 두 상품을 확인하고 다시 시도해 주세요.",
+    comparisonNavigationFailed: "상품 비교를 열 수 없습니다. 다시 시도해 주세요.",
     planSearch: "계획한 상품 검색", planBrand: "계획한 상품 브랜드", planSort: "계획 표시 순서", planOriginal: "계획 원래 순서", planResetView: "계획 보기 초기화",
     planSelected: "선택한 계획 항목", planSelectDisplayed: "표시된 계획 항목 선택", planClearSelection: "계획 항목 선택 해제", planSelectLine: "계획 항목 선택",
     planRemoveSelected: "선택 항목을 계획에서 제거", planBulkQuantity: "선택한 계획 항목 수량", planSetSelected: "선택 항목 수량 설정",
