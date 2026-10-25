@@ -228,7 +228,9 @@ test("directory and catalogue options derive only published brands while keeping
     assert.ok(!html.includes('>Anua</a>'));
     assert.ok(html.includes(marketingCopy[locale].directory.resultMany.replace("{count}", "2")));
     const listing = renderToStaticMarkup(ProductListing({ catalogue, locale, routeLocale: locale }));
-    assert.deepEqual([...listing.matchAll(/<option value="([^"]*)"/g)].map(match => match[1]), ["", "beplain", "Round Lab"]);
+    const brandOptions = listing.match(/<select\b[^>]*id="catalogue-brand"[^>]*>([\s\S]*?)<\/select>/)?.[1];
+    assert.ok(brandOptions);
+    assert.deepEqual([...brandOptions.matchAll(/<option value="([^"]*)"/g)].map(match => match[1]), ["", "beplain", "Round Lab"]);
     const historical = renderToStaticMarkup(ProductListing({ catalogue, locale, routeLocale: locale,
       criteria: { query: "TEST ONLY", brand: "Anua" } }));
     assert.ok(historical.includes('<option value="Anua" selected="">Anua</option>'));

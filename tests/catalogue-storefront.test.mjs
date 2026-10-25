@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { storefrontHref } from "../lib/storefront/localization.ts";
 import { registerHooks, createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -140,6 +141,36 @@ test("search batch A: copy shares only canonical applied criteria with bounded s
   assert.match(source, /return \(\) => \{ live.current = null; \}/);
   assert.match(source, /live.current === owner && owner.location === window.location.href/);
   assert.doesNotMatch(source, /execCommand|localStorage|sessionStorage|fetch\(|history\./);
+});
+
+test("H1-F04 native search precedes hydration-dependent session panels in legacy and every locale", () => {
+  const record = product(), catalogue = reader(record);
+  const criteria = { query: "árvíz 한국 &", brand: record.brand, sort: "name-desc" };
+  for (const routeLocale of [null, "en", "hu", "ko"]) {
+    const locale = routeLocale ?? "en";
+    const tree = ProductListing({ catalogue, locale, routeLocale, criteria });
+    const nodes = elements(tree);
+    const form = nodes.find(node => node.type === "form" && node.props.role === "search");
+    const input = nodes.find(node => node.type === "input" && node.props.id === "catalogue-search");
+    const saved = nodes.find(node => node.type === SavedProductsBar);
+    const recent = nodes.find(node => node.type === RecentlyViewedProducts);
+    assert.ok(form && input && saved && recent);
+    assert.ok(nodes.indexOf(input) < nodes.indexOf(saved));
+    assert.ok(nodes.indexOf(saved) < nodes.indexOf(recent));
+    assert.equal(nodes.filter(node => node.type === SavedProductsBar).length, 1);
+    assert.equal(nodes.filter(node => node.type === RecentlyViewedProducts).length, 1);
+    assert.equal(form.props.method, "get");
+    assert.equal(form.props.action, storefrontHref("/products", routeLocale));
+    assert.equal(input.props.type, "search"); assert.equal(input.props.name, "q");
+    assert.equal(input.props.defaultValue, criteria.query);
+    assert.equal(input.props.autoFocus, undefined);
+    assert.match(input.props.className, /(?:^| )scroll-mt-24(?: |$)/);
+    assert.equal(nodes.filter(node => node.type === ShoppingPlanSearchGuard).length, 1);
+    for (const panel of [saved, recent]) {
+      assert.equal(panel.props.locale, locale); assert.equal(panel.props.routeLocale, routeLocale);
+      assert.ok(panel.props.products.some(item => item.publicId === record.publicId));
+    }
+  }
 });
 
 test("search batch B: typed suggestion context wins over applied q and existing detail Back restores the encoded locale criteria", async () => {
@@ -922,14 +953,18 @@ test("invalid publication data cannot enter storefront through the existing cata
 
 test("route wiring uses the authoritative reader and promised slug; Header Shop reaches the real listing", () => {
   const source = (path) => readFileSync(join(repo, path), "utf8");
-  assert.match(source("app/products/page.tsx"), /<ProductListing criteria=\{criteria\} browse=\{browse\} planHint=\{query.cartPlan\} comparisonContext=\{readComparisonContext\(query\)\}\s*\/>/);
+  const listing = source("app/products/page.tsx");
+  assert.match(listing, /const comparisonContext = readComparisonContext\(query\)/);
+  assert.match(listing, /<ProductListing criteria=\{criteria\} browse=\{browse\} planHint=\{query.cartPlan\} comparisonContext=\{comparisonContext\}\s*\/>/);
   const detail = source("app/products/[slug]/page.tsx");
   assert.match(detail, /await params/);
-  assert.match(detail, /ProductDetail\(\{ slug, criteria, browse, planHint: query.cartPlan, comparisonContext: readComparisonContext\(query\), cartReturn: readCartReturn\(query.cartReturn\) \}\)/);
+  assert.match(detail, /const comparisonContext = readComparisonContext\(query\)/);
+  assert.match(detail, /ProductDetail\(\{ slug, criteria, browse, planHint: query.cartPlan, comparisonContext, cartReturn: readCartReturn\(query.cartReturn\) \}\)/);
   assert.match(detail, /productMetadata\(slug, "en", \{ legacy: true \}\)/);
   const header = source("components/layout/Header.tsx");
-  assert.equal((header.match(/storefrontHref\("\/products", routeLocale\)/g) ?? []).length, 4);
-  assert.match(header, /storefrontHref\("\/products", routeLocale\)[\s\S]*?onClick=\{closeMenuForNavigation\}/);
+  assert.match(header, /const listing = storefrontHref\("\/products", routeLocale\)/);
+  assert.equal((header.match(/href=\{shopHref\}/g) ?? []).length, 2);
+  assert.match(header, /href=\{shopHref\}[\s\S]*?onClick=\{closeMenuForNavigation\}/);
 });
 
 test("EN/HU/KO catalogue views select only the requested editorial content and keep identity/slug", () => {

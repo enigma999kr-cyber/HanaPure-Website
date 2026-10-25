@@ -127,8 +127,6 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
   return (
     <Container className="pb-20 pt-32 sm:pt-36">
       <h1 id="main-content" tabIndex={-1} className={`${locale === "ko" ? "text-3xl min-[375px]:text-4xl" : "text-4xl"} font-light text-hanapure-text sm:text-5xl`}>{labels.heading}</h1>
-      <SavedProductsBar locale={locale} routeLocale={routeLocale} products={savedProducts} comparisonProducts={comparison} planContext={planContext} />
-      <RecentlyViewedProducts locale={locale} routeLocale={routeLocale} products={quickProducts} comparisonProducts={comparison} planContext={planContext} />
       <ShoppingPlanSearchGuard path={listingHref} locale={locale}>
       <form key={JSON.stringify([locale, criteria.query, criteria.brand, criteria.sort, view.withLocaleInfo, view.withLocaleImage])}
         action={listingHref} method="get" autoComplete="off" role="search" aria-label={labels.searchProducts}
@@ -170,6 +168,8 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
         <button type="submit" className="min-h-11 rounded-xl bg-hanapure-text px-5 py-3 text-hanapure-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text">{labels.apply}</button>
       </form>
       </ShoppingPlanSearchGuard>
+      <SavedProductsBar locale={locale} routeLocale={routeLocale} products={savedProducts} comparisonProducts={comparison} planContext={planContext} />
+      <RecentlyViewedProducts locale={locale} routeLocale={routeLocale} products={quickProducts} comparisonProducts={comparison} planContext={planContext} />
       {publishedBrands.length > 0 && <nav aria-labelledby="catalogue-brand-shortcuts" className="mt-6 min-w-0">
         <h2 id="catalogue-brand-shortcuts" className="break-words text-sm font-medium">{labels.quickBrands}</h2>
         <ul className="mt-3 flex min-w-0 flex-wrap gap-3">

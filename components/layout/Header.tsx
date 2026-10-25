@@ -15,6 +15,7 @@ export default function Header({ catalogueQuery = "" }: { catalogueQuery?: strin
   const routeLocale = localeFromPath(pathname);
   const locale = routeLocale ?? "en";
   const labels = storefrontLabels[locale];
+  const currentPage = (path: string) => pathname === storefrontHref(path, routeLocale) ? "page" as const : undefined;
   // null refuses an unrepresentable browse context, not the entire navigation.
   const listing = storefrontHref("/products", routeLocale);
   const shopHref = catalogueQuery === null ? undefined : listing +
@@ -107,6 +108,7 @@ export default function Header({ catalogueQuery = "" }: { catalogueQuery?: strin
           {/* Logo */}
           <Link
             href={storefrontHref("/", routeLocale)}
+            aria-current={currentPage("/")}
             className="text-2xl font-light tracking-wide text-hanapure-text focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-hanapure-text"
           >
             HanaPure
@@ -114,11 +116,11 @@ export default function Header({ catalogueQuery = "" }: { catalogueQuery?: strin
 
           {/* Desktop Navigation */}
           <nav aria-label={labels.primaryNavigation} className="hidden items-center gap-4 text-sm text-hanapure-muted lg:flex xl:gap-6">
-            {shopHref === undefined ? <button type="button" disabled className="inline-flex min-h-11 items-center opacity-50">{labels.shop}</button> : <a ref={desktopShopRef} href={shopHref} className="inline-flex min-h-11 items-center transition hover:text-hanapure-text">
+            {shopHref === undefined ? <button type="button" disabled className="inline-flex min-h-11 items-center opacity-50">{labels.shop}</button> : <a ref={desktopShopRef} href={shopHref} aria-current={currentPage("/products")} className="inline-flex min-h-11 items-center transition hover:text-hanapure-text aria-[current=page]:font-medium aria-[current=page]:text-hanapure-text">
               {labels.shop}
             </a>}
 
-            <Link ref={desktopBrandsRef} href={storefrontHref("/brands", routeLocale)} className="inline-flex min-h-11 items-center transition hover:text-hanapure-text">
+            <Link ref={desktopBrandsRef} href={storefrontHref("/brands", routeLocale)} aria-current={currentPage("/brands")} className="inline-flex min-h-11 items-center transition hover:text-hanapure-text aria-[current=page]:font-medium aria-[current=page]:text-hanapure-text">
               {labels.brands}
             </Link>
 
@@ -132,7 +134,7 @@ export default function Header({ catalogueQuery = "" }: { catalogueQuery?: strin
 
             {catalogueQuery !== null && <LanguageSwitcher locale={locale} pathname={`${pathname}${catalogueQuery}`} />}
 
-            <Link href={storefrontHref("/cart", routeLocale)} aria-label={cartName} className="inline-flex min-h-11 items-center gap-1 focus-visible:outline-2 focus-visible:outline-hanapure-text">{cartLabels[locale].cart} <span aria-hidden="true">({quantity})</span></Link>
+            <Link href={storefrontHref("/cart", routeLocale)} aria-current={currentPage("/cart")} aria-label={cartName} className="inline-flex min-h-11 items-center gap-1 focus-visible:outline-2 focus-visible:outline-hanapure-text aria-[current=page]:font-medium">{cartLabels[locale].cart} <span aria-hidden="true">({quantity})</span></Link>
           </div>
 
           {/* Mobile Menu */}
@@ -170,21 +172,24 @@ export default function Header({ catalogueQuery = "" }: { catalogueQuery?: strin
           <div className="flex flex-col py-3 text-base text-hanapure-text">
             <Link
               href={storefrontHref("/", routeLocale)}
-              className="rounded-sm px-2 py-3 hover:bg-hanapure-beige-light focus-visible:outline-2 focus-visible:outline-hanapure-text"
+              aria-current={currentPage("/")}
+              className="rounded-sm px-2 py-3 hover:bg-hanapure-beige-light focus-visible:outline-2 focus-visible:outline-hanapure-text aria-[current=page]:bg-hanapure-beige-light aria-[current=page]:font-medium"
               onClick={closeMenuForNavigation}
             >
               {labels.home}
             </Link>
             {shopHref === undefined ? <button type="button" disabled className="min-h-11 rounded-sm px-2 py-3 text-left opacity-50">{labels.shop}</button> : <a
               href={shopHref}
-              className="rounded-sm px-2 py-3 hover:bg-hanapure-beige-light focus-visible:outline-2 focus-visible:outline-hanapure-text"
+              aria-current={currentPage("/products")}
+              className="rounded-sm px-2 py-3 hover:bg-hanapure-beige-light focus-visible:outline-2 focus-visible:outline-hanapure-text aria-[current=page]:bg-hanapure-beige-light aria-[current=page]:font-medium"
               onClick={closeMenuForNavigation}
             >
               {labels.shop}
             </a>}
             <Link
               href={storefrontHref("/brands", routeLocale)}
-              className="rounded-sm px-2 py-3 hover:bg-hanapure-beige-light focus-visible:outline-2 focus-visible:outline-hanapure-text"
+              aria-current={currentPage("/brands")}
+              className="rounded-sm px-2 py-3 hover:bg-hanapure-beige-light focus-visible:outline-2 focus-visible:outline-hanapure-text aria-[current=page]:bg-hanapure-beige-light aria-[current=page]:font-medium"
               onClick={closeMenuForNavigation}
             >
               {labels.brands}
@@ -195,8 +200,8 @@ export default function Header({ catalogueQuery = "" }: { catalogueQuery?: strin
               className="rounded-sm px-2 py-3 hover:bg-hanapure-beige-light focus-visible:outline-2 focus-visible:outline-hanapure-text">
               {labels.search}
             </a>}
-            <Link href={storefrontHref("/cart", routeLocale)} aria-label={cartName} onClick={closeMenuForNavigation}
-              className="rounded-sm px-2 py-3 focus-visible:outline-2 focus-visible:outline-hanapure-text">{cartLabels[locale].cart} <span aria-hidden="true">({quantity})</span></Link>
+            <Link href={storefrontHref("/cart", routeLocale)} aria-current={currentPage("/cart")} aria-label={cartName} onClick={closeMenuForNavigation}
+              className="rounded-sm px-2 py-3 focus-visible:outline-2 focus-visible:outline-hanapure-text aria-[current=page]:bg-hanapure-beige-light aria-[current=page]:font-medium">{cartLabels[locale].cart} <span aria-hidden="true">({quantity})</span></Link>
           </div>
         </Container>
       </nav>

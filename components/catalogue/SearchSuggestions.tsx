@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
+import { cloneElement, isValidElement, useId, useRef, useState, type InputHTMLAttributes, type ReactNode } from "react";
 import Link from "next/link";
 import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
 import { searchSuggestions, type SearchSuggestionProduct } from "@/lib/catalog/search-suggestions";
@@ -37,6 +37,14 @@ export default function SearchSuggestions({ products, initialQuery, locale, rout
   const visible = products.length > 0 && Boolean(query.trim()) && !dismissed;
   const labels = searchSuggestionLabels[locale];
   const existing = storefrontLabels[locale];
+  const suggestionsId = useId();
+  const statusId = `${suggestionsId}-status`;
+  // Keep the native search input and ordinary links; this is not a combobox.
+  const input = isValidElement<InputHTMLAttributes<HTMLInputElement>>(children) && children.type === "input"
+    ? cloneElement(children, {
+      "aria-controls": suggestionsId,
+      "aria-describedby": [children.props["aria-describedby"], statusId].filter(Boolean).join(" "),
+    }) : children;
   return <div ref={field} className="min-w-0" onChange={event => {
     if (event.target instanceof HTMLInputElement && event.target === field.current?.querySelector("#catalogue-search")) {
       setQuery(event.target.value);
@@ -66,18 +74,18 @@ export default function SearchSuggestions({ products, initialQuery, locale, rout
       if (previous) { event.preventDefault(); previous.focus(); }
     }
   }}>
-    {children}
-    {visible && <div className="mt-2 min-w-0 rounded-xl border border-hanapure-border bg-hanapure-white p-3">
-      <p role="status" className="break-words text-sm text-hanapure-muted">
-        {matches.length ? `${labels.heading}: ${matches.length}` : labels.none}
+    {input}
+    <div id={suggestionsId} hidden={!visible} className="mt-2 min-w-0 rounded-xl border border-hanapure-border bg-hanapure-white p-3">
+      <p id={statusId} role="status" className="break-words text-sm text-hanapure-muted">
+        {visible ? matches.length ? `${labels.heading}: ${matches.length}` : labels.none : ""}
       </p>
-      {matches.length > 0 && <ul aria-label={labels.heading} className="mt-2 max-h-64 space-y-1 overflow-y-auto">
+      {visible && matches.length > 0 && <ul aria-label={labels.heading} className="mt-2 max-h-64 space-y-1 overflow-y-auto">
         {matches.map(product => {
           const detail = suggestionDetailHref(product.slug, routeLocale, query, appliedCriteria.brand, appliedCriteria.sort);
           const href = plan ? carryShoppingPlan(detail, plan) : detail;
           return <li key={product.publicId} className="min-w-0">
           {href === null ? <span role="status" className="block break-words text-sm">{existing.planLimit}</span> : <Link href={href} data-search-suggestion=""
-            className="block min-h-11 min-w-0 max-w-full rounded-lg px-2 py-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text">
+            className="block min-h-11 min-w-0 max-w-full rounded-lg px-2 py-3 text-sm focus-visible:outline-2 focus-visible:-outline-offset-4! focus-visible:outline-hanapure-text focus-visible:bg-hanapure-beige-light forced-colors:focus-visible:outline-[Highlight]!">
             <span className="block break-words">{product.name ?? `${existing.details}: ${product.brand} (${product.slug})`}</span>
             <span className="block break-words text-hanapure-muted">{product.brand}</span>
             {product.name === null && <span className="block break-words text-hanapure-muted">{existing.missing}</span>}
@@ -85,6 +93,6 @@ export default function SearchSuggestions({ products, initialQuery, locale, rout
         </li>;
         })}
       </ul>}
-    </div>}
+    </div>
   </div>;
 }

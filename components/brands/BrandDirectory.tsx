@@ -48,7 +48,7 @@ export default function BrandDirectory({ labels, catalogueLinks, emptyState }: {
             className="w-full rounded-2xl border border-hanapure-border bg-hanapure-warm-white px-5 py-4 text-base text-hanapure-text outline-none placeholder:text-hanapure-muted focus-visible:border-hanapure-beige-deep focus-visible:ring-2 focus-visible:ring-hanapure-beige"
           />
 
-          <div className="mt-8" aria-label={labels.filterLabel}>
+          <div role="group" className="mt-8" aria-label={labels.filterLabel}>
             <p className="mb-3 text-sm font-medium text-hanapure-text">
               {labels.alphabet}
             </p>

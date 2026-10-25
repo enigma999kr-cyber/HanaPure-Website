@@ -8,6 +8,7 @@ import ts from "typescript";
 import { CART_STORAGE_KEY, serializeCart, inspectStoredCart } from "../lib/cart/cart-state.ts";
 import { cartLabels } from "../lib/cart/labels.ts";
 import { storefrontLabels } from "../lib/storefront/localization.ts";
+import { searchSuggestionLabels } from "../lib/catalog/search-suggestion-labels.ts";
 
 // Existing installed-TypeScript/registerHooks pattern, not browser/hydration evidence.
 const require = createRequire(import.meta.url);
@@ -15,9 +16,11 @@ const repo = dirname(dirname(fileURLToPath(import.meta.url)));
 const reactEntry = pathToFileURL(join(dirname(require.resolve("react/package.json")), "index.js")).href;
 const jsxEntry = pathToFileURL(join(dirname(require.resolve("react/package.json")), "jsx-runtime.js")).href;
 const hooksUrl = "data:text/javascript," + encodeURIComponent(`
+export {cloneElement,isValidElement} from ${JSON.stringify(reactEntry)};
 export const driver={instances:new Map(),active:[],index:0,subscriptions:new Map(),serial:0,effects:[]};
 export function useState(initial){const state=driver.active,index=driver.index++;if(!(index in state))state[index]=typeof initial==='function'?initial():initial;return [state[index],value=>{state[index]=typeof value==='function'?value(state[index]):value;}];}
 export function useId(){return useState(()=> 'synthetic-'+(++driver.serial))[0];}
+export function usePathname(){return driver.pathname ?? '/en/products';}
 export function useRef(current){return useState(()=>({current}))[0];}
 export function useEffect(effect,deps){const s=driver.active,i=driver.index++,old=s[i];if(!old||!deps||!old.deps||deps.length!==old.deps.length||deps.some((v,j)=>!Object.is(v,old.deps[j]))){driver.effects.push(()=>{old?.cleanup?.();s[i]={effect:true,deps,cleanup:effect()};});}}
 export function createContext(){return {Provider:Symbol("synthetic-provider")};}
@@ -26,12 +29,12 @@ export function useSyncExternalStore(subscribe,getSnapshot,getServerSnapshot){dr
 `);
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "react" && /\/(components\/(cart\/AddToCart|catalogue\/(SearchSuggestions|CatalogueResultPairPicker)|brands\/BrandDirectory)\.tsx|lib\/(cart\/browser-cart|favorites\/browser-favorites)\.ts)$/.test(context.parentURL ?? "")) return { url: hooksUrl, shortCircuit: true };
+    if (specifier === "react" && /\/(components\/(layout\/Header|cart\/AddToCart|catalogue\/(SearchSuggestions|CatalogueResultPairPicker)|brands\/BrandDirectory)\.tsx|lib\/(cart\/browser-cart|favorites\/browser-favorites)\.ts)$/.test(context.parentURL ?? "")) return { url: hooksUrl, shortCircuit: true };
     if (specifier === "react") return { url: reactEntry, shortCircuit: true };
     if (specifier === "react/jsx-runtime") return { url: jsxEntry, shortCircuit: true };
     if (specifier === "react-dom") return { url: pathToFileURL(join(dirname(require.resolve("react-dom/package.json")), "index.js")).href, shortCircuit: true };
     if (specifier === "next/link") return nextResolve("next/link.js", context);
-    if (specifier === "next/navigation" && context.parentURL?.endsWith("/components/layout/Header.tsx")) return { url: "data:text/javascript,export const usePathname=()=>'/en/products';", shortCircuit: true };
+    if (specifier === "next/navigation" && context.parentURL?.endsWith("/components/layout/Header.tsx")) return { url: hooksUrl, shortCircuit: true };
     if (specifier === "next/navigation") return nextResolve("next/dist/client/components/navigation.react-server.js", context);
     if (specifier.startsWith("@/")) specifier = pathToFileURL(join(repo, specifier.slice(2))).href;
     try { return nextResolve(specifier, context); } catch (error) {
@@ -53,6 +56,8 @@ const { default: AddToCart } = await import("../components/cart/AddToCart.tsx");
 const { default: Suggestions } = await import("../components/catalogue/SearchSuggestions.tsx");
 const { default: PairPicker } = await import("../components/catalogue/CatalogueResultPairPicker.tsx");
 const { default: Directory } = await import("../components/brands/BrandDirectory.tsx");
+const { default: Header } = await import("../components/layout/Header.tsx");
+const { createElement } = await import(reactEntry);
 const { default: BrandCard } = await import("../components/brands/BrandCard.tsx");
 const { default: Hero } = await import("../components/home/Hero.tsx");
 const { default: Why } = await import("../components/home/WhyHanaPure.tsx");
@@ -94,6 +99,140 @@ async function stores(run,lines=[{publicId:id(1),quantity:5}]) {
 function detail(locale="en",publicId=id(1)){return render(AddToCart,{publicId,locale,routeLocale:locale},"detail");}
 function quantity(tree,raw){nodes(tree).find(n=>n.type==="input"&&n.props.type==="number").props.onChange({target:{value:raw}});}
 const submit=tree=>nodes(tree).find(n=>n.type==="form").props.onSubmit({preventDefault(){}});
+
+test("web21 C01 exact current-page semantics preserve localized Header destinations and refuse false detail highlights", () => {
+  try {
+    for (const prefix of ["", "/en", "/hu", "/ko"]) for (const path of ["/", "/products", "/brands", "/cart", "/products/fixture-1", "/brands-other", "/missing"]) {
+      driver.pathname = prefix + (path === "/" && prefix ? "" : path);
+      const tree = render(Header, { catalogueQuery: "?q=Synthetic" }, "header-current");
+      const links = nodes(tree).filter(node => typeof node.props?.href === "string" && node.props.href !== "#main-content");
+      const active = links.filter(node => node.props["aria-current"] === "page");
+      assert.equal(active.length, ["/", "/products", "/brands", "/cart"].includes(path) ? 2 : 0);
+      for (const link of active) assert.equal(link.props.href, driver.pathname);
+      assert.ok(links.filter(node => node.props.href === `${prefix}/products`).length >= 2);
+      assert.ok(links.every(node => node.props["aria-current"] === undefined || node.props["aria-current"] === "page"));
+      dispose("header-current");
+    }
+    driver.pathname = "/hu/products";
+    const refused = render(Header, { catalogueQuery: null }, "header-refused");
+    assert.equal(nodes(refused).filter(node => node.props?.["aria-current"] === "page").length, 0);
+    assert.equal(buttons(refused).filter(node => node.props.disabled).length, 4);
+  } finally { dispose("header-current"); dispose("header-refused"); delete driver.pathname; }
+});
+
+test("H1-F04 first cross-route Search keeps native locale/hash/query/Plan targets without a focus override", () => {
+  const suffix = "?" + new URLSearchParams({ q: "árvíz 한국 &", brand: "Round Lab", sort: "name-desc",
+    cartPlan: portablePayload([{ publicId: id(1), quantity: 2 }]) });
+  try {
+    for (const prefix of ["", "/en", "/hu", "/ko"]) for (const path of ["/brands", "/products"]) {
+      driver.pathname = prefix + path;
+      const locale = prefix.slice(1) || "en";
+      const tree = render(Header, { catalogueQuery: suffix }, "search-destination");
+      const links = nodes(tree).filter(node => node.type === "a" && text(node) === storefrontLabels[locale].search);
+      assert.equal(links.length, 2);
+      for (const link of links) {
+        assert.equal(link.props.href, `${prefix}/products${suffix}#catalogue-search`);
+        assert.equal(link.props["aria-current"], undefined);
+        assert.equal(link.props.onMouseDown, undefined);
+      }
+      assert.equal(typeof links[1].props.onClick, "function", "Mobile menu cleanup is preserved");
+      dispose("search-destination");
+      const refused = render(Header, { catalogueQuery: null }, "search-refused");
+      assert.equal(nodes(refused).filter(node => node.type === "a" && text(node) === storefrontLabels[locale].search).length, 0);
+      assert.equal(buttons(refused).filter(node => text(node) === storefrontLabels[locale].search && node.props.disabled).length, 2);
+      dispose("search-refused");
+    }
+  } finally { dispose("search-destination"); dispose("search-refused"); delete driver.pathname; }
+});
+
+test("web21 C03 native search references stable results/status, preserves props and clears dismissed content", () => {
+  for (const locale of ["en", "hu", "ko"]) {
+    const original = createElement("input", { id: "catalogue-search", name: "q", type: "search", defaultValue: "Synthetic", "aria-describedby": "existing-help" });
+    const props = { ...suggestionProps(locale), children: original };
+    const inspect = tree => {
+      const input = nodes(tree).find(node => node.type === "input");
+      const controlled = nodes(tree).find(node => node.props?.id === input.props["aria-controls"]);
+      const status = nodes(tree).find(node => node.props?.id === input.props["aria-describedby"].split(" ").at(-1));
+      assert.ok(controlled); assert.equal(status.props.role, "status");
+      assert.ok(input.props["aria-describedby"].startsWith("existing-help "));
+      for (const key of ["id", "name", "type", "defaultValue"]) assert.equal(input.props[key], original.props[key]);
+      assert.equal(input.props.role, undefined); assert.equal(input.props["aria-expanded"], undefined);
+      return { input, controlled, status };
+    };
+    let tree = render(Suggestions, props, "semantic-search"), state = inspect(tree);
+    assert.equal(state.controlled.props.hidden, false);
+    assert.ok(text(state.status).endsWith(": 3"));
+    const stableId = state.controlled.props.id;
+    const f = focusFixture(tree); f.key(f.input, "Escape");
+    state = inspect(render(Suggestions, props, "semantic-search"));
+    assert.equal(state.controlled.props.hidden, true); assert.equal(text(state.status), "");
+    assert.equal(state.controlled.props.id, stableId); dispose("semantic-search");
+    for (const patch of [{ initialQuery: "absent" }, { initialQuery: "" }, { products: [] }]) {
+      state = inspect(render(Suggestions, { ...props, ...patch }, "semantic-search"));
+      assert.equal(state.controlled.props.hidden, patch.initialQuery !== "absent");
+      assert.equal(text(state.status), patch.initialQuery === "absent" ? searchSuggestionLabels[locale].none : "");
+      dispose("semantic-search");
+    }
+    assert.equal(original.props["aria-controls"], undefined);
+  }
+});
+
+test("web21 C09 A-Z has a named group in every locale without changing public filter buttons", () => {
+  for (const locale of ["en", "hu", "ko"]) {
+    const labels = marketingCopy[locale].directory;
+    const tree = render(Directory, { labels, catalogueLinks: { Anua: "/products?brand=Anua" }, emptyState: { heading: "Empty", description: "None" } }, "semantic-directory");
+    const group = nodes(tree).find(node => node.props?.role === "group");
+    assert.equal(group.props["aria-label"], labels.filterLabel);
+    assert.equal(buttons(group).length, 27);
+    assert.equal(buttons(group).filter(node => !node.props.disabled).length, 2);
+    assert.equal(buttons(group).filter(node => node.props["aria-pressed"]).length, 1);
+    dispose("semantic-directory");
+  }
+});
+
+test("H1-F05 suggestion focus is inset and high-contrast without changing scrolling, locale or Plan links", async () => {
+  // The global focus rule is unlayered. These two scoped declarations must win
+  // over its outside offset and outline-color without changing global CSS.
+  const { compile } = await import("tailwindcss");
+  const css = (await compile("@tailwind utilities;")).build([
+    "focus-visible:-outline-offset-4!", "forced-colors:focus-visible:outline-[Highlight]!",
+  ]);
+  assert.match(css, /outline-offset: calc\(4px \* -1\) !important/);
+  assert.match(css, /outline-color: Highlight !important/);
+  assert.match(css, /@media \(forced-colors: active\)/);
+  for (const locale of ["en", "hu", "ko"]) {
+    const plan = { status: "ready", lines: [{ publicId: id(1), quantity: 2 }] };
+    const props = suggestionProps(locale, plan);
+    const tree = render(Suggestions, props, "inset-suggestions");
+    const list = nodes(tree).find(node => node.type === "ul");
+    assert.ok(list.props.className.split(" ").includes("max-h-64"));
+    assert.ok(list.props.className.split(" ").includes("overflow-y-auto"));
+    const links = nodes(list).filter(node => node.props?.["data-search-suggestion"] !== undefined);
+    assert.equal(links.length, 3);
+    for (const link of links) {
+      const classes = link.props.className.split(" ");
+      for (const token of ["rounded-lg", "min-h-11", "focus-visible:outline-2", "focus-visible:-outline-offset-4!",
+        "focus-visible:outline-hanapure-text", "focus-visible:bg-hanapure-beige-light", "forced-colors:focus-visible:outline-[Highlight]!"]) assert.ok(classes.includes(token));
+      assert.ok(!classes.includes("focus-visible:outline-offset-2"));
+      assert.ok(!classes.some(token => /outline-none|forced-color-adjust-none/.test(token)));
+      assert.notEqual(link.type, "button"); assert.equal(link.props.role, undefined);
+      const url = new URL(link.props.href, "https://synthetic.invalid");
+      assert.ok(url.pathname.startsWith(`/${locale}/products/fixture-`));
+      assert.equal(url.searchParams.get("cartPlan"), portablePayload(plan.lines));
+      assert.equal(url.searchParams.get("q"), "Synthetic");
+      assert.equal(url.searchParams.get("brand"), "Anua");
+    }
+    const f = focusFixture(tree);
+    for (const link of f.links) {
+      f.key(f.input.active ?? f.input, "ArrowDown");
+      assert.equal(f.input.active, link);
+    }
+    assert.equal(f.input.active, f.links.at(-1));
+    f.key(f.links.at(-1), "ArrowUp"); assert.equal(f.input.active, f.links.at(-2));
+    f.key(f.links.at(-2), "Escape"); assert.equal(f.input.focused, true);
+    dispose("inset-suggestions");
+  }
+});
 test("F1 virgin empty Cart adds only on explicit submit with confirmed readback",async()=>stores(async({values,writes,notify})=>{
   values.delete(CART_STORAGE_KEY);notify();submit(detail());
   assert.deepEqual(inspectStoredCart(values.get(CART_STORAGE_KEY)).lines,[{publicId:id(1),quantity:1}]);
