@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, copyFileSync, lstatSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync, lstatSync, realpathSync, accessSync, constants } from "node:fs";
 import { rm } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { dirname, join, resolve, relative, isAbsolute } from "node:path";
@@ -20,6 +20,58 @@ export function fixtureEnvironment(input = process.env) {
     if (allowed.has(key.toUpperCase()) && typeof value === "string") env[key.toUpperCase()] = value;
   }
   return { ...env, NODE_ENV: "production", NEXT_TELEMETRY_DISABLED: "1", HANAPURE_PUBLIC_SITE_ORIGIN: "" };
+}
+
+// Resolve only an existing OS-profile installation, never a caller's browser
+// override. This is a read-only check; no browser or child process is launched.
+export function publishedBrowserRoot() {
+  if (process.platform !== "win32" || process.arch !== "x64") throw new Error("Unsupported browser installation platform");
+  const environment = fixtureEnvironment();
+  function ordinary(path, directory) {
+    const stat = lstatSync(path);
+    if (stat.isSymbolicLink() || (directory ? !stat.isDirectory() : !stat.isFile())) {
+      throw new Error("Non-ordinary browser installation path");
+    }
+    for (let ancestor = dirname(path); ; ancestor = dirname(ancestor)) {
+      const parent = lstatSync(ancestor);
+      if (parent.isSymbolicLink() || !parent.isDirectory()) throw new Error("Linked browser installation ancestor");
+      if (dirname(ancestor) === ancestor) break;
+    }
+  }
+  const candidates = [];
+  if (environment.LOCALAPPDATA && isAbsolute(environment.LOCALAPPDATA)) candidates.push(join(environment.LOCALAPPDATA, "ms-playwright"));
+  if (environment.USERPROFILE && isAbsolute(environment.USERPROFILE)) candidates.push(join(environment.USERPROFILE, "AppData", "Local", "ms-playwright"));
+  const roots = new Map();
+  for (const candidate of candidates) {
+    if (!existsSync(candidate)) continue;
+    ordinary(candidate, true);
+    // Windows app-package redirection may produce a different canonical root.
+    const root = realpathSync.native(candidate);
+    ordinary(root, true);
+    if (realpathSync.native(root).toLowerCase() !== root.toLowerCase()) throw new Error("Unstable browser installation root");
+    roots.set(root.toLowerCase(), root);
+  }
+  if (roots.size !== 1) throw new Error("Missing or ambiguous existing browser installation");
+  const root = [...roots.values()][0];
+  const metadata = JSON.parse(readFileSync(join(repo, "node_modules", "playwright-core", "browsers.json"), "utf8"));
+  for (const [name, folder, executable] of [
+    ["chromium", "chromium", ["chrome-win64", "chrome.exe"]],
+    ["chromium-headless-shell", "chromium_headless_shell", ["chrome-headless-shell-win64", "chrome-headless-shell.exe"]],
+  ]) {
+    const matches = metadata.browsers.filter(browser => browser.name === name);
+    if (matches.length !== 1) throw new Error("Ambiguous installed browser revision");
+    const revision = matches[0].revisionOverrides?.win64 ?? matches[0].revision;
+    if (typeof revision !== "string" || !/^\d+$/.test(revision)) throw new Error("Invalid installed browser revision");
+    const file = join(root, `${folder}-${revision}`, ...executable);
+    ordinary(file, false);
+    const canonicalFile = realpathSync.native(file);
+    const suffix = relative(root, canonicalFile);
+    if (!suffix || suffix.startsWith("..") || isAbsolute(suffix) || canonicalFile.toLowerCase() !== file.toLowerCase()) {
+      throw new Error("Browser executable escapes canonical installation");
+    }
+    accessSync(file, constants.R_OK);
+  }
+  return root;
 }
 
 export async function stopOwnedChild(child, owner) {
@@ -114,7 +166,28 @@ async function assertPortFree() {
   });
 }
 
+export function publishedTestSelection(args) {
+  const selectors = new Map([
+    ["--cart-only", ["--grep", ": cart "]],
+    ["--gallery-only", ["--grep", "media gallery"]],
+    ["--footer-only", ["--grep", "Footer"]],
+    ["--discovery-only", ["--grep", "discovery entry|image decode|normal listing/detail|published Brands"]],
+    ["--same-brand-only", ["--grep", "same-brand discovery|media gallery|image decode"]],
+    ["--quick-add-only", ["--grep", "quick add|: cart "]],
+    ["--sort-only", ["--grep", "sort continuity|quick add|same-brand discovery|direct entry|published Brands"]],
+    ["--journey-quality-only", ["--grep", "\\[web19\\]", "--project", "published-chromium-375"]],
+  ]);
+  if (!Array.isArray(args) || args.length > 1 ||
+    (args.length === 1 && !selectors.has(args[0]))) {
+    throw new Error("STOP: provide no selector or exactly one recognized published-browser selector");
+  }
+  return args.length ? [...selectors.get(args[0])] : [];
+}
+
 async function runJourney() {
+  // Validate before port binding, workspace creation, build or child execution.
+  const selection = publishedTestSelection(process.argv.slice(2));
+  const browserRoot = publishedBrowserRoot();
   await assertPortFree(); // Never adopt an unknown fixture-port server.
   const owner = `hanapure-published-catalogue-browser-v1:${randomUUID()}`;
   const workspace = createFixtureWorkspace(join(repo, ".next", "published-catalogue-app"), owner);
@@ -172,37 +245,13 @@ async function runJourney() {
     writeFileSync(join(fixtureRoot, "data", "catalogue.ts"),
       'import "server-only";\nimport type { EditorialProduct } from "../lib/catalog/editorial-catalogue";\n' +
       `export const editorialProducts: readonly EditorialProduct[] = ${JSON.stringify(publishedCatalogueFixtures)};\n`);
-    const chunks = join(repo, ".next", "static", "chunks");
-    const css = readdirSync(chunks).filter(file => file.endsWith(".css"))
-      .map(file => readFileSync(join(chunks, file), "utf8")).join("\n");
-    const fontCSS = {};
-    for (const family of ["Geist", "Geist Mono"]) {
-      const faces = [...css.matchAll(/@font-face\{[^}]+\}/g)].map(match => match[0])
-        .filter(face => face.includes(`font-family:${family};`));
-      if (!faces.length) throw new Error("Build the real app first to supply offline font assets");
-      fontCSS[family] = faces.join("\n").replace(/url\(\.\.\/media\/([^)]*)\)/g, (_, name) => {
-        const absolute = join(repo, ".next", "static", "media", name);
-        if (!existsSync(absolute)) throw new Error("Missing built font asset");
-        return `url(${absolute.replace(/\\/g, "/").replace(/^[A-Za-z]:/, "")})`;
-      });
-    }
-    const fontResponses = join(fixtureRoot, "offline-font-responses.cjs");
-    writeFileSync(fontResponses, `const css = ${JSON.stringify(fontCSS)};\nmodule.exports = new Proxy({}, {get: (_, url) => css[String(url).includes("Geist+Mono") ? "Geist Mono" : "Geist"]});\n`);
-    environment.NEXT_FONT_GOOGLE_MOCKED_RESPONSES = fontResponses; // Controlled local path, never inherited.
     const next = join(repo, "node_modules", "next", "dist", "bin", "next");
     await workspace.wait(workspace.spawn([next, "build", "--webpack"], environment));
     const server = workspace.spawn([next, "start", "--hostname", "127.0.0.1", "--port", "3101"], environment);
     await waitForFixtureServer(server, "http://127.0.0.1:3101/en/products");
     const playwright = join(repo, "node_modules", "@playwright", "test", "cli.js");
-    const selection = process.argv.includes("--cart-only") ? ["--grep", ": cart "]
-      : process.argv.includes("--gallery-only") ? ["--grep", "media gallery"]
-      : process.argv.includes("--footer-only") ? ["--grep", "Footer"]
-      : process.argv.includes("--discovery-only") ? ["--grep", "discovery entry|image decode|normal listing/detail|published Brands"]
-      : process.argv.includes("--same-brand-only") ? ["--grep", "same-brand discovery|media gallery|image decode"]
-      : process.argv.includes("--quick-add-only") ? ["--grep", "quick add|: cart "]
-      : process.argv.includes("--sort-only") ? ["--grep", "sort continuity|quick add|same-brand discovery|direct entry|published Brands"] : [];
     await workspace.wait(workspace.spawn([playwright, "test", "--config", join(repo, "playwright.published.config.ts"), ...selection],
-      { ...environment, HANAPURE_PUBLISHED_TEST_RUN_ID: owner }));
+      { ...environment, HANAPURE_PUBLISHED_TEST_RUN_ID: owner, PLAYWRIGHT_BROWSERS_PATH: browserRoot }));
   } finally {
     // Covers build/start/readiness/test errors. Only this living controller holds
     // the native child handles; orphan/PID recovery is deliberately refused.

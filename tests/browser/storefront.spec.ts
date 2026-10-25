@@ -39,6 +39,52 @@ async function noOverflow(page: Page) {
     .toBeLessThanOrEqual(page.viewportSize()!.width + 1);
 }
 
+// SOURCE ONLY under A-stage. CSS viewport geometry is not physical touch/zoom proof.
+for (const scenario of [
+  { locale: "en", width: 320 }, { locale: "hu", width: 390 },
+  { locale: "ko", width: 430 }, { locale: "en", width: 1280 },
+] as const) {
+  test(`[web19] empty public entry and Brands fit ${scenario.locale} ${scenario.width}`, async ({ page }) => {
+    const { locale, width } = scenario;
+    await page.setViewportSize({ width, height: 900 });
+    for (const path of [`/${locale}`, `/${locale}/brands`]) {
+      await visit(page, path);
+      await noOverflow(page);
+      const title = page.locator("#main-content");
+      await expect(title).toBeVisible();
+      const box = await title.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.x).toBeGreaterThanOrEqual(-1);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(width + 1);
+    }
+    const directory = page.getByRole("region", { name: marketingCopy[locale].directory.browse, exact: true });
+    await expect(directory.getByRole("link")).toHaveCount(0);
+    const letters = directory.getByRole("button");
+    await expect(letters).toHaveCount(27);
+    for (const letter of await letters.all()) {
+      await letter.scrollIntoViewIfNeeded();
+      const box = await letter.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.width).toBeGreaterThanOrEqual(44);
+      expect(box!.height).toBeGreaterThanOrEqual(44);
+      expect(box!.x).toBeGreaterThanOrEqual(-1);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(width + 1);
+    }
+    const all = directory.getByRole("button", { name: marketingCopy[locale].directory.all, exact: true });
+    await expect(all).toBeEnabled();
+    await all.focus();
+    // Keyboard, rather than pointer, must produce the visible focus indicator.
+    await all.press("Tab"); await page.keyboard.press("Shift+Tab");
+    await expect(all).toBeFocused();
+    await expect(all).toHaveCSS("outline-style", "solid");
+    expect(parseFloat(await all.evaluate(node => getComputedStyle(node).outlineWidth))).toBeGreaterThan(0);
+    for (const letter of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
+      await expect(directory.getByRole("button", { name: letter, exact: true })).toBeDisabled();
+    }
+    await noOverflow(page);
+  });
+}
+
 test("draft preview production isolation: no preview route or draft data in public storefront/SEO/cart", async ({ page }) => {
   const slug = "test-only-private-draft-preview";
   const marker = "TEST ONLY PRIVATE DRAFT PREVIEW";

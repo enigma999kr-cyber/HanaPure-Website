@@ -1,9 +1,11 @@
 import { test as base, expect, type Page } from "@playwright/test";
 import { storefrontLabels, storefrontLocales } from "../../lib/storefront/localization";
 import { marketingCopy } from "../../lib/storefront/marketing-copy";
-import { publishedSlug, draftSlug, missingLocaleSlug, gallerySlug, textOnlySlug } from "./published-catalogue-fixtures.mjs";
+import { publishedSlug, draftSlug, missingLocaleSlug, gallerySlug, textOnlySlug, publishedCatalogueFixtures } from "./published-catalogue-fixtures.mjs";
 import { cartLabels } from "../../lib/cart/labels";
 import { CART_STORAGE_KEY } from "../../lib/cart/cart-state";
+import { portablePayload } from "../../lib/cart/cart-portable-handoff";
+import { readShoppingPlan } from "../../lib/catalog/catalogue-shopping-plan";
 
 // Expected browser URLs, not a replacement for the server-only parser/serializer.
 const expectedQuery = (q: string, brand: string) =>
@@ -289,8 +291,8 @@ for (const locale of storefrontLocales) {
     await page.route(`**/file.svg?gallery=3&locale=${locale}`, route => route.fulfill({ status: 200, contentType: "image/svg+xml", body: "TEST ONLY corrupt" }));
     const response = await visit(page, `/${locale}/products/${gallerySlug}${criteria}`);
     expect(await response!.text()).toContain(`/file.svg?gallery=1&amp;locale=${locale}`);
-    const media = page.locator("article > div").first();
-    const buttons = media.getByRole("button");
+    const media = page.getByRole("group", { name: labels.gallery, exact: true });
+    const buttons = media.locator("button[aria-pressed]");
     await expect(buttons).toHaveCount(3);
     for (let i = 0; i < 3; i++) await expect(buttons.nth(i)).toHaveAccessibleName(`TEST ONLY ${locale} gallery ${["first", "second", "third"][i]} (${i + 1}/3)`);
     const image = media.getByRole("img", { name: `TEST ONLY ${locale} gallery first`, exact: true });
@@ -310,9 +312,18 @@ for (const locale of storefrontLocales) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width + 1);
     await expect(page.getByRole("link", { name: labels.back, exact: true })).toHaveAttribute("href", `/${locale}/products${criteria}`);
     await visit(page, `/${locale}/products/${publishedSlug}`);
-    await expect(page.locator("article > div").first().getByRole("button")).toHaveCount(0);
+    await expect(page.getByRole("group", { name: labels.gallery, exact: true }).locator("button[aria-pressed]")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: labels.inspectImage, exact: true })).toBeEnabled();
     await visit(page, `/${locale}/products/${textOnlySlug}`);
-    await expect(page.locator("article").getByRole("img")).toHaveCount(0);
+    const textOnlyDetail = page.getByRole("article").filter({
+      has: page.getByRole("heading", {
+        level: 1,
+        name: `TEST ONLY ${locale} text-only item`,
+        exact: true,
+      }),
+    });
+    await expect(textOnlyDetail).toHaveCount(1);
+    await expect(textOnlyDetail.getByRole("img")).toHaveCount(0);
     await expect(page.getByRole("button", { name: cart.add, exact: true })).toBeEnabled();
   });
   async function expectHeaderQuantity(page: Page, quantity: number) {
@@ -489,10 +500,12 @@ for (const locale of storefrontLocales) {
     test.use({ javaScriptEnabled: false });
     test("media gallery retains first native image and no inert selection controls", async ({ page }) => {
       await page.goto(`/${locale}/products/${gallerySlug}`);
-      const image = page.getByRole("img", { name: `TEST ONLY ${locale} gallery first`, exact: true });
+      const gallery = page.getByRole("group", { name: labels.gallery, exact: true });
+      await expect(gallery).toHaveCount(1);
+      const image = gallery.getByRole("img", { name: `TEST ONLY ${locale} gallery first`, exact: true });
       await expect(image).toBeVisible();
       expect(await image.evaluate(async node => { await (node as HTMLImageElement).decode(); return (node as HTMLImageElement).naturalWidth; })).toBeGreaterThan(0);
-      await expect(page.locator("article > div").first().getByRole("button")).toHaveCount(0);
+      await expect(gallery.getByRole("button")).toHaveCount(0);
     });
     test("normal listing/detail images retain native visibility and editorial alt", async ({ page }, testInfo) => {
       const criteria = expectedQuery("TEST ONLY", "Round Lab");
@@ -676,3 +689,244 @@ for (const locale of storefrontLocales) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width + 1);
   });
 }
+
+
+// [web19] SOURCE WRITTEN ONLY in A-stage. Run solely through the owned runner
+// after separate Build/Browser/workspace approval; never against real product data.
+const web19Public = publishedCatalogueFixtures.filter(product => product.state === "published");
+const web19Product = web19Public.find(product => product.slug === publishedSlug)!;
+const web19Gallery = web19Public.find(product => product.slug === gallerySlug)!;
+
+for (const { locale, width } of [
+  { locale: "en", width: 375 }, { locale: "hu", width: 390 }, { locale: "ko", width: 430 },
+] as const) {
+  test(`[web19] suggestion keyboard and encoded Plan/detail/Back continuity ${locale}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const labels = storefrontLabels[locale];
+    const payload = portablePayload([{ publicId: web19Product.publicId, quantity: 2 }]);
+    const matchCount = web19Public.filter(product => product.translations[locale] !== null).length;
+    expect(payload).not.toBeNull();
+    const criteria = new URLSearchParams({ q: "TEST ONLY", brand: "Round Lab", sort: "name-asc", cartPlan: payload! });
+    await visit(page, `/${locale}/products?${criteria}`);
+    const input = page.locator("#catalogue-search");
+    const suggestions = page.locator("a[data-search-suggestion]");
+    await expect(suggestions).toHaveCount(matchCount);
+    await input.focus(); await input.press("ArrowDown");
+    await expect(suggestions.first()).toBeFocused();
+    await suggestions.first().press("ArrowDown"); await expect(suggestions.nth(1)).toBeFocused();
+    await suggestions.nth(1).press("ArrowUp"); await expect(suggestions.first()).toBeFocused();
+    await suggestions.first().press("ArrowUp"); await expect(input).toBeFocused();
+    await input.press("Control+ArrowDown"); await expect(input).toBeFocused();
+    // Deterministic composition-flag dispatch, not hardware IME certification.
+    await input.dispatchEvent("keydown", { key: "ArrowDown", isComposing: true, bubbles: true });
+    await expect(input).toBeFocused();
+    await input.press("Tab"); await expect(suggestions.first()).toBeFocused();
+    await suggestions.first().press("Escape");
+    await expect(input).toBeFocused(); await expect(suggestions).toHaveCount(0);
+    await expect(input).toHaveValue("TEST ONLY");
+    await input.fill("gallery"); await expect(suggestions).toHaveCount(1);
+    await expect(suggestions.filter({ hasText: `TEST ONLY ${locale} published item` })).toHaveCount(0);
+    const selectedHref = await suggestions.first().getAttribute("href");
+    expect(selectedHref).not.toBeNull();
+    const selected = new URL(selectedHref!, page.url());
+    expect(selected.pathname).toBe(`/${locale}/products/${gallerySlug}`);
+    expect(selected.searchParams.get("q")).toBe("gallery");
+    expect(selected.searchParams.get("brand")).toBe("Round Lab");
+    expect(selected.searchParams.get("cartPlan")).toBe(payload);
+    expect(selectedHref!.length).toBeLessThanOrEqual(8192);
+    await input.press("ArrowDown"); await suggestions.first().press("Enter");
+    await expect(page).toHaveURL(selected.href);
+    const back = page.getByRole("link", { name: labels.back, exact: true });
+    const backHref = await back.getAttribute("href");
+    expect(backHref).not.toBeNull();
+    const backURL = new URL(backHref!, page.url());
+    expect(backURL.pathname).toBe(`/${locale}/products`);
+    expect(backURL.searchParams.get("q")).toBe("gallery");
+    expect(backURL.searchParams.get("cartPlan")).toBe(payload);
+    await back.press("Enter"); await expect(page).toHaveURL(backURL.href);
+    await expect(input).toHaveValue("gallery");
+    await input.fill("TEST ONLY"); await expect(suggestions).toHaveCount(matchCount);
+    await expect(suggestions.filter({ hasText: `TEST ONLY ${locale} published item` })).toHaveCount(1);
+    await input.fill("no-matching-web19-query"); await expect(suggestions).toHaveCount(0);
+    await input.press("Enter"); // Actual native GET; no custom submit or app callback.
+    await expect(page).toHaveURL(url => url.searchParams.get("q") === "no-matching-web19-query");
+    expect(new URL(page.url()).searchParams.get("cartPlan")).toBe(payload);
+    await expect(page.getByRole("heading", { name: labels.noResults, exact: true })).toBeVisible();
+    expect(await page.evaluate(key => localStorage.getItem(key), CART_STORAGE_KEY)).toBeNull();
+  });
+}
+
+test("[web19] current-page public pair and explicit Plan-to-Cart preview boundary", async ({ page }) => {
+  const labels = storefrontLabels.en;
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await visit(page, "/en/products?q=TEST+ONLY");
+  const initial = await page.evaluate(key => localStorage.getItem(key), CART_STORAGE_KEY);
+  expect(initial).toBeNull();
+  const first = page.getByRole("checkbox", { name: `${labels.selectResultComparison}: TEST ONLY en published item`, exact: true });
+  const second = page.getByRole("checkbox", { name: `${labels.selectResultComparison}: TEST ONLY en gallery item`, exact: true });
+  await first.check(); await second.check();
+  const compare = page.getByRole("button", { name: labels.compareSelectedResults, exact: true });
+  await expect(compare).toBeEnabled(); await compare.press("Enter");
+  await expect(page).toHaveURL(url => url.searchParams.get("compareFirst") === web19Product.publicId &&
+    url.searchParams.get("compareSecond") === web19Gallery.publicId && url.hash === "#catalogue-comparison");
+  const comparison = page.locator("#catalogue-comparison");
+  await expect(comparison).toBeVisible();
+  await expect(comparison).toBeFocused();
+  await comparison.getByRole("button", { name: labels.planAddPair, exact: true }).press("Enter");
+  await expect(page).toHaveURL(url => url.searchParams.has("cartPlan") && !url.searchParams.has("compareFirst"));
+  const plan = page.getByRole("region", { name: labels.planHeading, exact: true });
+  const line = plan.locator("li").filter({ has: page.getByRole("link", { name: "TEST ONLY en published item", exact: true }) });
+  await line.getByRole("spinbutton", { name: `${labels.planQuantity}: TEST ONLY en published item`, exact: true }).fill("3");
+  await line.getByRole("button", { name: labels.planSet, exact: true }).press("Enter");
+  await expect(page).toHaveURL(url => {
+    const state = readShoppingPlan(url.searchParams.get("cartPlan"), web19Public);
+    return state.status === "ready" && state.lines.find(item => item.publicId === web19Product.publicId)?.quantity === 3;
+  });
+  expect(await page.evaluate(key => localStorage.getItem(key), CART_STORAGE_KEY)).toBe(initial);
+  const review = plan.getByRole("link", { name: labels.planReviewCart, exact: true });
+  const reviewHref = await review.getAttribute("href");
+  expect(reviewHref).not.toBeNull();
+  expect(new URL(reviewHref!, page.url()).searchParams.has("cartDraft")).toBe(true);
+  await review.press("Enter"); await expect(page).toHaveURL(new URL(reviewHref!, "http://127.0.0.1:3101").href);
+  await expect(page.getByRole("heading", { name: cartLabels.en.portablePreview, exact: true })).toBeVisible();
+  await expect(page.getByRole("list", { name: cartLabels.en.portablePreview, exact: true })).toContainText("TEST ONLY en published item");
+  expect(await page.evaluate(key => localStorage.getItem(key), CART_STORAGE_KEY)).toBe(initial);
+  // Review is not acceptance/merge: no automatic Cart write is permitted.
+});
+
+test("[web19] gallery inspection eligibility, dialog Escape and launcher focus", async ({ page }) => {
+  await page.setViewportSize({ width: 430, height: 900 });
+  const labels = storefrontLabels.ko;
+  let releaseImage: (() => void) | undefined;
+  const imageGate = new Promise<void>(resolve => { releaseImage = () => resolve(); });
+  await page.route("**/file.svg?gallery=1&locale=ko", async route => {
+    await imageGate; await route.continue();
+  });
+  await page.route("**/file.svg?gallery=3&locale=ko", route =>
+    route.fulfill({ status: 200, contentType: "image/svg+xml", body: "TEST ONLY corrupt web19 image" }));
+  await page.goto(`/ko/products/${gallerySlug}`, { waitUntil: "domcontentloaded" });
+  const gallery = page.getByRole("group", { name: labels.gallery, exact: true });
+  const launcher = gallery.getByRole("button", { name: labels.inspectImage, exact: true });
+  try { await expect(launcher).toBeDisabled(); }
+  finally { releaseImage?.(); }
+  const image = gallery.locator("img:not(noscript img)").first();
+  expect(await image.evaluate(async node => { await (node as HTMLImageElement).decode(); return (node as HTMLImageElement).naturalWidth; })).toBeGreaterThan(0);
+  await expect(launcher).toBeEnabled();
+  await launcher.press("Enter");
+  const dialog = page.getByRole("dialog", { name: `${labels.inspectImage}: TEST ONLY ko gallery first`, exact: true });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: labels.closeImage, exact: true })).toBeFocused();
+  await page.keyboard.press("Escape"); await expect(dialog).toBeHidden(); await expect(launcher).toBeFocused();
+  const thumbs = gallery.locator("button[aria-pressed]");
+  await expect(thumbs).toHaveCount(3);
+  await thumbs.nth(1).press("Space"); await expect(thumbs.nth(1)).toHaveAttribute("aria-pressed", "true");
+  await expect(launcher).toBeDisabled(); await expect(page.getByRole("dialog")).toHaveCount(0);
+  await thumbs.nth(2).press("Enter"); await expect(thumbs.nth(2)).toHaveAttribute("aria-pressed", "true");
+  await expect(launcher).toBeDisabled();
+  await thumbs.first().press("Enter"); await expect(launcher).toBeEnabled();
+  await expect(thumbs.first()).toBeFocused();
+});
+
+test.describe("[web19] no-JS inspection boundary", () => {
+  test.use({ javaScriptEnabled: false });
+  test("[web19] native first gallery image remains visible with no inert inspection controls", async ({ page }) => {
+    await page.goto(`/en/products/${gallerySlug}`);
+    const image = page.getByRole("group", { name: storefrontLabels.en.gallery, exact: true })
+      .getByRole("img", { name: "TEST ONLY en gallery first", exact: true });
+    await expect(image).toBeVisible();
+    expect(await image.evaluate(async node => { await (node as HTMLImageElement).decode(); return (node as HTMLImageElement).naturalWidth; })).toBeGreaterThan(0);
+    await expect(page.getByRole("group", { name: storefrontLabels.en.gallery, exact: true }).getByRole("button")).toHaveCount(0);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  });
+});
+
+test("[web19] strict detail Add confirms Cart readback and rejects alternate notation", async ({ page }) => {
+  const cart = cartLabels.en;
+  await visit(page, `/en/products/${publishedSlug}`);
+  const add = page.getByRole("button", { name: cart.add, exact: true });
+  const quantity = page.getByLabel(cart.quantity, { exact: true });
+  const section = add.locator("xpath=ancestor::section[1]");
+  const before = await page.evaluate(key => localStorage.getItem(key), CART_STORAGE_KEY);
+  for (const raw of ["0", "1e2"]) {
+    await quantity.fill(raw); await add.press("Enter");
+    expect(await page.evaluate(key => localStorage.getItem(key), CART_STORAGE_KEY)).toBe(before);
+    await expect(section).not.toContainText(cart.added);
+  }
+  await quantity.fill("2"); await add.press("Enter");
+  await expect(section).toContainText(cart.added);
+  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), CART_STORAGE_KEY))
+    .toEqual({ version: 1, lines: [{ publicId: web19Product.publicId, quantity: 2 }] });
+  const header = page.locator("header");
+  const cartLink = header.getByRole("link", { name: `${cart.cart}: ${cart.selectedQuantity} 2`, exact: true }).filter({ visible: true });
+  if (page.viewportSize()!.width < 1024) await header.locator('[aria-controls="mobile-navigation"]').press("Enter");
+  await expect(cartLink).toBeVisible(); await cartLink.press("Enter");
+  await expect(page).toHaveURL("/en/cart");
+  await expect(page.getByRole("spinbutton")).toHaveValue("2");
+});
+
+for (const mode of ["write-denied", "readback-denied"] as const) {
+  test(`[web19] detail ${mode} never announces added or allows stale repeat mutation`, async ({ page }) => {
+    // Per-test BrowserContext owns this fault. No OS/system clipboard or user data.
+    await page.addInitScript(({ key, mode }) => {
+      const get = Storage.prototype.getItem, set = Storage.prototype.setItem;
+      let firstWrite = true, denyReadback = false;
+      Storage.prototype.setItem = function (name, value) {
+        if (name === key && firstWrite) {
+          firstWrite = false;
+          if (mode === "write-denied") throw new DOMException("TEST ONLY denied", "SecurityError");
+          set.call(this, name, value); denyReadback = true; return;
+        }
+        set.call(this, name, value);
+      };
+      Storage.prototype.getItem = function (name) {
+        if (name === key && denyReadback) { denyReadback = false; throw new DOMException("TEST ONLY readback denied", "SecurityError"); }
+        return get.call(this, name);
+      };
+    }, { key: CART_STORAGE_KEY, mode });
+    await visit(page, `/en/products/${publishedSlug}`);
+    const add = page.getByRole("button", { name: cartLabels.en.add, exact: true });
+    const section = add.locator("xpath=ancestor::section[1]");
+    await add.press("Enter");
+    await expect(section).toContainText(cartLabels.en.selectionWriteFailed);
+    await expect(section).not.toContainText(cartLabels.en.added);
+    await expect(add).toBeDisabled();
+    const saved = await page.evaluate(key => localStorage.getItem(key), CART_STORAGE_KEY);
+    await page.getByRole("button", { name: `${cartLabels.en.presetQuantity}: 2`, exact: true }).press("Enter");
+    await expect(add).toBeDisabled();
+    expect(await page.evaluate(key => localStorage.getItem(key), CART_STORAGE_KEY)).toBe(saved);
+  });
+}
+
+test("[web19] explicit corrupt Cart reset failure then same-screen confirmed retry", async ({ page }) => {
+  await page.addInitScript(key => {
+    const set = Storage.prototype.setItem;
+    set.call(localStorage, key, "TEST ONLY malformed cart");
+    let deniedOnce = false;
+    Storage.prototype.setItem = function (name, value) {
+      if (name === key && !deniedOnce) { deniedOnce = true; throw new DOMException("TEST ONLY first reset denied", "SecurityError"); }
+      set.call(this, name, value);
+    };
+  }, CART_STORAGE_KEY);
+  await visit(page, "/en/cart");
+  const cart = cartLabels.en;
+  const reset = page.getByRole("button", { name: cart.reset, exact: true });
+  await reset.press("Enter");
+  await expect(page.getByRole("status").filter({ hasText: cart.selectionUnavailable })).toBeVisible();
+  await expect(page.locator("main")).not.toContainText(cart.updated);
+  await reset.press("Enter");
+  await expect(page.getByRole("status").filter({ hasText: cart.updated })).toBeVisible();
+  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), CART_STORAGE_KEY)).toEqual({ version: 1, lines: [] });
+  await expect(page.getByRole("searchbox", { name: cart.find, exact: true })).toBeEnabled();
+  await expect(page.getByRole("link", { name: cart.browse, exact: true })).toBeFocused();
+});
+
+// Deliberate unresolved claims: these are not empty tests reported as PASS.
+test.fixme("[web19] BLOCKED hydrated cross-page pair requires approved 13+ published fixture", async () => {
+  // Existing fixture has four published records, PAGE_SIZE=12. No fixture edits authorized.
+});
+test.fixme("[web19] BLOCKED Location.assign exception uses existing synthetic-only evidence", async () => {
+  // Native Location is not replaced or given production hooks for fault injection.
+});
+test.fixme("[web19] BLOCKED deferred Clipboard receipt needs separately reviewed owned instrumentation", async () => {
+  // No real/system clipboard; do not introduce a global deferred Promise hook in A-stage.
+});
