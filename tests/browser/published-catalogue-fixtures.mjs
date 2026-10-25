@@ -43,3 +43,25 @@ export const publishedCatalogueFixtures = [
       { ...content(locale), name: `TEST ONLY ${locale} text-only item`, images: [] }])),
   },
 ];
+
+// WEB #20 opt-in scenario only. Keep the CLOSED five-record base fixture intact.
+// Fourteen matching public records genuinely cross the existing twelve-card page.
+export const journeyCatalogueProducts = Array.from({ length: 14 }, (_, index) => {
+  const suffix = String(index + 1).padStart(2, "0");
+  return {
+    publicId: `${String(81000000 + index + 1)}-abcd-1234-abcd-123456789abc`,
+    brand: "Round Lab", slug: `test-only-journey-${suffix}`, state: "published",
+    translations: Object.fromEntries(["en", "hu", "ko"].map(locale => [locale, {
+      name: `TEST ONLY JOURNEY ${locale} ${suffix} — ${locale === "hu" ? "Hosszú szintetikus tesztmegnevezés" : locale === "ko" ? "긴 합성 테스트 상품 이름" : "Long synthetic test name"}`,
+      description: "TEST ONLY JOURNEY synthetic editorial fixture. Not a real product.",
+      images: [{ src: `/file.svg?journey=${suffix}&locale=${locale}`, alt: `TEST ONLY JOURNEY ${locale} image ${suffix}` }],
+      usage: null, caution: null,
+    }])),
+  };
+});
+export const paginatedCatalogueFixtures = [
+  ...publishedCatalogueFixtures,
+  ...journeyCatalogueProducts,
+  { ...journeyCatalogueProducts[0], publicId: "81999999-abcd-1234-abcd-123456789abc",
+    slug: "test-only-journey-draft", state: "draft" },
+];

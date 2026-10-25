@@ -15,11 +15,12 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
   const query = await searchParams;
   const criteria = readCatalogueCriteria(query);
   const browse = readCatalogueBrowse(query);
-  const headerQuery = catalogueHeaderQuery(criteria, browse, query.cartPlan);
+  const comparisonContext = readComparisonContext(query);
+  const headerQuery = catalogueHeaderQuery(criteria, browse, query.cartPlan, undefined, "/products", comparisonContext);
   return (
     <><main className="min-h-screen bg-hanapure-warm-white text-hanapure-text">
       <Header catalogueQuery={headerQuery} />
-      <ProductListing criteria={criteria} browse={browse} planHint={query.cartPlan} comparisonContext={readComparisonContext(query)} />
+      <ProductListing criteria={criteria} browse={browse} planHint={query.cartPlan} comparisonContext={comparisonContext} />
     </main><Footer /></>
   );
 }

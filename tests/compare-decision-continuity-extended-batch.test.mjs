@@ -13,6 +13,9 @@ import { storefrontLabels, storefrontHref, switchLocalePath } from "../lib/store
 import { FAVORITES_STORAGE_KEY, MAX_FAVORITES, serializeFavorites, inspectStoredFavorites } from "../lib/favorites/favorite-state.ts";
 import { favoriteLabels } from "../lib/favorites/labels.ts";
 import { CART_STORAGE_KEY, serializeCart } from "../lib/cart/cart-state.ts";
+import { readCatalogueBrowse } from "../lib/catalog/catalogue-browse.ts";
+import { portablePayload } from "../lib/cart/cart-portable-handoff.ts";
+import { cartLabels } from "../lib/cart/labels.ts";
 
 // Reuse the established installed-TypeScript/Node JSX fixture convention, not a browser runner.
 const require = createRequire(import.meta.url), repo = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -48,7 +51,7 @@ registerHooks({
   },
 });
 const { driver } = await import(hooksUrl);
-const { ProductListing, ProductDetail } = await import("../components/catalogue/ProductCatalogue.tsx");
+const { ProductListing, ProductDetail, catalogueHeaderQuery } = await import("../components/catalogue/ProductCatalogue.tsx");
 const { default: ProductComparison } = await import("../components/catalogue/ProductComparison.tsx");
 const { default: SaveProductButton } = await import("../components/catalogue/SaveProductButton.tsx");
 const browserCart = await import("../lib/cart/browser-cart.ts");
@@ -73,6 +76,138 @@ function nodes(node) {
 }
 const text = node => nodes(node).filter(value => typeof value === "string" || typeof value === "number").join(" ");
 const button = (tree, label) => nodes(tree).find(node => node.type === "button" && text(node) === label);
+
+test("H1-F01 validated pair survives Header language transport with browse and Plan, without changing identities", () => {
+  const browse = readCatalogueBrowse({ page: "2", withLocaleInfo: "1", withLocaleImage: "1", pickFirst: third });
+  const payload = portablePayload([{ publicId: id, quantity: 2 }]);
+  const comparison = readComparisonContext({ compareFirst: id.toUpperCase(), compareSecond: third });
+  const before = JSON.stringify(records);
+  for (const path of ["/products", "/products/one"]) {
+    const suffix = catalogueHeaderQuery(criteria, browse, payload, catalogue, path, comparison);
+    for (const from of [null, "en", "hu", "ko"]) for (const to of ["en", "hu", "ko"]) {
+      const url = new URL(switchLocalePath(storefrontHref(path, from) + suffix, to), origin);
+      assert.equal(url.pathname, storefrontHref(path, to));
+      assert.equal(url.searchParams.get("compareFirst"), id);
+      assert.equal(url.searchParams.get("compareSecond"), third);
+      assert.equal(url.searchParams.get("q"), criteria.query);
+      assert.equal(url.searchParams.get("brand"), criteria.brand);
+      assert.equal(url.searchParams.get("sort"), criteria.sort);
+      assert.equal(url.searchParams.get("page"), "2");
+      assert.equal(url.searchParams.get("withLocaleImage"), "1");
+      assert.equal(url.searchParams.get("cartPlan"), payload);
+      assert.equal(url.searchParams.has("pickFirst"), false);
+    }
+  }
+  assert.equal(JSON.stringify(records), before);
+});
+
+test("H1-F01 private, unknown, repeated, same or incomplete comparison never becomes a Header pair", () => {
+  for (const raw of [
+    { compareFirst: hidden, compareSecond: id }, { compareFirst: id, compareSecond: hidden },
+    { compareFirst: id, compareSecond: "ffffffff-abcd-1234-abcd-123456789abc" },
+    { compareFirst: [id, third], compareSecond: other }, { compareFirst: id, compareSecond: [other] },
+    { compareFirst: id, compareSecond: id }, { compareFirst: id },
+    { compareFirst: id + " ", compareSecond: other },
+  ]) {
+    const suffix = catalogueHeaderQuery(criteria, readCatalogueBrowse(), undefined, catalogue, "/products/one", readComparisonContext(raw));
+    const url = new URL("/en/products/one" + suffix, origin);
+    assert.equal(url.searchParams.has("compareFirst"), false);
+    assert.equal(url.searchParams.has("compareSecond"), false);
+    assert.equal(url.searchParams.get("q"), criteria.query);
+  }
+});
+
+test("H1-F01 absent comparison keeps clean direct links and oversized complete context fails closed", () => {
+  const browse = readCatalogueBrowse();
+  assert.equal(catalogueHeaderQuery(criteria, browse, undefined, catalogue, "/products/one"), query);
+  assert.equal(catalogueHeaderQuery({ query: "", brand: "" }, browse, undefined, catalogue, "/products/one"), "");
+  assert.equal(catalogueHeaderQuery({ query: "x".repeat(8192), brand: "" }, browse, undefined, catalogue, "/products/one", { first: id, second: third }), null);
+  const nearLimit = { query: "x".repeat(8090), brand: "" };
+  assert.notEqual(catalogueHeaderQuery(nearLimit, browse, undefined, catalogue, "/products/one"), null);
+  assert.equal(catalogueHeaderQuery(nearLimit, browse, undefined, catalogue, "/products/one", { first: id, second: third }), null);
+});
+
+test("R1 Header accepts complete public pairs only, even without the route parser", () => {
+  // The comparison UI intentionally allows a first-only hint and selects a default
+  // partner. Header transport must never promote that UI default into URL state.
+  assert.notEqual(publishedComparison(catalogue.listPublished(), { first: id }), null);
+  for (const context of [
+    { first: id }, { second: other }, { first: "invalid", second: other },
+    { first: id, second: "invalid" }, { first: id, second: id },
+    { first: hidden, second: other }, { first: id, second: hidden },
+  ]) {
+    const suffix = catalogueHeaderQuery(criteria, readCatalogueBrowse(), undefined, catalogue, "/products/one", context);
+    const url = new URL("/en/products/one" + suffix, origin);
+    assert.equal(url.searchParams.has("compareFirst"), false);
+    assert.equal(url.searchParams.has("compareSecond"), false);
+  }
+});
+
+test("R2 comparison transport drops presentation filters while ordinary detail Back preserves them", () => {
+  const browse = readCatalogueBrowse({ withLocaleInfo: "1", withLocaleImage: "1", page: "2" });
+  const start = query + "&withLocaleInfo=1&withLocaleImage=1&page=2";
+  for (const locale of ["en", "hu", "ko"]) {
+    const selected = [records[0], records[2]];
+    const comparison = new URL(comparisonHref(`/${locale}/products`, selected, start), origin);
+    assert.deepEqual([...comparison.searchParams.keys()], ["q", "brand", "sort", "compareFirst", "compareSecond"]);
+    const detail = ProductDetail({ slug: "one", catalogue, locale, routeLocale: locale, criteria, browse, comparisonContext: { first: id, second: third } });
+    const special = nodes(detail).find(node => node.props?.children === comparisonLabels[locale].backToComparison);
+    assert.equal(special.props.href, comparison.pathname + comparison.search + `#${COMPARISON_DESTINATION}`);
+    const ordinary = nodes(detail).find(node => node.props?.children === storefrontLabels[locale].back);
+    const back = new URL(ordinary.props.href, origin);
+    assert.equal(back.searchParams.get("withLocaleInfo"), "1");
+    assert.equal(back.searchParams.get("withLocaleImage"), "1");
+  }
+});
+
+test("H1-F03 detail return links keep explicit wrapping gaps, order and original destinations in every locale", () => {
+  const before = JSON.stringify(records);
+  for (const locale of ["en", "hu", "ko"]) for (const routeLocale of [null, locale]) {
+    for (const cartReturn of [false, true]) for (const withComparison of [false, true]) {
+      const browse = readCatalogueBrowse({ page: "2", withLocaleInfo: "1", withLocaleImage: "1" });
+      const detail = ProductDetail({ slug: "one", catalogue, locale, routeLocale, criteria, browse, cartReturn,
+        comparisonContext: withComparison ? { first: id, second: third } : {} });
+      const ordinary = nodes(detail).find(node => node.props?.children === storefrontLabels[locale].back);
+      const group = nodes(detail).find(node => node.type === "div" && Array.isArray(node.props?.children) && node.props.children.includes(ordinary));
+      assert.ok(group, "Return links share one layout container");
+      for (const token of ["flex", "min-w-0", "flex-wrap", "items-start", "gap-x-6", "gap-y-3"]) {
+        assert.ok(group.props.className.split(" ").includes(token));
+      }
+      const links = group.props.children.filter(Boolean);
+      assert.deepEqual(links.map(link => link.props.children), [storefrontLabels[locale].back,
+        ...(cartReturn ? [cartLabels[locale].backToCart] : []),
+        ...(withComparison ? [comparisonLabels[locale].backToComparison] : [])]);
+      const back = new URL(links[0].props.href, origin);
+      assert.equal(back.pathname, storefrontHref("/products", routeLocale));
+      assert.equal(back.searchParams.get("q"), criteria.query);
+      assert.equal(back.searchParams.get("brand"), criteria.brand);
+      assert.equal(back.searchParams.get("sort"), criteria.sort);
+      assert.equal(back.searchParams.get("withLocaleInfo"), "1");
+      assert.equal(back.searchParams.get("withLocaleImage"), "1");
+      if (cartReturn) assert.equal(links[1].props.href, storefrontHref("/cart", routeLocale));
+      if (withComparison) assert.equal(links.at(-1).props.href,
+        comparisonHref(storefrontHref("/products", routeLocale), [records[0], records[2]], query) + `#${COMPARISON_DESTINATION}`);
+      for (const link of links) {
+        const classes = link.props.className.split(" ");
+        for (const token of ["inline-flex", "min-w-0", "max-w-full", "break-words", "min-h-11", "focus-visible:outline-2"]) assert.ok(classes.includes(token));
+        assert.ok(!classes.includes("block") && !classes.some(token => /nowrap|truncate/.test(token)));
+        assert.equal(link.props.tabIndex, undefined);
+      }
+    }
+  }
+  assert.equal(JSON.stringify(records), before);
+});
+
+test("H5-F02 Korean listing heading uses a narrow mobile size without changing copy or other locale typography", () => {
+  for (const locale of ["en", "hu", "ko"]) {
+    const heading = nodes(ProductListing({ catalogue, locale, routeLocale: locale })).find(node => node.type === "h1");
+    assert.equal(text(heading), storefrontLabels[locale].heading);
+    assert.doesNotMatch(heading.props.className, /nowrap|truncate/);
+    if (locale === "ko") assert.match(heading.props.className, /text-3xl min-\[375px\]:text-4xl/);
+    else assert.match(heading.props.className, /(?:^| )text-4xl(?: |$)/);
+    assert.match(heading.props.className, /sm:text-5xl/);
+  }
+});
 const controls = tree => nodes(tree).filter(node => node.type === "select");
 function render(component, props, key = component.name) {
   if (!driver.instances.has(key)) driver.instances.set(key, []);

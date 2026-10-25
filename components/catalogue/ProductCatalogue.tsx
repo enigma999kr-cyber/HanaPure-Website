@@ -40,14 +40,24 @@ const linkStyle = "inline-flex min-h-11 items-center text-sm underline underline
 function BrowseLink({ href, refusal, ...props }: Omit<ComponentProps<typeof Link>, "href"> & { href: string | null; refusal: string }) {
   return href === null ? <span role="status" className="break-words text-sm">{refusal}</span> : <Link href={href} {...props} />;
 }
-/** The shell forwards only fully public, validated plan hints to language links. */
-export function catalogueHeaderQuery(criteria: CatalogueCriteria, browse: CatalogueBrowse, planHint: unknown, catalogue: CatalogueReader = localCatalogue, path = "/products") {
+/** The shell forwards only validated public Plan and complete comparison hints. */
+export function catalogueHeaderQuery(criteria: CatalogueCriteria, browse: CatalogueBrowse, planHint: unknown, catalogue: CatalogueReader = localCatalogue, path = "/products", comparisonContext: ComparisonContext = {}) {
   const query = catalogueBrowseQuery(catalogueQueryString(criteria), { ...browse, pickFirst: undefined });
   if (query === null) return null;
   const plan = readShoppingPlan(planHint, catalogue.listPublished());
   const href = shoppingPlanHref(path, query, plan.lines);
+  if (href === null) return null;
+  // Do not turn a partial/invalid selection into the comparison UI's fallback pair.
+  const pair = comparisonContext.first && comparisonContext.second
+    ? publishedComparison(catalogue.listPublished(), comparisonContext) : null;
+  const params = new URLSearchParams(href.slice(path.length));
+  if (pair) {
+    params.set("compareFirst", pair[0].publicId.toLowerCase());
+    params.set("compareSecond", pair[1].publicId.toLowerCase());
+  }
+  const suffix = params.size ? `?${params}` : "";
   // Reserve the longest locale prefix for all language-switch destinations.
-  return href === null || href.length + 4 > 8192 ? null : href.slice(path.length);
+  return path.length + suffix.length + 4 > 8192 ? null : suffix;
 }
 function planProjection(comparison: readonly ComparisonProduct[], ids: readonly string[]): readonly PlanProduct[] {
   return comparison.filter(product => ids.includes(product.publicId.toLowerCase())).map(product => ({
@@ -116,7 +126,7 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
   const controlStyle = "min-h-11 w-full min-w-0 max-w-full break-words rounded-xl border border-hanapure-border bg-hanapure-warm-white px-3 py-3 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text";
   return (
     <Container className="pb-20 pt-32 sm:pt-36">
-      <h1 id="main-content" tabIndex={-1} className="text-4xl font-light text-hanapure-text sm:text-5xl">{labels.heading}</h1>
+      <h1 id="main-content" tabIndex={-1} className={`${locale === "ko" ? "text-3xl min-[375px]:text-4xl" : "text-4xl"} font-light text-hanapure-text sm:text-5xl`}>{labels.heading}</h1>
       <SavedProductsBar locale={locale} routeLocale={routeLocale} products={savedProducts} comparisonProducts={comparison} planContext={planContext} />
       <RecentlyViewedProducts locale={locale} routeLocale={routeLocale} products={quickProducts} comparisonProducts={comparison} planContext={planContext} />
       <ShoppingPlanSearchGuard path={listingHref} locale={locale}>
@@ -322,9 +332,11 @@ export function ProductDetail({ slug, catalogue = localCatalogue, locale = "en",
   return (
     <Container className="pb-20 pt-32 sm:pt-36">
       {planHint === undefined && <ProductVisitTracker key={product.publicId} publicId={product.publicId} />}
-      <BrowseLink refusal={labels.planLimit} href={carryShoppingPlan(backHref, plan)} className={linkStyle}>{labels.back}</BrowseLink>
-      {cartReturn === true && <Link href={storefrontHref("/cart", routeLocale)} className={`${linkStyle} mt-3 block max-w-full break-words`}>{cartLabels[locale].backToCart}</Link>}
-      {returnHref && <Link href={`${returnHref}#${COMPARISON_DESTINATION}`} className={`${linkStyle} mt-3 block max-w-full break-words`}>{comparisonLabels[locale].backToComparison}</Link>}
+      <div className="flex min-w-0 flex-wrap items-start gap-x-6 gap-y-3">
+        <BrowseLink refusal={labels.planLimit} href={carryShoppingPlan(backHref, plan)} className={`${linkStyle} min-w-0 max-w-full break-words`}>{labels.back}</BrowseLink>
+        {cartReturn === true && <Link href={storefrontHref("/cart", routeLocale)} className={`${linkStyle} min-w-0 max-w-full break-words`}>{cartLabels[locale].backToCart}</Link>}
+        {returnHref && <Link href={`${returnHref}#${COMPARISON_DESTINATION}`} className={`${linkStyle} min-w-0 max-w-full break-words`}>{comparisonLabels[locale].backToComparison}</Link>}
+      </div>
       {adjacent.length > 0 && <nav aria-label={labels.matchingNavigation} className="mt-5 flex min-w-0 flex-wrap gap-4">
         {adjacent.map(link => <Link key={link.href} href={link.href} aria-label={`${link.label}: ${link.name}`}
           className={`${linkStyle} min-w-0 max-w-full break-words`}>{link.label}: {link.name}</Link>)}

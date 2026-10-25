@@ -176,25 +176,76 @@ export function publishedTestSelection(args) {
     ["--quick-add-only", ["--grep", "quick add|: cart "]],
     ["--sort-only", ["--grep", "sort continuity|quick add|same-brand discovery|direct entry|published Brands"]],
     ["--journey-quality-only", ["--grep", "\\[web19\\]", "--project", "published-chromium-375"]],
+    ["--integrated-journey-only", ["--grep", "\\[web20\\]", "--project", "published-chromium-375"]],
+    ["--human-preview-only", []],
   ]);
   if (!Array.isArray(args) || args.length > 1 ||
     (args.length === 1 && !selectors.has(args[0]))) {
     throw new Error("STOP: provide no selector or exactly one recognized published-browser selector");
   }
-  return args.length ? [...selectors.get(args[0])] : [];
+  // The base all-tests run must not consume the opt-in paginated-only cases.
+  return args.length ? [...selectors.get(args[0])] : ["--grep-invert", "\\[web20\\]"];
+}
+
+/** Explicit selector only; never accept fixture choice from an environment hook. */
+export function publishedFixtureScenario(args) {
+  publishedTestSelection(args); // Reject unknown/combined selectors before any side effect.
+  return ["--integrated-journey-only", "--human-preview-only"].includes(args[0]) ? "paginated" : "base";
+}
+
+/** Foreground input only. Requests cleanup; never acquires PID/kill authority. */
+export function createHumanPreviewController(input = process.stdin, signals = process) {
+  if (!input.isTTY) throw new Error("Human preview requires a foreground interactive terminal");
+  let requestStop, reason = null, buffer = "";
+  const stopped = new Promise(resolve => { requestStop = resolve; });
+  const stop = value => { if (reason === null) { reason = value; requestStop(value); } };
+  const interrupt = () => stop("SIGINT"), terminate = () => stop("SIGTERM");
+  const end = () => stop("terminal input ended"), error = () => stop("terminal input failed");
+  const data = chunk => {
+    buffer += chunk.toString("utf8");
+    if (buffer.length > 1024) { stop("terminal input exceeded limit"); return; }
+    const lines = buffer.split(/\r?\n/); buffer = lines.pop();
+    if (lines.some(line => line.trim().toUpperCase() === "STOP")) stop("operator STOP");
+  };
+  signals.on("SIGINT", interrupt); signals.on("SIGTERM", terminate);
+  input.on("data", data); input.on("end", end); input.on("error", error); input.resume();
+  return {
+    stopped,
+    get reason() { return reason; },
+    close() {
+      signals.removeListener("SIGINT", interrupt); signals.removeListener("SIGTERM", terminate);
+      input.removeListener("data", data); input.removeListener("end", end); input.removeListener("error", error); input.pause();
+    },
+  };
 }
 
 async function runJourney() {
   // Validate before port binding, workspace creation, build or child execution.
   const selection = publishedTestSelection(process.argv.slice(2));
-  const browserRoot = publishedBrowserRoot();
+  const scenario = publishedFixtureScenario(process.argv.slice(2));
+  const humanPreview = process.argv[2] === "--human-preview-only";
+  if (humanPreview && !process.stdin.isTTY) throw new Error("Human preview requires a foreground interactive terminal");
+  const browserRoot = humanPreview ? null : publishedBrowserRoot();
   await assertPortFree(); // Never adopt an unknown fixture-port server.
   const owner = `hanapure-published-catalogue-browser-v1:${randomUUID()}`;
   const workspace = createFixtureWorkspace(join(repo, ".next", "published-catalogue-app"), owner);
   const fixtureRoot = workspace.root;
   const environment = fixtureEnvironment();
+  let controller;
   try {
-    const { publishedCatalogueFixtures } = await import("./published-catalogue-fixtures.mjs");
+    controller = humanPreview ? createHumanPreviewController() : null;
+    const continueAfter = async task => {
+      const proceed = controller ? await Promise.race([
+        task.then(() => true), controller.stopped.then(() => false),
+      ]) : await task.then(() => true);
+      if (!proceed) {
+        console.log(`HUMAN_PREVIEW_STOP_REQUESTED ${controller.reason}`);
+        if (controller.reason.startsWith("terminal input")) throw new Error(`Human preview stopped: ${controller.reason}`);
+      }
+      return proceed;
+    };
+    const { publishedCatalogueFixtures, paginatedCatalogueFixtures } = await import("./published-catalogue-fixtures.mjs");
+    const fixtures = scenario === "paginated" ? paginatedCatalogueFixtures : publishedCatalogueFixtures;
     const files = execFileSync("git", ["ls-files", "-z", "--", "app", "components", "data", "lib", "public",
       "package.json", "package-lock.json", "tsconfig.json", "next.config.ts", "postcss.config.mjs"],
     { cwd: repo, encoding: "utf8", env: environment }).split("\0").filter(Boolean);
@@ -244,18 +295,31 @@ async function runJourney() {
     // Only the disposable copy receives test content; real source stays empty.
     writeFileSync(join(fixtureRoot, "data", "catalogue.ts"),
       'import "server-only";\nimport type { EditorialProduct } from "../lib/catalog/editorial-catalogue";\n' +
-      `export const editorialProducts: readonly EditorialProduct[] = ${JSON.stringify(publishedCatalogueFixtures)};\n`);
+      `export const editorialProducts: readonly EditorialProduct[] = ${JSON.stringify(fixtures)};\n`);
     const next = join(repo, "node_modules", "next", "dist", "bin", "next");
-    await workspace.wait(workspace.spawn([next, "build", "--webpack"], environment));
-    const server = workspace.spawn([next, "start", "--hostname", "127.0.0.1", "--port", "3101"], environment);
-    await waitForFixtureServer(server, "http://127.0.0.1:3101/en/products");
+    const stdio = humanPreview ? ["ignore", "inherit", "inherit"] : "inherit";
+    if (!await continueAfter(workspace.wait(workspace.spawn([next, "build", "--webpack"], environment, stdio)))) return;
+    const server = workspace.spawn([next, "start", "--hostname", "127.0.0.1", "--port", "3101"], environment, stdio);
+    if (!await continueAfter(waitForFixtureServer(server, "http://127.0.0.1:3101/en/products"))) return;
+    if (humanPreview) {
+      console.log("HUMAN_PREVIEW_READY http://127.0.0.1:3101/en/products?q=TEST+ONLY+JOURNEY&brand=Round+Lab&sort=name-asc");
+      console.log("TEST ONLY foreground preview. STOP + Enter or Ctrl+C requests owned cleanup. No automated tests run.");
+      const reason = await Promise.race([controller.stopped, children.get(server).completion.then(result => {
+        throw new Error(`Human preview server exited unexpectedly: ${result.code ?? result.signal ?? result.error?.message}`);
+      })]);
+      console.log(`HUMAN_PREVIEW_STOP_REQUESTED ${reason}`);
+      if (reason.startsWith("terminal input")) throw new Error(`Human preview stopped: ${reason}`);
+      return;
+    }
     const playwright = join(repo, "node_modules", "@playwright", "test", "cli.js");
     await workspace.wait(workspace.spawn([playwright, "test", "--config", join(repo, "playwright.published.config.ts"), ...selection],
       { ...environment, HANAPURE_PUBLISHED_TEST_RUN_ID: owner, PLAYWRIGHT_BROWSERS_PATH: browserRoot }));
   } finally {
+    controller?.close();
     // Covers build/start/readiness/test errors. Only this living controller holds
     // the native child handles; orphan/PID recovery is deliberately refused.
     await workspace.cleanup();
+    if (humanPreview) console.log("HUMAN_PREVIEW_CLEANUP_COMPLETE");
   }
 }
 

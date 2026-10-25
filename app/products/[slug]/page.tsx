@@ -20,9 +20,10 @@ export default async function ProductPage({ params, searchParams }: Props) {
   const query = await searchParams;
   const criteria = readCatalogueCriteria(query);
   const browse = readCatalogueBrowse(query);
-  const headerQuery = catalogueHeaderQuery(criteria, browse, query.cartPlan, undefined, `/products/${slug}`);
+  const comparisonContext = readComparisonContext(query);
+  const headerQuery = catalogueHeaderQuery(criteria, browse, query.cartPlan, undefined, `/products/${slug}`, comparisonContext);
   // Resolve existence before rendering the page shell; drafts use the same 404 path.
-  const detail = ProductDetail({ slug, criteria, browse, planHint: query.cartPlan, comparisonContext: readComparisonContext(query), cartReturn: readCartReturn(query.cartReturn) });
+  const detail = ProductDetail({ slug, criteria, browse, planHint: query.cartPlan, comparisonContext, cartReturn: readCartReturn(query.cartReturn) });
   return (
     <><main className="min-h-screen bg-hanapure-warm-white text-hanapure-text">
       <Header catalogueQuery={headerQuery} />

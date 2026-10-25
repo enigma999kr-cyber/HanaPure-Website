@@ -20,11 +20,12 @@ export default async function LocalizedProducts({ params, searchParams }: {
   const query = await searchParams;
   const criteria = readCatalogueCriteria(query);
   const browse = readCatalogueBrowse(query);
-  const headerQuery = catalogueHeaderQuery(criteria, browse, query.cartPlan);
+  const comparisonContext = readComparisonContext(query);
+  const headerQuery = catalogueHeaderQuery(criteria, browse, query.cartPlan, undefined, "/products", comparisonContext);
   return (
     <><main lang={locale} className="min-h-screen bg-hanapure-warm-white text-hanapure-text">
       <Header catalogueQuery={headerQuery} />
-      <ProductListing locale={locale} routeLocale={locale} criteria={criteria} browse={browse} planHint={query.cartPlan} comparisonContext={readComparisonContext(query)} />
+      <ProductListing locale={locale} routeLocale={locale} criteria={criteria} browse={browse} planHint={query.cartPlan} comparisonContext={comparisonContext} />
     </main><Footer locale={locale} routeLocale={locale} /></>
   );
 }

@@ -1,11 +1,14 @@
 import { test as base, expect, type Page } from "@playwright/test";
 import { storefrontLabels, storefrontLocales } from "../../lib/storefront/localization";
 import { marketingCopy } from "../../lib/storefront/marketing-copy";
-import { publishedSlug, draftSlug, missingLocaleSlug, gallerySlug, textOnlySlug, publishedCatalogueFixtures } from "./published-catalogue-fixtures.mjs";
+import { publishedSlug, draftSlug, missingLocaleSlug, gallerySlug, textOnlySlug, publishedCatalogueFixtures, journeyCatalogueProducts } from "./published-catalogue-fixtures.mjs";
 import { cartLabels } from "../../lib/cart/labels";
 import { CART_STORAGE_KEY } from "../../lib/cart/cart-state";
 import { portablePayload } from "../../lib/cart/cart-portable-handoff";
 import { readShoppingPlan } from "../../lib/catalog/catalogue-shopping-plan";
+import { comparisonLabels } from "../../lib/comparison/labels";
+import { FAVORITES_STORAGE_KEY, serializeFavorites } from "../../lib/favorites/favorite-state";
+import { RECENT_STORAGE_KEY, serializeRecent } from "../../lib/recently-viewed/recent-state";
 
 // Expected browser URLs, not a replacement for the server-only parser/serializer.
 const expectedQuery = (q: string, brand: string) =>
@@ -929,4 +932,186 @@ test.fixme("[web19] BLOCKED Location.assign exception uses existing synthetic-on
 });
 test.fixme("[web19] BLOCKED deferred Clipboard receipt needs separately reviewed owned instrumentation", async () => {
   // No real/system clipboard; do not introduce a global deferred Promise hook in A-stage.
+});
+
+// WEB #20 SOURCE ONLY until separate runtime approval. The opt-in owned runner
+// selects the paginated fixture; base selectors and all three #19 fixmes remain.
+type Web20Control = { writes: number; denyAfterWrite: boolean };
+type Web20Clipboard = { calls: string[]; settle?: (reject: boolean) => void };
+const web20First = journeyCatalogueProducts[0], web20Second = journeyCatalogueProducts[12];
+const web20Lines = [{ publicId: web20First.publicId, quantity: 3 }, { publicId: web20Second.publicId, quantity: 1 }];
+
+async function web20Seed(page: Page, populated = false) {
+  await page.addInitScript(({ key, seed, favoritesKey, recentKey, favorites, recent }) => {
+    const get = Storage.prototype.getItem, set = Storage.prototype.setItem;
+    if (seed && get.call(localStorage, key) === null) set.call(localStorage, key, seed);
+    if (favorites && get.call(localStorage, favoritesKey) === null) set.call(localStorage, favoritesKey, favorites);
+    if (recent && get.call(localStorage, recentKey) === null) set.call(localStorage, recentKey, recent);
+    const state = { writes: 0, denyAfterWrite: false };
+    (window as unknown as { __web20Cart: Web20Control }).__web20Cart = state;
+    Storage.prototype.getItem = function (name) {
+      if (name === key && state.denyAfterWrite && state.writes > 0) throw new Error("TEST ONLY WEB20 readback denied");
+      return get.call(this, name);
+    };
+    Storage.prototype.setItem = function (name, value) {
+      if (this === localStorage && name === key) state.writes++;
+      return set.call(this, name, value);
+    };
+  }, {
+    key: CART_STORAGE_KEY,
+    seed: populated ? JSON.stringify({ version: 1, lines: [{ publicId: web20First.publicId, quantity: 2 }] }) : null,
+    favoritesKey: FAVORITES_STORAGE_KEY, recentKey: RECENT_STORAGE_KEY,
+    favorites: populated ? serializeFavorites([web20First.publicId, web20Second.publicId]) : null,
+    recent: populated ? serializeRecent([web20Second.publicId, web20First.publicId]) : null,
+  });
+}
+
+for (const locale of storefrontLocales) {
+  test(`[web20] paginated comparison to detail and locale Back ${locale}`, async ({ page }) => {
+    const labels = storefrontLabels[locale], comparison = comparisonLabels[locale];
+    await web20Seed(page);
+    const query = new URLSearchParams({ q: "TEST ONLY JOURNEY", brand: "Round Lab", sort: "name-asc", withLocaleInfo: "1", withLocaleImage: "1" });
+    await visit(page, `/${locale}/products?${query}`);
+    const firstName = web20First.translations[locale].name;
+    await page.getByRole("link", { name: `${labels.chooseFirstResult}: ${firstName}`, exact: true }).press("Enter");
+    await expect(page).toHaveURL(url => url.searchParams.get("pickFirst") === web20First.publicId);
+    const pages = page.getByRole("navigation", { name: labels.resultPages, exact: true });
+    await pages.getByRole("link", { name: labels.nextPage, exact: true }).press("Enter");
+    await expect(page).toHaveURL(url => url.searchParams.get("page") === "2" && url.searchParams.get("pickFirst") === web20First.publicId);
+    await expect(page.locator("main li h2")).toHaveCount(2);
+    await page.getByRole("link", { name: `${labels.chooseSecondResult}: ${web20Second.translations[locale].name}`, exact: true }).press("Enter");
+    // CLOSED comparison URLs carry q/brand/sort, not presentation-only filters.
+    await expect(page).toHaveURL(url => url.searchParams.get("compareFirst") === web20First.publicId && url.searchParams.get("compareSecond") === web20Second.publicId &&
+      !url.searchParams.has("withLocaleInfo") && !url.searchParams.has("withLocaleImage"));
+    const panel = page.locator("#catalogue-comparison");
+    await expect(panel.getByRole("heading", { name: comparison.heading, exact: true })).toBeVisible();
+    await panel.getByRole("link", { name: `${labels.details}: ${firstName}`, exact: true }).press("Enter");
+    await expect(page.getByRole("heading", { level: 1, name: firstName, exact: true })).toBeVisible();
+    await expect(page).toHaveURL(url => url.pathname === `/${locale}/products/${web20First.slug}` && url.searchParams.get("q") === "TEST ONLY JOURNEY" &&
+      url.searchParams.get("compareFirst") === web20First.publicId && url.searchParams.get("compareSecond") === web20Second.publicId &&
+      !url.searchParams.has("withLocaleInfo") && !url.searchParams.has("withLocaleImage"));
+    const target = locale === "hu" ? "ko" : "hu";
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.locator("header").getByRole("link", { name: target === "hu" ? "Magyar" : "한국어", exact: true }).press("Enter");
+    await expect(page).toHaveURL(url => url.pathname === `/${target}/products/${web20First.slug}` &&
+      url.searchParams.get("compareFirst") === web20First.publicId && url.searchParams.get("compareSecond") === web20Second.publicId &&
+      !url.searchParams.has("withLocaleInfo") && !url.searchParams.has("withLocaleImage"));
+    await expect(page.getByRole("link", { name: comparisonLabels[target].backToComparison, exact: true })).toHaveAttribute("href",
+      `/${target}/products?${new URLSearchParams({ q: "TEST ONLY JOURNEY", brand: "Round Lab", sort: "name-asc", compareFirst: web20First.publicId, compareSecond: web20Second.publicId })}#catalogue-comparison`);
+    await page.getByRole("link", { name: storefrontLabels[target].back, exact: true }).press("Enter");
+    await expect(page).toHaveURL(url => url.pathname === `/${target}/products` && url.searchParams.get("q") === "TEST ONLY JOURNEY" && url.searchParams.get("brand") === "Round Lab" && url.searchParams.get("sort") === "name-asc");
+    expect(await page.evaluate(key => localStorage.getItem(key), CART_STORAGE_KEY)).toBeNull();
+    await expect(page.locator('a[href*="test-only-journey-draft"]')).toHaveCount(0);
+  });
+}
+
+for (const denied of [false, true]) test(`[web20] Plan to Cart explicit merge ${denied ? "readback refusal" : "confirmed once"}`, async ({ page }) => {
+  const labels = storefrontLabels.en, cart = cartLabels.en;
+  await web20Seed(page, true);
+  const payload = portablePayload(web20Lines)!;
+  await visit(page, `/en/products?${new URLSearchParams({ q: "TEST ONLY JOURNEY", cartPlan: payload })}`);
+  const plan = page.getByRole("region", { name: labels.planHeading, exact: true });
+  await plan.getByRole("link", { name: labels.planReviewCart, exact: true }).press("Enter");
+  await expect(page.getByRole("heading", { name: cart.portablePreview, exact: true })).toBeVisible();
+  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), CART_STORAGE_KEY))
+    .toEqual({ version: 1, lines: [{ publicId: web20First.publicId, quantity: 2 }] });
+  expect(await page.evaluate(() => (window as unknown as { __web20Cart: Web20Control }).__web20Cart.writes)).toBe(0);
+  const merge = page.getByRole("button", { name: cart.portableMerge, exact: true });
+  await expect(merge).toBeEnabled();
+  if (denied) await page.evaluate(() => { (window as unknown as { __web20Cart: Web20Control }).__web20Cart.denyAfterWrite = true; });
+  await merge.press("Enter");
+  await expect(merge).toBeDisabled();
+  expect(await page.evaluate(() => (window as unknown as { __web20Cart: Web20Control }).__web20Cart.writes)).toBe(1);
+  if (denied) {
+    await expect(page.getByRole("status").filter({ hasText: cart.portableMerged })).toHaveCount(0);
+    await page.evaluate(() => { (window as unknown as { __web20Cart: Web20Control }).__web20Cart.denyAfterWrite = false; });
+    await expect(merge).toBeDisabled(); // Re-enabling reads cannot certify the earlier write.
+  } else {
+    await expect(page.getByRole("status").filter({ hasText: cart.portableMerged })).toHaveCount(1);
+    expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), CART_STORAGE_KEY))
+      .toEqual({ version: 1, lines: [{ publicId: web20First.publicId, quantity: 5 }, { publicId: web20Second.publicId, quantity: 1 }] });
+  }
+});
+
+for (const width of [320, 375, 400]) test(`[web20] Korean catalogue heading keeps complete last word ${width}`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  await visit(page, "/ko/products?q=TEST+ONLY+JOURNEY");
+  await page.evaluate(() => document.fonts.ready);
+  const heading = page.getByRole("heading", { level: 1, name: storefrontLabels.ko.heading, exact: true });
+  await expect(heading).toBeVisible();
+  const lines = await heading.evaluate(node => {
+    const range = document.createRange(); range.selectNodeContents(node);
+    return new Set([...range.getClientRects()].filter(rect => rect.width > 0).map(rect => Math.round(rect.top))).size;
+  });
+  expect(lines).toBe(1);
+  await expect(heading).toHaveCSS("font-size", width < 375 ? "30px" : "36px");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width + 1);
+});
+
+for (const mode of ["current", "reject", "filter"] as const) test(`[web20] owned deferred Search clipboard receipt ${mode}`, async ({ page }) => {
+  const labels = storefrontLabels.en;
+  await web20Seed(page);
+  // This BrowserContext owns the fake. No system clipboard permission/read/write.
+  await page.addInitScript(() => {
+    const state: Web20Clipboard = { calls: [] };
+    (window as unknown as { __web20Clipboard: Web20Clipboard }).__web20Clipboard = state;
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: {
+      writeText(value: string) { state.calls.push(value); return new Promise<void>((resolve, reject) => {
+        state.settle = failed => failed ? reject(new Error("TEST ONLY WEB20 clipboard denied")) : resolve();
+      }); },
+    } });
+  });
+  await visit(page, "/en/products?q=TEST+ONLY+JOURNEY&brand=Round+Lab");
+  const copy = page.getByRole("button", { name: labels.copySearchLink, exact: true });
+  await copy.press("Enter"); await expect(copy).toBeDisabled();
+  expect(await page.evaluate(() => (window as unknown as { __web20Clipboard: Web20Clipboard }).__web20Clipboard.calls))
+    .toEqual(["http://127.0.0.1:3101/en/products?q=TEST+ONLY+JOURNEY&brand=Round+Lab"]);
+  if (mode === "filter") {
+    await page.getByRole("region", { name: labels.activeFilters, exact: true })
+      .getByRole("link", { name: `${labels.removeFilter}: ${labels.filterBrand}: Round Lab`, exact: true }).press("Enter");
+    await expect(page).toHaveURL(url => !url.searchParams.has("brand"));
+    // Next Link keeps the same owned context: if it does not, fail honestly.
+    expect(await page.evaluate(() => (window as unknown as { __web20Clipboard: Web20Clipboard }).__web20Clipboard.calls.length)).toBe(1);
+  }
+  await page.evaluate(failed => (window as unknown as { __web20Clipboard: Web20Clipboard }).__web20Clipboard.settle!(failed), mode === "reject");
+  if (mode === "filter") await page.evaluate(() => new Promise<void>(resolve => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  })); // Let the old receipt continuation and React render settle before a negative assertion.
+  if (mode === "current") await expect(page.getByRole("status").filter({ hasText: labels.searchLinkCopied })).toHaveCount(1);
+  else if (mode === "reject") await expect(page.getByRole("status").filter({ hasText: labels.searchLinkFailed })).toHaveCount(1);
+  else await expect(page.getByRole("status").filter({ hasText: labels.searchLinkCopied })).toHaveCount(0);
+  expect(await page.evaluate(key => localStorage.getItem(key), CART_STORAGE_KEY)).toBeNull();
+});
+
+for (const scenario of [
+  { locale: "en", width: 320 }, { locale: "hu", width: 375 }, { locale: "ko", width: 390 },
+  { locale: "hu", width: 430 }, { locale: "hu", width: 768 }, { locale: "ko", width: 1024 }, { locale: "en", width: 1280 },
+] as const) test(`[web20] populated Plan comparison and Cart fit ${scenario.locale} ${scenario.width}`, async ({ page }) => {
+  const { locale, width } = scenario, labels = storefrontLabels[locale], comparison = comparisonLabels[locale];
+  await web20Seed(page, true); await page.setViewportSize({ width, height: 900 });
+  await visit(page, `/${locale}/products?${new URLSearchParams({ q: "TEST ONLY JOURNEY", cartPlan: portablePayload(web20Lines)! })}`);
+  await page.evaluate(() => document.fonts.ready);
+  const plan = page.getByRole("region", { name: labels.planHeading, exact: true });
+  await expect(plan).toBeVisible();
+  await expect(plan.getByRole("spinbutton", { name: `${labels.planQuantity}: ${web20First.translations[locale].name}`, exact: true })).toHaveValue("3");
+  const panel = page.locator("#catalogue-comparison");
+  const firstPanel = panel.getByRole("link", { name: comparison.jumpFirst, exact: true });
+  for (const region of [plan, panel]) {
+    const box = await region.boundingBox(); expect(box).not.toBeNull();
+    expect(box!.x).toBeGreaterThanOrEqual(-1); expect(box!.x + box!.width).toBeLessThanOrEqual(width + 1);
+  }
+  const review = plan.getByRole("link", { name: labels.planReviewCart, exact: true });
+  await review.scrollIntoViewIfNeeded(); const bounds = await review.boundingBox();
+  expect(bounds!.height).toBeGreaterThanOrEqual(44);
+  await review.press("Enter");
+  await expect(page.getByRole("heading", { name: cartLabels[locale].portablePreview, exact: true })).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width + 1);
+  expect(await page.evaluate(() => (window as unknown as { __web20Cart: Web20Control }).__web20Cart.writes)).toBe(0);
+  await page.goBack();
+  await expect(plan).toBeVisible();
+  await firstPanel.press("Enter");
+  const target = await firstPanel.getAttribute("href");
+  await expect(panel.locator(target!)).toBeFocused();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width + 1);
 });
