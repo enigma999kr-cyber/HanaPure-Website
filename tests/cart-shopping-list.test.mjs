@@ -117,9 +117,10 @@ test("copy action source contract awaits native clipboard success, catches failu
   assert.match(action, /copyPending.current \|\| !cart.ready/);
   assert.match(action, /copyPending.current = true; setCopying\(true\)/);
   assert.match(action, /typeof navigator === "undefined" \|\| !navigator.clipboard\?\.writeText/);
-  assert.match(action, /await navigator.clipboard.writeText\(list.text\);\s*setCopyMessage\(list.omitted/);
-  assert.match(action, /catch \{\s*setCopyMessage\(labels.shoppingListFailed\)/);
-  assert.match(action, /finally \{\s*copyPending.current = false; setCopying\(false\)/);
+  assert.match(action, /const owner = copyLive.current;\s*if \(!currentCopy\(owner\)\)/);
+  assert.match(action, /await navigator.clipboard.writeText\(list.text\);\s*if \(currentCopy\(owner\)\) setCopyMessage\(list.omitted/);
+  assert.match(action, /catch \{\s*if \(currentCopy\(owner\)\) setCopyMessage\(labels.shoppingListFailed\)/);
+  assert.match(action, /finally \{\s*copyPending.current = false; if \(copyLive.current\) setCopying\(false\)/);
   assert.doesNotMatch(action, /changeBrowserCart|changeBrowserFavorite|resetBrowser|setUndo|execCommand|textarea|fetch\(/);
   assert.equal((action.match(/navigator.clipboard.writeText\(/g) ?? []).length, 1);
   assert.match(source, /<p role="status"[^>]*>\{copyMessage\}<\/p>/);

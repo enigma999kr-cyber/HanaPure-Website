@@ -10,6 +10,7 @@ import { discoverCatalogue, catalogueQueryString, readCatalogueCriteria } from "
 import { CATALOGUE_PAGE_SIZE, readCatalogueBrowse, catalogueResultPage, catalogueBrowseQuery, catalogueBrowseHref, catalogueCardId } from "../lib/catalog/catalogue-browse.ts";
 import { storefrontLabels, switchLocalePath } from "../lib/storefront/localization.ts";
 import { publishedComparison, comparisonHref, comparisonShareLink, COMPARISON_DESTINATION } from "../lib/comparison/compare-selection.ts";
+import { searchSuggestions } from "../lib/catalog/search-suggestions.ts";
 
 // Existing installed TypeScript / react-server resolver convention; no browser or runner.
 const require = createRequire(import.meta.url), repo = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -87,6 +88,47 @@ test("F1 0/1/12/13/25/37 published results have truthful ranges, 12-card pages a
       assert.ok(text(tree).replace(/\s*:\s*/g, ": ").includes(`${storefrontLabels.en.results}: ${count}`));
       assert.ok(!cards(tree).some(card => card.props.id === catalogueCardId(draft.publicId)));
     }
+  }
+});
+
+test("WEB22 100/500/1000 published records retain locale search, stable ties, five suggestions and complete page coverage", () => {
+  for (const count of [100, 500, 1000]) {
+    const source = Array.from({ length: count }, (_, index) => record(index + 1));
+    const privateRecord = record(count + 1, "draft");
+    const reader = createLocalCatalogueReader([...source, privateRecord]);
+    const before = JSON.stringify(reader.listPublished());
+    for (const locale of ["en", "hu", "ko"]) {
+      const word = locale === "hu" ? "ÁRVÍZ" : locale === "ko" ? "가상" : "ＦＩＸＴＵＲＥ";
+      const selected = readCatalogueCriteria({ q: word, brand: "Anua", sort: "name-asc" });
+      const results = discoverCatalogue(reader, locale, selected);
+      assert.equal(results.length, source.filter(item => item.brand === "Anua" && item.translations[locale]).length);
+      assert.ok(results.every(item => item.state === "published" && item.translations[locale]));
+      const names = new Intl.Collator(locale, { sensitivity: "base" });
+      for (let index = 1; index < results.length; index++) {
+        const left = results[index - 1], right = results[index];
+        const order = names.compare(left.translations[locale].name, right.translations[locale].name);
+        assert.ok(order <= 0);
+        if (order === 0) assert.ok(left.slug < right.slug);
+      }
+      const flattened = [];
+      const pages = Math.max(1, Math.ceil(results.length / CATALOGUE_PAGE_SIZE));
+      for (let page = 1; page <= pages; page++) {
+        const slice = catalogueResultPage(results, locale, readCatalogueBrowse({ page: String(page) }));
+        assert.ok(slice.items.length <= 12); flattened.push(...slice.items);
+      }
+      assert.deepEqual(flattened.map(item => item.publicId), results.map(item => item.publicId));
+      assert.equal(new Set(flattened.map(item => item.publicId)).size, flattened.length);
+      assert.equal(catalogueResultPage(results, locale, readCatalogueBrowse({ page: "999999" })).page, pages);
+      const projection = reader.listPublished().map(item => ({ publicId: item.publicId, slug: item.slug, brand: item.brand,
+        name: item.translations[locale]?.name ?? null, description: item.translations[locale]?.description ?? null }));
+      const suggestions = searchSuggestions(projection, word);
+      assert.equal(suggestions.length, 5);
+      assert.deepEqual(suggestions.map(item => item.publicId), source.filter(item => item.translations[locale]).slice(0, 5).map(item => item.publicId));
+      assert.ok(!suggestions.some(item => item.publicId === privateRecord.publicId));
+      const repeated = readCatalogueCriteria({ q: [word, "absent"], brand: ["Anua", "beplain"], sort: ["name-asc", "name-desc"] });
+      assert.deepEqual(repeated, { query: word, brand: "Anua" });
+    }
+    assert.equal(JSON.stringify(reader.listPublished()), before);
   }
 });
 

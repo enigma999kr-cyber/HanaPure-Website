@@ -29,6 +29,58 @@ test("catalogue reconciliation uses UUID identity, preserves selections, and nev
   assert.equal(reconcileCart(lines, [])[0].product, null);
   assert.deepEqual(lines, [{ publicId: id.toUpperCase(), quantity: 2 }, { publicId: missing, quantity: 3 }]);
 });
+
+test("WEB22 reconciliation indexes each published identity once at 0/1/12/13/25/37/100/500/1000 scale", () => {
+  for (const count of [0, 1, 12, 13, 25, 37, 100, 500, 1000]) {
+    const identity = index => `${String(index + 1).padStart(8, "0")}-abcd-1234-abcd-123456789abc`;
+    let reads = 0;
+    const products = Array.from({ length: count }, (_, index) => Object.freeze({
+      get publicId() { reads++; return identity(index); }, slug: `test-only-${index}`,
+    }));
+    const lines = Object.freeze(Array.from({ length: count }, (_, index) => Object.freeze({
+      publicId: index % 2 ? identity(index).toUpperCase() : identity(index), quantity: index + 1,
+    })));
+    // These identities/quantities must fit the existing persisted Cart contract.
+    assert.equal(inspectStoredCart(serializeCart(lines)).invalid, false);
+    const result = reconcileCart(lines, products);
+    assert.equal(result.length, count);
+    assert.equal(reads, count, "One catalogue scan, not a repeated scan for every Cart line");
+    result.forEach((row, index) => {
+      assert.strictEqual(row.line, lines[index]);
+      assert.strictEqual(row.product, products[index]);
+    });
+  }
+});
+
+test("WEB22 reconciliation preserves first case-alias match, missing rows and line order without changing input", () => {
+  const missing = "22345678-abcd-1234-abcd-123456789abc";
+  const first = Object.freeze({ publicId: id.toUpperCase(), slug: "first-test-only" });
+  const duplicate = Object.freeze({ publicId: id, slug: "later-test-only" });
+  const lines = Object.freeze([Object.freeze({ publicId: missing, quantity: 3 }), Object.freeze({ publicId: id, quantity: 2 })]);
+  const products = Object.freeze([first, duplicate]);
+  const result = reconcileCart(lines, products);
+  assert.strictEqual(result[0].product, null); assert.strictEqual(result[1].product, first);
+  assert.strictEqual(result[0].line, lines[0]); assert.strictEqual(result[1].line, lines[1]);
+  assert.deepEqual(products, [first, duplicate]);
+  assert.deepEqual(lines, [{ publicId: missing, quantity: 3 }, { publicId: id, quantity: 2 }]);
+});
+
+test("WEB22 reconciliation never caches removed or replaced catalogue entries and skips scanning an empty Cart", () => {
+  const lines = [{ publicId: id, quantity: 1 }];
+  const first = { publicId: id, slug: "old-test-only" }, replacement = { publicId: id, slug: "new-test-only" };
+  assert.strictEqual(reconcileCart(lines, [first])[0].product, first);
+  assert.equal(reconcileCart(lines, [])[0].product, null);
+  assert.strictEqual(reconcileCart(lines, [replacement])[0].product, replacement);
+  assert.deepEqual(reconcileCart([], [{ get publicId() { throw new Error("An empty Cart must not scan the catalogue"); } }]), []);
+  assert.strictEqual(reconcileCart(lines, [first,
+    { get publicId() { throw new Error("A single matching line must retain its early exit"); } },
+  ])[0].product, first);
+  const second = { publicId: "22345678-abcd-1234-abcd-123456789abc" };
+  const pair = reconcileCart([...lines, { publicId: second.publicId, quantity: 2 }], [first, second,
+    { get publicId() { throw new Error("A small Cart must not scan an unneeded catalogue suffix"); } },
+  ]);
+  assert.strictEqual(pair[0].product, first); assert.strictEqual(pair[1].product, second);
+});
 test("Header quantity sums selections rather than line count, without unsafe-number rounding", () => {
   assert.equal(cartQuantity([]), "0");
   assert.equal(cartQuantity([{ publicId: id, quantity: 2 }, { publicId: id, quantity: 3 }]), "5");

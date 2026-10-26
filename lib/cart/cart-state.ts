@@ -35,8 +35,25 @@ export function parseCart(raw: string | null): readonly CartLine[] {
 }
 /** Compare identities only. Never delete selections or infer commercial availability. */
 export function reconcileCart<T extends Readonly<{ publicId: string }>>(lines: readonly CartLine[], products: readonly T[]) {
-  return lines.map(line => ({ line, product: products.find(product =>
+  if (!lines.length) return [];
+  // Keep a one-line Cart's existing early-exit lookup without allocating an index.
+  if (lines.length === 1) return lines.map(line => ({ line, product: products.find(product =>
     product.publicId.toLowerCase() === line.publicId.toLowerCase()) ?? null }));
+  // Preserve find's first-match semantics, including casing aliases. Rebuild for
+  // each current published projection; never cache removed or replaced products.
+  const byIdentity = new Map<string, T>();
+  let scanned = 0;
+  return lines.map(line => {
+    const requested = line.publicId.toLowerCase();
+    // Extend only as far as this selection needs, reusing the scanned prefix for
+    // later rows. Small selections near the start do not scan a whole catalogue.
+    while (!byIdentity.has(requested) && scanned < products.length) {
+      const product = products[scanned++];
+      const identity = product.publicId.toLowerCase();
+      if (!byIdentity.has(identity)) byIdentity.set(identity, product);
+    }
+    return { line, product: byIdentity.get(requested) ?? null };
+  });
 }
 export function serializeCart(lines: readonly CartLine[]): string {
   return JSON.stringify({ version: 1, lines: lines.map(({ publicId, quantity }) => ({ publicId, quantity })) });
