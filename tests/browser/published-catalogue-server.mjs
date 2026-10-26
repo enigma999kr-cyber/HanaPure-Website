@@ -5,6 +5,7 @@ import { rm } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { dirname, join, resolve, relative, isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
+import { get as httpGet } from "node:http";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const sourceCatalogue = join(repo, "data", "catalogue.ts");
@@ -141,17 +142,23 @@ export function createFixtureWorkspace(root, owner) {
   };
 }
 
-export async function waitForFixtureServer(child, url, timeout = 30_000) {
+export async function waitForFixtureServer(child, url, timeout = 30_000, validateResponse) {
   const record = children.get(child);
   if (!record) throw new Error("Unowned server readiness check");
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
     if (record.closed) throw new Error("Fixture server failed before readiness");
+    let readyBody;
     try {
       const response = await fetch(url, { signal: AbortSignal.timeout(1000), redirect: "error" });
-      await response.arrayBuffer();
-      if (response.ok && !record.closed) return;
+      const body = await response.arrayBuffer();
+      if (response.ok && !record.closed) readyBody = body;
     } catch { /* Loopback readiness only; no business-request retries. */ }
+    if (readyBody !== undefined) {
+      // Validation failures must escape, never be swallowed as polling failures.
+      validateResponse?.(Buffer.from(readyBody).toString("utf8"));
+      return;
+    }
     await delay(100);
   }
   throw new Error("Fixture server readiness timed out");
@@ -166,6 +173,185 @@ async function assertPortFree() {
   });
 }
 
+const devReadinessError = (kind, attempts, last) =>
+  new Error(`WEB23_DEV_READINESS ${kind} attempts=${attempts} last=${last}`);
+
+/** Offline-testable DEV observer. Each sequential probe shares one 90s deadline. */
+export async function observeWeb23DevReadiness({ request, childExited, now = () => performance.now(), pause = delay }) {
+  if ([request, childExited, now, pause].some(fn => typeof fn !== "function")) throw new Error("Invalid DEV readiness observer");
+  const started = now();
+  if (!Number.isFinite(started)) throw new Error("Invalid DEV readiness clock");
+  const deadline = started + 90_000;
+  let attempts = 0, last = "NO_HTTP_RESPONSE";
+  while (true) {
+    if (childExited()) throw devReadinessError("SERVER_CHILD_EXIT", attempts, last);
+    const remaining = Math.floor(deadline - now());
+    if (remaining <= 0) throw devReadinessError("DEADLINE_EXCEEDED", attempts, last);
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), remaining);
+    let response, body, failed = false, phase = "FETCH";
+    attempts++;
+    try {
+      response = await request({ signal: abort.signal, remaining });
+      last = `HTTP_STATUS:${response.status}`;
+      phase = "BODY";
+      body = await response.text(); // Same deadline covers headers AND body.
+    } catch (error) {
+      failed = true;
+      const code = error?.cause?.code ?? error?.code;
+      const safeCode = ["ECONNREFUSED", "ECONNRESET", "ENETUNREACH", "EHOSTUNREACH"].includes(code) ? `:${code}` : "";
+      last = phase === "BODY" ? `BODY_ABORT_OR_TIMEOUT:HTTP_STATUS:${response.status}`
+        : `CONNECTION/TRANSPORT${safeCode}:NO_HTTP_RESPONSE`;
+    } finally { clearTimeout(timer); }
+    if (childExited()) throw devReadinessError("SERVER_CHILD_EXIT", attempts, last);
+    if (now() >= deadline || abort.signal.aborted) throw devReadinessError("DEADLINE_EXCEEDED", attempts, last);
+    if (!failed) {
+      last = `HTTP_STATUS:${response.status}`;
+      if (response.status === 200) {
+        try { assertWeb23DevPage(body); }
+        catch { throw devReadinessError("FIXTURE_MISMATCH", attempts, last); }
+        return { attempts, status: 200 };
+      }
+    }
+    const wait = Math.min(100, Math.max(0, deadline - now()));
+    if (wait > 0) await pause(wait);
+  }
+}
+
+/** The runtime entry point has no caller URL, deadline, environment or probe override. */
+export async function waitForWeb23DevFixture(child) {
+  const record = children.get(child);
+  if (!record || child.pid !== record.pid || child.spawnfile !== record.executable ||
+    child.kill !== record.kill || JSON.stringify(child.spawnargs) !== JSON.stringify(record.args)) {
+    throw new Error("Unowned DEV readiness check");
+  }
+  return observeWeb23DevReadiness({
+    childExited: () => record.closed,
+    request: ({ signal }) => fetch("http://127.0.0.1:3101/en/products/test-only-journey-01", { signal, redirect: "error" }),
+  });
+}
+
+// Values are enumerated, never copied from raw messages, headers or paths.
+export function transportErrorFields(error) {
+  const names = new Set(["Error", "TypeError", "AbortError", "TimeoutError", "AggregateError"]);
+  const codes = new Set(["EACCES", "EPERM", "ECONNREFUSED", "ECONNRESET", "ENETUNREACH", "EHOSTUNREACH",
+    "ETIMEDOUT", "ABORT_ERR", "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_SOCKET", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_ABORTED"]);
+  const syscalls = new Set(["connect", "read", "write", "getaddrinfo"]);
+  const fields = {};
+  if (names.has(error?.name)) fields.name = error.name;
+  if (codes.has(error?.code)) fields.code = error.code;
+  if (syscalls.has(error?.syscall)) fields.syscall = error.syscall;
+  if (names.has(error?.cause?.name)) fields.causeName = error.cause.name;
+  if (codes.has(error?.cause?.code)) fields.causeCode = error.cause.code;
+  if (syscalls.has(error?.cause?.syscall)) fields.causeSyscall = error.cause.syscall;
+  const nested = [error?.cause?.cause, error?.errors?.[0], error?.cause?.errors?.[0]];
+  const code = nested.find(item => codes.has(item?.code))?.code;
+  if (code) fields.nestedCode = code;
+  return fields;
+}
+
+/** Direct GET never follows Location; owned request/response are destroyed. */
+export function directTransportProbe(get = httpGet) {
+  return ({ signal }) => new Promise((resolve, reject) => {
+    let request, response, settled = false;
+    const finish = (error, value) => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener("abort", abort);
+      response?.destroy();
+      request?.destroy();
+      if (error) reject(error); else resolve(value);
+    };
+    const abort = () => finish(Object.assign(new Error(), { name: "AbortError", code: "ABORT_ERR" }));
+    if (signal.aborted) { abort(); return; }
+    signal.addEventListener("abort", abort, { once: true });
+    try {
+      request = get("http://127.0.0.1:3101/en/products/test-only-journey-01", { agent: false }, incoming => {
+        response = incoming;
+        finish(null, { status: incoming.statusCode,
+          locationPresent: incoming.statusCode >= 300 && incoming.statusCode < 400 && typeof incoming.headers.location === "string" });
+      });
+      // Retain an error handler through destroy/close to absorb owned teardown errors.
+      const onError = error => finish(error);
+      request.on("error", onError);
+      request.once("close", () => request.removeListener("error", onError));
+      if (settled) request.destroy();
+    } catch (error) { finish(error); }
+  });
+}
+
+/** Offline adapters only in tests; production entry below fixes URL/ownership. */
+export async function observeTransportComparison({ fetchProbe, httpProbe, childExited,
+  now = () => performance.now(), pause = delay, setTimer = setTimeout, clearTimer = clearTimeout }) {
+  if ([fetchProbe, httpProbe, childExited, now, pause, setTimer, clearTimer].some(fn => typeof fn !== "function")) {
+    throw new Error("Invalid transport observer");
+  }
+  const started = now();
+  if (!Number.isFinite(started)) throw new Error("Invalid transport clock");
+  const deadline = started + 30_000;
+  const result = { owned: true, childClosed: false, elapsedMs: 0, fetchCalls: 0, httpCalls: 0,
+    fetch: { outcome: "NOT_EXECUTED" }, http: { outcome: "NOT_EXECUTED" },
+    comparison: "INCONCLUSIVE", limitation: "Sequential probes have different warm-up conditions; CLI/listener readiness is not proven." };
+  // One stabilization pause, no HTTP polling. Included in the absolute ceiling.
+  if (!childExited()) await pause(1500);
+  for (const [key, probe] of [["fetch", fetchProbe], ["http", httpProbe]]) {
+    if (childExited()) { result[key] = { outcome: "NOT_EXECUTED_CHILD_EXIT" }; continue; }
+    const remaining = Math.floor(deadline - now());
+    if (remaining <= 0) { result[key] = { outcome: "NOT_EXECUTED_BUDGET" }; continue; }
+    const signalOwner = new AbortController();
+    const budget = Math.min(12_000, remaining);
+    let timer, drainTimer, timedOut = false, probeSettled = false;
+    result[`${key}Calls`]++;
+    try {
+      const timeout = new Promise(resolve => { timer = setTimer(() => {
+        timedOut = true; signalOwner.abort(); resolve({ outcome: "TIMEOUT" });
+      }, budget); });
+      const observed = Promise.resolve().then(() => probe({ signal: signalOwner.signal, remaining: budget })).then(value => {
+        if (!Number.isInteger(value?.status) || value.status < 100 || value.status > 599) return { outcome: "INVALID_STATUS" };
+        return { outcome: "HTTP_STATUS", status: value.status,
+          ...(key === "http" ? { locationPresent: value.status >= 300 && value.status < 400 && value.locationPresent === true } : {}) };
+      }, error => ({ outcome: key === "fetch" ? "FETCH_REJECTED" : "HTTP_REJECTED", ...transportErrorFields(error) }))
+        .then(value => { probeSettled = true; return value; });
+      result[key] = await Promise.race([observed, timeout]);
+      if (timedOut && !probeSettled) {
+        // Await abort settlement before the second probe, within the SAME ceiling.
+        // If cancellation never settles, consume remaining budget and skip it.
+        const drainBudget = Math.max(0, Math.floor(deadline - now()));
+        if (drainBudget > 0) await Promise.race([observed, new Promise(resolve => {
+          drainTimer = setTimer(resolve, drainBudget);
+        })]);
+      }
+      if (timedOut || now() >= deadline) result[key] = { outcome: "TIMEOUT" };
+    } finally { clearTimer(timer); clearTimer(drainTimer); signalOwner.abort(); }
+  }
+  result.childClosed = childExited();
+  result.elapsedMs = Math.max(0, Math.floor(now() - started));
+  if (!result.childClosed) {
+    if (result.http.status >= 300 && result.http.status < 400 && result.fetch.outcome === "FETCH_REJECTED") {
+      result.comparison = "REDIRECT_OBSERVED_FETCH_REJECTED_CAUSE_UNCONFIRMED";
+    } else if (result.http.status === 200 && result.fetch.outcome === "FETCH_REJECTED") {
+      result.comparison = "HTTP_200_FETCH_REJECTED_CAUSE_UNCONFIRMED";
+    } else if (result.http.status === 200 && result.fetch.status === 200) result.comparison = "BOTH_HTTP_200_NOT_FIXTURE_OR_BROWSER_CERTIFICATION";
+  }
+  return result;
+}
+
+export async function compareOwnedWeb23Transport(child) {
+  const record = children.get(child);
+  if (!record || child.pid !== record.pid || child.spawnfile !== record.executable ||
+    child.kill !== record.kill || JSON.stringify(child.spawnargs) !== JSON.stringify(record.args)) {
+    throw new Error("Unowned transport comparison");
+  }
+  return observeTransportComparison({
+    childExited: () => record.closed,
+    fetchProbe: async ({ signal }) => {
+      const response = await fetch("http://127.0.0.1:3101/en/products/test-only-journey-01", { signal, redirect: "error" });
+      try { return { status: response.status }; } finally { await response.body?.cancel(); }
+    },
+    httpProbe: directTransportProbe(),
+  });
+}
+
 export function publishedTestSelection(args) {
   const selectors = new Map([
     ["--cart-only", ["--grep", ": cart "]],
@@ -177,6 +363,9 @@ export function publishedTestSelection(args) {
     ["--sort-only", ["--grep", "sort continuity|quick add|same-brand discovery|direct entry|published Brands"]],
     ["--journey-quality-only", ["--grep", "\\[web19\\]", "--project", "published-chromium-375"]],
     ["--integrated-journey-only", ["--grep", "\\[web20\\]", "--project", "published-chromium-375"]],
+    ["--web23-cross-device-only", ["--grep", "\\[web23\\]", "--project", "published-chromium-375"]],
+    ["--web23-dev-browser-only", ["--grep", "\\[web23\\]", "--project", "published-chromium-375"]],
+    ["--web23-transport-diagnostic-only", []],
     ["--human-preview-only", []],
   ]);
   if (!Array.isArray(args) || args.length > 1 ||
@@ -184,13 +373,43 @@ export function publishedTestSelection(args) {
     throw new Error("STOP: provide no selector or exactly one recognized published-browser selector");
   }
   // The base all-tests run must not consume the opt-in paginated-only cases.
-  return args.length ? [...selectors.get(args[0])] : ["--grep-invert", "\\[web20\\]"];
+  return args.length ? [...selectors.get(args[0])] : ["--grep-invert", "\\[web(?:20|23)\\]"];
 }
 
 /** Explicit selector only; never accept fixture choice from an environment hook. */
 export function publishedFixtureScenario(args) {
   publishedTestSelection(args); // Reject unknown/combined selectors before any side effect.
-  return ["--integrated-journey-only", "--human-preview-only"].includes(args[0]) ? "paginated" : "base";
+  return ["--integrated-journey-only", "--web23-cross-device-only", "--web23-dev-browser-only", "--web23-transport-diagnostic-only", "--human-preview-only"].includes(args[0]) ? "paginated" : "base";
+}
+
+/** Pure execution plan: only the explicit flag can select development mode. */
+export function publishedRuntimePlan(args, input = process.env) {
+  publishedTestSelection(args); // Reject before filesystem, socket or child work.
+  const transportDiagnostic = args[0] === "--web23-transport-diagnostic-only";
+  const development = args[0] === "--web23-dev-browser-only" || transportDiagnostic;
+  const filtered = fixtureEnvironment(input);
+  return {
+    development,
+    transportDiagnostic,
+    environment: development ? { ...filtered, NODE_ENV: "development" } : filtered,
+    buildArgs: development ? null : ["build", "--webpack"],
+    serverArgs: [development ? "dev" : "start", ...(development ? ["--webpack"] : []), "--hostname", "127.0.0.1", "--port", "3101"],
+    config: transportDiagnostic ? null : development ? "playwright.web23-dev.config.ts" : "playwright.published.config.ts",
+  };
+}
+
+/** A UUID-only namespace cannot escape .next or overwrite past report folders. */
+export function web23DevEvidence(owner) {
+  const match = /^hanapure-published-catalogue-browser-v1:([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/.exec(owner);
+  if (!match) throw new Error("Invalid owned WEB23 development evidence identity");
+  const root = join(".next", `web23-dev-not-production-${match[1]}`);
+  return { root, results: join(root, "results"), report: join(root, "report.json") };
+}
+
+export function assertWeb23DevPage(html) {
+  if (typeof html !== "string" || !/<h1\b[^>]*\bid="main-content"[^>]*>TEST ONLY JOURNEY en 01 — Long synthetic test name<\/h1>/.test(html)) {
+    throw new Error("WEB23 development fixture mismatch: expected published TEST ONLY detail");
+  }
 }
 
 /** Foreground input only. Requests cleanup; never acquires PID/kill authority. */
@@ -223,14 +442,15 @@ async function runJourney() {
   // Validate before port binding, workspace creation, build or child execution.
   const selection = publishedTestSelection(process.argv.slice(2));
   const scenario = publishedFixtureScenario(process.argv.slice(2));
+  const runtime = publishedRuntimePlan(process.argv.slice(2));
   const humanPreview = process.argv[2] === "--human-preview-only";
   if (humanPreview && !process.stdin.isTTY) throw new Error("Human preview requires a foreground interactive terminal");
-  const browserRoot = humanPreview ? null : publishedBrowserRoot();
+  const browserRoot = humanPreview || runtime.transportDiagnostic ? null : publishedBrowserRoot();
   await assertPortFree(); // Never adopt an unknown fixture-port server.
   const owner = `hanapure-published-catalogue-browser-v1:${randomUUID()}`;
   const workspace = createFixtureWorkspace(join(repo, ".next", "published-catalogue-app"), owner);
   const fixtureRoot = workspace.root;
-  const environment = fixtureEnvironment();
+  const environment = runtime.environment;
   let controller;
   try {
     controller = humanPreview ? createHumanPreviewController() : null;
@@ -298,9 +518,21 @@ async function runJourney() {
       `export const editorialProducts: readonly EditorialProduct[] = ${JSON.stringify(fixtures)};\n`);
     const next = join(repo, "node_modules", "next", "dist", "bin", "next");
     const stdio = humanPreview ? ["ignore", "inherit", "inherit"] : "inherit";
-    if (!await continueAfter(workspace.wait(workspace.spawn([next, "build", "--webpack"], environment, stdio)))) return;
-    const server = workspace.spawn([next, "start", "--hostname", "127.0.0.1", "--port", "3101"], environment, stdio);
-    if (!await continueAfter(waitForFixtureServer(server, "http://127.0.0.1:3101/en/products"))) return;
+    if (runtime.development) {
+      const evidence = web23DevEvidence(owner);
+      mkdirSync(join(repo, evidence.root)); // UUID path must be new; never adopt.
+      writeFileSync(join(repo, evidence.root, "mode.json"), JSON.stringify({ owner, mode: "DEV-NOT-PRODUCTION" }), { flag: "wx" });
+      console.log(`WEB23_DEV_NOT_PRODUCTION_EVIDENCE ${join(repo, evidence.root)}`);
+    } else if (!await continueAfter(workspace.wait(workspace.spawn([next, ...runtime.buildArgs], environment, stdio)))) return;
+    const server = workspace.spawn([next, ...runtime.serverArgs], environment, stdio);
+    if (runtime.transportDiagnostic) {
+      console.log(`WEB23_TRANSPORT_COMPARISON ${JSON.stringify(await compareOwnedWeb23Transport(server))}`);
+      return; // Owned finally cleanup; never readiness polling or Playwright.
+    }
+    const readiness = runtime.development
+      ? waitForWeb23DevFixture(server)
+      : waitForFixtureServer(server, "http://127.0.0.1:3101/en/products");
+    if (!await continueAfter(readiness)) return;
     if (humanPreview) {
       console.log("HUMAN_PREVIEW_READY http://127.0.0.1:3101/en/products?q=TEST+ONLY+JOURNEY&brand=Round+Lab&sort=name-asc");
       console.log("TEST ONLY foreground preview. STOP + Enter or Ctrl+C requests owned cleanup. No automated tests run.");
@@ -312,7 +544,7 @@ async function runJourney() {
       return;
     }
     const playwright = join(repo, "node_modules", "@playwright", "test", "cli.js");
-    await workspace.wait(workspace.spawn([playwright, "test", "--config", join(repo, "playwright.published.config.ts"), ...selection],
+    await workspace.wait(workspace.spawn([playwright, "test", "--config", join(repo, runtime.config), ...selection],
       { ...environment, HANAPURE_PUBLISHED_TEST_RUN_ID: owner, PLAYWRIGHT_BROWSERS_PATH: browserRoot }));
   } finally {
     controller?.close();

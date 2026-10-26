@@ -9,6 +9,8 @@ import { readShoppingPlan } from "../../lib/catalog/catalogue-shopping-plan";
 import { comparisonLabels } from "../../lib/comparison/labels";
 import { FAVORITES_STORAGE_KEY, serializeFavorites } from "../../lib/favorites/favorite-state";
 import { RECENT_STORAGE_KEY, serializeRecent } from "../../lib/recently-viewed/recent-state";
+import { searchSuggestionLabels } from "../../lib/catalog/search-suggestion-labels";
+import { favoriteLabels } from "../../lib/favorites/labels";
 
 // Expected browser URLs, not a replacement for the server-only parser/serializer.
 const expectedQuery = (q: string, brand: string) =>
@@ -1114,4 +1116,219 @@ for (const scenario of [
   const target = await firstPanel.getAttribute("href");
   await expect(panel.locator(target!)).toBeFocused();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width + 1);
+});
+
+// WEB23 opt-in only: authored evidence scenarios, NOT a claim of Browser PASS.
+// One project avoids duplicating each explicit viewport on both configured projects.
+const web23Widths = [
+  { locale: "en", width: 320 }, { locale: "hu", width: 375 }, { locale: "ko", width: 390 },
+  { locale: "ko", width: 400 }, { locale: "hu", width: 430 }, { locale: "hu", width: 768 },
+  { locale: "ko", width: 1024 }, { locale: "en", width: 1280 },
+] as const;
+
+async function web23NoOverflow(page: Page) {
+  await page.evaluate(() => document.fonts.ready);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width + 1);
+}
+
+/** Observe actual focus, clipping ancestors and header occlusion; no CSS goldens. */
+async function web23FocusVisible(page: Page, suggestion = false) {
+  await expect.poll(() => page.evaluate(checkOutline => {
+    const active = document.activeElement;
+    if (!(active instanceof HTMLElement)) return false;
+    const box = active.getBoundingClientRect();
+    const header = document.querySelector("header")?.getBoundingClientRect();
+    if (box.width <= 0 || box.height <= 0 || box.left < -1 || box.right > innerWidth + 1 ||
+      box.top < (header?.bottom ?? 0) - 1 || box.bottom > innerHeight + 1) return false;
+    for (let parent = active.parentElement; parent; parent = parent.parentElement) {
+      const style = getComputedStyle(parent), rect = parent.getBoundingClientRect();
+      if (/(auto|scroll|hidden|clip)/.test(style.overflowY) &&
+        (box.top < rect.top - 1 || box.bottom > rect.bottom + 1)) return false;
+      if (/(auto|scroll|hidden|clip)/.test(style.overflowX) &&
+        (box.left < rect.left - 1 || box.right > rect.right + 1)) return false;
+    }
+    const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    if (!hit || !active.contains(hit)) return false;
+    const style = getComputedStyle(active);
+    return !checkOutline || (style.outlineStyle !== "none" && parseFloat(style.outlineWidth) >= 2 &&
+      parseFloat(style.outlineOffset) <= -parseFloat(style.outlineWidth));
+  }, suggestion)).toBe(true);
+}
+
+for (const scenario of web23Widths) test(`[web23] expanded suggestions remain operable ${scenario.locale} ${scenario.width}`, async ({ page }) => {
+  const { locale, width } = scenario, labels = storefrontLabels[locale];
+  await page.setViewportSize({ width, height: 900 });
+  await web20Seed(page, true);
+  const payload = portablePayload(web20Lines)!;
+  await visit(page, `/${locale}/products?${new URLSearchParams({ cartPlan: payload })}`);
+  const form = page.getByRole("search", { name: labels.searchProducts, exact: true });
+  const input = form.getByRole("searchbox", { name: labels.searchProducts, exact: true });
+  const brand = form.getByRole("combobox", { name: labels.filterBrand, exact: true });
+  const sort = form.getByRole("combobox", { name: labels.sortBy, exact: true });
+  await page.evaluate(() => document.fonts.ready);
+  const before = await Promise.all([input.boundingBox(), brand.boundingBox(), sort.boundingBox()]);
+  await input.fill("TEST ONLY JOURNEY");
+  const suggestions = form.getByRole("list", { name: searchSuggestionLabels[locale].heading, exact: true });
+  const links = suggestions.locator("a[data-search-suggestion]");
+  await expect(links).toHaveCount(5);
+  await expect(links.first()).toContainText(journeyCatalogueProducts[0].translations[locale].name);
+  const after = await Promise.all([input.boundingBox(), brand.boundingBox(), sort.boundingBox()]);
+  await test.info().attach("search-controls-before-after.json", {
+    body: JSON.stringify({ locale, width, before, after }), contentType: "application/json",
+  }); // Movement itself is allowed; reachability/occlusion is the contract.
+  for (const boxes of [before, after]) for (const box of boxes) {
+    expect(box).not.toBeNull();
+    expect(box!.width).toBeGreaterThan(0);
+    expect(box!.x).toBeGreaterThanOrEqual(-1);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(width + 1);
+  }
+  await web23NoOverflow(page);
+  // Native focus scrolling must expose the full first/middle/last result.
+  await input.press("ArrowDown");
+  for (let index = 0; index < 5; index++) {
+    await expect(links.nth(index)).toBeFocused();
+    await web23FocusVisible(page, true);
+    if (index < 4) await links.nth(index).press("ArrowDown");
+  }
+  await links.last().press("ArrowUp");
+  await expect(links.nth(3)).toBeFocused();
+  await links.nth(3).press("Escape");
+  await expect(input).toBeFocused();
+  await expect(input).toHaveValue("TEST ONLY JOURNEY");
+  await expect(suggestions).toBeHidden();
+  // Reopen, then Tab naturally leaves the five links for native Brand/Sort.
+  await input.fill("TEST ONLY JOURNEY ");
+  await input.press("ArrowDown");
+  for (let index = 0; index < 5; index++) await page.keyboard.press("Tab");
+  await expect(brand).toBeFocused();
+  await web23FocusVisible(page);
+  await brand.selectOption("Round Lab");
+  await brand.press("Tab");
+  await expect(sort).toBeFocused();
+  await web23FocusVisible(page);
+  await sort.selectOption("name-desc");
+  await form.getByRole("button", { name: labels.apply, exact: true }).press("Enter");
+  await expect(page).toHaveURL(url => url.pathname === `/${locale}/products` &&
+    url.searchParams.get("q")?.trim() === "TEST ONLY JOURNEY" && url.searchParams.get("brand") === "Round Lab" &&
+    url.searchParams.get("sort") === "name-desc" && url.searchParams.get("cartPlan") === payload);
+  await web23NoOverflow(page);
+});
+
+test("[web23] populated discovery keeps first Search and focus across breakpoints", async ({ page }) => {
+  const labels = storefrontLabels.en;
+  await page.setViewportSize({ width: 375, height: 900 });
+  await web20Seed(page, true);
+  await visit(page, "/en/brands");
+  const toggle = page.locator('[aria-controls="mobile-navigation"]');
+  await toggle.press("Enter");
+  await page.locator("#mobile-navigation").getByRole("link", { name: labels.search, exact: true }).press("Enter");
+  await expect(page).toHaveURL("http://127.0.0.1:3101/en/products#catalogue-search");
+  const input = page.getByRole("searchbox", { name: labels.searchProducts, exact: true });
+  await expect(input).toBeInViewport();
+  await input.fill("TEST ONLY JOURNEY");
+  const suggestions = page.getByRole("search", { name: labels.searchProducts, exact: true })
+    .getByRole("list", { name: searchSuggestionLabels.en.heading, exact: true });
+  const links = suggestions.locator("a[data-search-suggestion]");
+  await expect(links).toHaveCount(5);
+  await input.press("ArrowDown");
+  await expect(links.first()).toBeFocused();
+  await web23FocusVisible(page, true);
+  await toggle.click();
+  await page.locator("#mobile-navigation").getByRole("link", { name: labels.home, exact: true }).focus();
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await expect(page.getByRole("navigation", { name: labels.primaryNavigation, exact: true })
+    .getByRole("link", { name: labels.shop, exact: true })).toBeFocused();
+  await expect(page.locator("#mobile-navigation")).toBeHidden();
+  await page.setViewportSize({ width: 375, height: 900 });
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  // Breakpoint changes must not discard typed search or populated session data.
+  await expect(input).toHaveValue("TEST ONLY JOURNEY");
+  await input.focus(); await input.press("ArrowDown");
+  await web23FocusVisible(page, true);
+  await web23NoOverflow(page);
+  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)!).ids.length, FAVORITES_STORAGE_KEY)).toBe(2);
+});
+
+test("[web23] HU320 saved and recent history restores Plan and public identity across locale", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 900 });
+  const hiddenId = "81999999-abcd-1234-abcd-123456789abc";
+  const favorites = serializeFavorites([web20First.publicId, web20Second.publicId, hiddenId]);
+  const recent = serializeRecent([web20Second.publicId, web20First.publicId, hiddenId]);
+  await page.addInitScript(({ favoriteKey, recentKey, favorites, recent }) => {
+    if (localStorage.getItem(favoriteKey) === null) localStorage.setItem(favoriteKey, favorites);
+    if (localStorage.getItem(recentKey) === null) localStorage.setItem(recentKey, recent);
+  }, { favoriteKey: FAVORITES_STORAGE_KEY, recentKey: RECENT_STORAGE_KEY, favorites, recent });
+  const payload = portablePayload(web20Lines)!;
+  const path = `/hu/products?${new URLSearchParams({ q: "TEST ONLY JOURNEY", brand: "Round Lab", sort: "name-desc", cartPlan: payload })}`;
+  await visit(page, path);
+  for (const [heading, product] of [
+    [favoriteLabels.hu.heading, web20First], ["Legutóbb megtekintett termékek", web20Second],
+  ] as const) {
+    const region = page.getByRole("region", { name: heading, exact: true });
+    const link = region.getByRole("link", { name: product.translations.hu.name, exact: true });
+    // CLOSED saved/recent links intentionally use clean detail URLs. History Back,
+    // rather than inventing a new href contract, must restore the listing context.
+    await expect(link).toHaveAttribute("href", `/hu/products/${product.slug}`);
+    await link.press("Enter");
+    await expect(page.getByRole("heading", { level: 1, name: product.translations.hu.name, exact: true })).toBeVisible();
+    await page.goBack();
+    await expect(page).toHaveURL(`http://127.0.0.1:3101${path}`);
+    await expect(page.getByRole("region", { name: storefrontLabels.hu.planHeading, exact: true })).toBeVisible();
+    // Exercise keyboard access after history restore; no undocumented automatic
+    // focus-restoration promise for Next history is imposed by this test.
+    await region.getByRole("link", { name: product.translations.hu.name, exact: true }).press("Tab");
+    await web23FocusVisible(page);
+    await expect(page.locator('main a[href*="test-only-journey-draft"]')).toHaveCount(0);
+  }
+  const toggle = page.locator('[aria-controls="mobile-navigation"]');
+  await toggle.click();
+  await page.locator("#mobile-navigation").getByRole("link", { name: "한국어", exact: true }).press("Enter");
+  await expect(page).toHaveURL(url => url.pathname === "/ko/products" && url.searchParams.get("cartPlan") === payload &&
+    url.searchParams.get("q") === "TEST ONLY JOURNEY" && url.searchParams.get("brand") === "Round Lab" && url.searchParams.get("sort") === "name-desc");
+  await expect(page.getByRole("region", { name: favoriteLabels.ko.heading, exact: true })).toBeVisible();
+  expect(await page.evaluate(key => localStorage.getItem(key), FAVORITES_STORAGE_KEY)).toBe(favorites);
+  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), RECENT_STORAGE_KEY))
+    .toEqual({ version: 1, ids: [web20Second.publicId, web20First.publicId, hiddenId] });
+  await expect(page.locator('main a[href*="test-only-journey-draft"]')).toHaveCount(0);
+  await web23NoOverflow(page);
+});
+
+for (const change of ["locale", "route"] as const) test(`[web23] owned pending clipboard expires on ${change}`, async ({ page }) => {
+  await page.setViewportSize({ width: 430, height: 900 });
+  const labels = storefrontLabels.ko;
+  await page.addInitScript(() => {
+    const state = { calls: [] as string[], settle: undefined as undefined | (() => void), done: false };
+    (window as unknown as { __web23Clipboard: typeof state }).__web23Clipboard = state;
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: {
+      writeText(value: string) {
+        state.calls.push(value);
+        const deferred = new Promise<void>(resolve => { state.settle = resolve; });
+        void deferred.then(() => { state.done = true; });
+        return deferred;
+      },
+    } });
+  });
+  type Clipboard = { calls: string[]; settle?: () => void; done: boolean };
+  const read = () => page.evaluate(() => (window as unknown as { __web23Clipboard: Clipboard }).__web23Clipboard);
+  await visit(page, "/ko/products?q=TEST+ONLY+JOURNEY&brand=Round+Lab");
+  const copy = page.getByRole("button", { name: labels.copySearchLink, exact: true });
+  await copy.press("Enter"); await expect(copy).toBeDisabled();
+  const original = "http://127.0.0.1:3101/ko/products?q=TEST+ONLY+JOURNEY&brand=Round+Lab";
+  expect((await read()).calls).toEqual([original]);
+  const toggle = page.locator('[aria-controls="mobile-navigation"]');
+  await toggle.click();
+  const mobile = page.locator("#mobile-navigation");
+  await mobile.getByRole("link", { name: change === "locale" ? "Magyar" : labels.brands, exact: true }).press("Enter");
+  await expect(page).toHaveURL(url => url.pathname === (change === "locale" ? "/hu/products" : "/ko/brands"));
+  // Require the SAME document-owned fake to survive client navigation. A new
+  // context/reset fake cannot accidentally stand in for the original promise.
+  expect((await read()).calls).toEqual([original]);
+  await page.evaluate(() => { (window as unknown as { __web23Clipboard: Clipboard }).__web23Clipboard.settle!(); });
+  await expect.poll(async () => (await read()).done).toBe(true);
+  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  for (const locale of storefrontLocales) {
+    await expect(page.getByRole("status").filter({ hasText: storefrontLabels[locale].searchLinkCopied })).toHaveCount(0);
+  }
+  expect((await read()).calls).toEqual([original]);
+  expect(await page.evaluate(key => localStorage.getItem(key), CART_STORAGE_KEY)).toBeNull();
 });

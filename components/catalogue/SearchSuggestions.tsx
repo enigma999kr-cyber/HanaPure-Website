@@ -1,6 +1,6 @@
 "use client";
 
-import { cloneElement, isValidElement, useId, useRef, useState, type InputHTMLAttributes, type ReactNode } from "react";
+import { cloneElement, isValidElement, useEffect, useId, useRef, useState, type InputHTMLAttributes, type ReactNode } from "react";
 import Link from "next/link";
 import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
 import { searchSuggestions, type SearchSuggestionProduct } from "@/lib/catalog/search-suggestions";
@@ -33,6 +33,14 @@ export default function SearchSuggestions({ products, initialQuery, locale, rout
   const [query, setQuery] = useState(initialQuery);
   const [dismissed, setDismissed] = useState(false);
   const field = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // The uncontrolled input may already contain text entered before hydration.
+    const input = field.current?.querySelector<HTMLInputElement>("#catalogue-search");
+    if (input) {
+      const value = input.value;
+      setQuery(current => current === value ? current : value);
+    }
+  }, []);
   const matches = searchSuggestions(products, query);
   const visible = products.length > 0 && Boolean(query.trim()) && !dismissed;
   const labels = searchSuggestionLabels[locale];
