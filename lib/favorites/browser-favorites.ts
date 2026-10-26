@@ -38,19 +38,41 @@ export function useBrowserFavorites() {
   return useSyncExternalStore(subscribeFavorites, getFavoriteSnapshot, getServerFavoriteSnapshot);
 }
 
+export type FavoriteChangeResult = "updated" | "unchanged" | "unavailable" | "write-failed" | "unconfirmed";
 export function changeBrowserFavorite(publicId: string, saved: boolean): boolean {
+  return changeBrowserFavoriteResult(publicId, saved) === "updated";
+}
+/** Detailed result keeps cross-key callers honest about an unconfirmed write. */
+export function changeBrowserFavoriteResult(publicId: string, saved: boolean): FavoriteChangeResult {
+  if (typeof window === "undefined") return "unavailable";
   // Re-read immediately before writing, including changes from another tab.
   readStorage();
-  if (!snapshot.persistent || snapshot.invalid) return false;
+  if (!snapshot.persistent || snapshot.invalid) return "unavailable";
   const ids = setFavorite(snapshot.ids, publicId, saved);
-  if (ids === snapshot.ids) return false;
+  if (ids === snapshot.ids) return "unchanged";
   return save(ids);
 }
-export function resetBrowserFavorites(): boolean { return save([]); }
+export function resetBrowserFavorites(): boolean {
+  if (typeof window === "undefined" || !snapshot.ready) return false;
+  const recovering = snapshot.invalid;
+  try {
+    const raw = window.localStorage.getItem(FAVORITES_STORAGE_KEY);
+    snapshot = { ...inspectStoredFavorites(raw), ready: true, persistent: true };
+    emit();
+    // A stale corrupt-state Reset must not erase another tab's valid recovery.
+    if (recovering && !snapshot.invalid) return false;
+    if (window.localStorage.getItem(FAVORITES_STORAGE_KEY) !== raw) { readStorage(); return false; }
+    return save([]) === "updated";
+  } catch {
+    // Keep the known recovery state so a read denial never removes its retry.
+    snapshot = { ...snapshot, persistent: false }; emit();
+    return false;
+  }
+}
 export function sameFavoriteIds(left: FavoriteIds, right: FavoriteIds): boolean {
   return left.length === right.length && left.every((id, index) => id === right[index]);
 }
-/** New batch path only; old save/toggle/reset semantics remain unchanged. */
+/** Guarded bulk path retains full snapshot witnesses and post-write confirmation. */
 export function mutateBrowserFavorites(expected: FavoriteIds, change: (ids: FavoriteIds) => FavoriteIds):
   "updated" | "unchanged" | "conflict" | "unavailable" | "write-failed" | "unconfirmed" {
   if (typeof window === "undefined" || !snapshot.ready || !snapshot.persistent || snapshot.invalid) return "unavailable";
@@ -79,14 +101,20 @@ export function mutateBrowserFavorites(expected: FavoriteIds, change: (ids: Favo
     return written ? "unconfirmed" : "write-failed";
   }
 }
-function save(ids: FavoriteIds): boolean {
-  try { window.localStorage.setItem(FAVORITES_STORAGE_KEY, serializeFavorites(ids)); }
+function save(ids: FavoriteIds): "updated" | "write-failed" | "unconfirmed" {
+  let written = false;
+  try {
+    const serialized = serializeFavorites(ids);
+    window.localStorage.setItem(FAVORITES_STORAGE_KEY, serialized);
+    written = true;
+    if (window.localStorage.getItem(FAVORITES_STORAGE_KEY) !== serialized) throw new Error("Favorite write not confirmed");
+  }
   catch {
     snapshot = { ...snapshot, persistent: false };
     emit();
-    return false;
+    return written ? "unconfirmed" : "write-failed";
   }
   snapshot = { ids, ready: true, persistent: true, invalid: false };
   emit();
-  return true;
+  return "updated";
 }

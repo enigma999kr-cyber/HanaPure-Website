@@ -156,3 +156,72 @@ test("browser store is SSR-safe, shared, cross-tab aware, preserves corruption a
     else delete globalThis.window;
   }
 });
+
+test("WEB26 favorite toggle and reset never confirm no-op, changed or denied readback", async () => {
+  const store = await import("../lib/favorites/browser-favorites.ts");
+  const serverState = store.getFavoriteSnapshot();
+  assert.equal(store.changeBrowserFavoriteResult(id, true), "unavailable");
+  assert.equal(store.resetBrowserFavorites(), false);
+  assert.strictEqual(store.getFavoriteSnapshot(), serverState);
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const events = new Map();
+  let raw = payload([other]), mode = "normal", denied = false, writes = 0;
+  Object.defineProperty(globalThis, "window", { configurable: true, value: {
+    localStorage: {
+      getItem(key) { assert.equal(key, FAVORITES_STORAGE_KEY); if (denied) throw new Error("synthetic denied"); return raw; },
+      setItem(key, value) {
+        assert.equal(key, FAVORITES_STORAGE_KEY); writes++;
+        if (mode === "write-denied") throw new Error("synthetic denied");
+        if (mode !== "noop") raw = value;
+        if (mode === "changed") raw = payload([id]);
+        if (mode === "read-denied") denied = true;
+      },
+    }, addEventListener(type, listener) { events.set(type, listener); }, removeEventListener(type) { events.delete(type); },
+  } });
+  const unsubscribe = store.subscribeFavorites(() => {});
+  try {
+    for (const action of ["add", "remove", "reset"]) for (mode of ["noop", "changed", "read-denied", "write-denied"]) {
+      denied = false;
+      raw = action === "remove" ? payload([id, other]) : action === "reset" ? "synthetic-corrupt" : payload([other]);
+      events.get("storage")({ key: FAVORITES_STORAGE_KEY });
+      const count = writes;
+      const result = action === "reset" ? store.resetBrowserFavorites() : store.changeBrowserFavorite(id, action === "add");
+      assert.equal(result, false, `${action}/${mode}`);
+      assert.equal(store.getFavoriteSnapshot().persistent, false);
+      assert.equal(writes, count + 1); // No retry or rollback.
+    }
+    denied = false; mode = "normal"; raw = payload([other]); events.get("storage")({ key: null });
+    assert.equal(store.changeBrowserFavorite(id.toUpperCase(), true), true);
+    assert.deepEqual(store.getFavoriteSnapshot().ids, [other, id.toUpperCase()]);
+    assert.equal(store.changeBrowserFavorite(id, false), true);
+    assert.deepEqual(store.getFavoriteSnapshot().ids, [other]);
+  } finally {
+    unsubscribe();
+    if (previous) Object.defineProperty(globalThis, "window", previous); else delete globalThis.window;
+  }
+});
+
+test("WEB26 stale corrupt-Favorites reset preserves an unobserved valid external recovery", async () => {
+  const store = await import("../lib/favorites/browser-favorites.ts");
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const events = new Map(); let raw = "synthetic-corrupt", writes = 0;
+  Object.defineProperty(globalThis, "window", { configurable: true, value: {
+    localStorage: { getItem() { return raw; }, setItem(_, value) { writes++; raw = value; } },
+    addEventListener(type, listener) { events.set(type, listener); }, removeEventListener(type) { events.delete(type); },
+  } });
+  const unsubscribe = store.subscribeFavorites(() => {});
+  try {
+    assert.equal(store.getFavoriteSnapshot().invalid, true);
+    raw = payload([other, id.toUpperCase()]); // Another tab, notification not yet delivered.
+    assert.equal(store.resetBrowserFavorites(), false);
+    assert.equal(writes, 0); assert.equal(raw, payload([other, id.toUpperCase()]));
+    assert.deepEqual(store.getFavoriteSnapshot().ids, [other, id.toUpperCase()]);
+    assert.equal(store.getFavoriteSnapshot().invalid, false);
+    // Deliberate reset of a current valid list keeps the existing public API.
+    assert.equal(store.resetBrowserFavorites(), true);
+    assert.equal(raw, payload([])); assert.equal(writes, 1);
+  } finally {
+    unsubscribe();
+    if (previous) Object.defineProperty(globalThis, "window", previous); else delete globalThis.window;
+  }
+});

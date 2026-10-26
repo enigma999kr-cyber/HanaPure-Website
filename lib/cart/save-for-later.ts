@@ -3,7 +3,7 @@
 import { changeBrowserCart } from "./browser-cart";
 import { CART_STORAGE_KEY, inspectStoredCart, reconcileCart, serializeCart, validCartId, type CartLine } from "./cart-state";
 import { sameCartSelection } from "./cart-undo";
-import { changeBrowserFavorite, getFavoriteSnapshot } from "../favorites/browser-favorites";
+import { changeBrowserFavoriteResult, getFavoriteSnapshot } from "../favorites/browser-favorites";
 import { FAVORITES_STORAGE_KEY, MAX_FAVORITES, inspectStoredFavorites } from "../favorites/favorite-state";
 
 export type SaveForLaterResult = "moved" | "blocked" | "conflict" | "partial";
@@ -30,7 +30,9 @@ export function saveCartLineForLater(publicId: string, cart: CartSnapshot,
     if (!includesIdentity(storedFavorites.ids)) {
       if (storedFavorites.ids.length >= MAX_FAVORITES) return "blocked";
       // The existing store rereads Favorites before adding; never toggle or copy quantity.
-      confirmedSaved = changeBrowserFavorite(publicId, true);
+      const savedResult = changeBrowserFavoriteResult(publicId, true);
+      if (savedResult === "unconfirmed") return "partial";
+      confirmedSaved = savedResult === "updated";
     }
     const savedSnapshot = getFavoriteSnapshot();
     const saved = inspectStoredFavorites(window.localStorage.getItem(FAVORITES_STORAGE_KEY));

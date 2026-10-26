@@ -247,7 +247,8 @@ test("F4/F5 Cart JSX summary/overlap follows checkboxes and cross-tab invalidati
     assert.deepEqual(nodes(summary).filter(node => node.type === "dd").map(node => node.props.children), ["18014398509481982", 1]);
     values.set(CART_STORAGE_KEY, serializeCart([lines[0]])); notify(CART_STORAGE_KEY);
     tree = render(ShoppingCart, props);
-    assert.ok(!nodes(tree).some(node => node.type === "dl"));
+    // Only the stale selection summary disappears; independent review totals remain.
+    assert.ok(!nodes(tree).some(node => node.type === "dl" && node.props["aria-label"] === cartLabels[locale].selectionOverview));
     assert.ok(text(tree).includes(cartLabels[locale].selectionUnknown));
     values.set(FAVORITES_STORAGE_KEY, "{"); notify(FAVORITES_STORAGE_KEY);
     tree = render(ShoppingCart, props);
@@ -266,8 +267,10 @@ test("server projection is full-public-only and localized, independent of global
     const saved = nodes(listing).find(node => node.type === SavedProductsBar);
     assert.deepEqual(saved.props.products.map(product => product.publicId), [id, other]);
     assert.deepEqual(saved.props.comparisonProducts.map(product => product.publicId), [id, other]);
-    assert.ok(saved.props.products.every(product => Object.keys(product).sort().join(",") === "brand,name,publicId,slug"));
-    assert.ok(saved.props.comparisonProducts.every(product => Object.keys(product).sort().join(",") === "brand,caution,description,name,publicId,slug,usage"));
+    assert.ok(saved.props.products.every(product => Object.keys(product).sort().join(",") === "brand,image,name,publicId,slug"));
+    assert.ok(saved.props.comparisonProducts.every(product => Object.keys(product).sort().join(",") === "brand,caution,description,image,name,publicId,slug,usage"));
+    assert.ok(saved.props.products.every(product => product.image === null));
+    assert.ok(saved.props.comparisonProducts.every(product => product.image === null));
     if (locale !== "en") {
       assert.ok(saved.props.comparisonProducts.every(product => product.name === null && product.description === null));
       assert.ok(saved.props.products.every(product => product.name.includes(product.slug) && !product.name.includes("Synthetic")));
@@ -275,6 +278,52 @@ test("server projection is full-public-only and localized, independent of global
   }
   const empty = nodes(ProductListing()).find(node => node.type === SavedProductsBar);
   assert.deepEqual(empty.props.products, []); assert.deepEqual(empty.props.comparisonProducts, []);
+});
+
+test("WEB26 Saved reset restores heading focus after confirmation and preserves externally recovered selections", () => {
+  for (const locale of ["en", "hu", "ko"]) for (const external of [false, true]) withStores(({ values, writes, notify }) => {
+    values.set(FAVORITES_STORAGE_KEY, "synthetic-corrupt"); notify(FAVORITES_STORAGE_KEY);
+    const props = { products, comparisonProducts: comparison, locale, routeLocale: locale };
+    const tree = render(SavedProductsBar, props), labels = favoriteLabels[locale];
+    let focused = 0;
+    find(tree, "h2").props.ref.current = { focus: () => { focused++; } };
+    if (external) values.set(FAVORITES_STORAGE_KEY, serializeFavorites(savedIds));
+    find(tree, "button", labels.reset).props.onClick();
+    assert.equal(focused, 1, `${locale}/${external}`);
+    assert.equal(writes.length, external ? 0 : 1);
+    const next = render(SavedProductsBar, props);
+    assert.ok(text(next).includes(external ? labels.bulkChanged : labels.empty));
+    assert.equal(find(next, "button", labels.reset), undefined);
+    assert.equal(values.get(FAVORITES_STORAGE_KEY), serializeFavorites(external ? savedIds : []));
+  });
+});
+
+test("WEB26 unconfirmed Saved reset retains localized warning and never moves focus as a success", () => {
+  for (const locale of ["en", "hu", "ko"]) for (const mode of ["noop", "write-denied", "read-denied", "initial-read-denied"]) withStores(({ values, writes, notify }) => {
+    values.set(FAVORITES_STORAGE_KEY, "synthetic-corrupt"); notify(FAVORITES_STORAGE_KEY);
+    const props = { products, comparisonProducts: comparison, locale, routeLocale: locale };
+    const tree = render(SavedProductsBar, props), labels = favoriteLabels[locale];
+    let focused = 0;
+    find(tree, "h2").props.ref.current = { focus: () => { focused++; } };
+    const storage = window.localStorage, get = storage.getItem, set = storage.setItem;
+    if (mode === "initial-read-denied") storage.getItem = () => { throw new Error("synthetic denied"); };
+    storage.setItem = (key, value) => {
+      if (mode === "write-denied") throw new Error("synthetic denied");
+      if (mode !== "noop") set(key, value);
+      if (mode === "read-denied") storage.getItem = () => { throw new Error("synthetic denied"); };
+    };
+    find(tree, "button", labels.reset).props.onClick();
+    let next = render(SavedProductsBar, props);
+    assert.equal(focused, 0); assert.ok(text(next).includes(labels.storage));
+    assert.ok(find(next, "button", labels.reset));
+    assert.equal(writes.length, mode === "read-denied" ? 1 : 0);
+    storage.getItem = get; storage.setItem = set;
+    find(next, "button", labels.reset).props.onClick(); // Explicit retry or fresh-state recovery.
+    next = render(SavedProductsBar, props);
+    assert.equal(focused, 1); assert.ok(text(next).includes(labels.empty));
+    assert.equal(find(next, "button", labels.reset), undefined);
+    assert.equal(values.get(FAVORITES_STORAGE_KEY), serializeFavorites([]));
+  });
 });
 
 test("SSR is storage-free; native local controls have complete locale labels and no new mutation or persistence", () => {

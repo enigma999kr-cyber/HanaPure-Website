@@ -162,7 +162,17 @@ export default function SavedProductsBar({ products, comparisonProducts = [], lo
       guard={() => healthy && coherent && checkedIds.length > 0 && mutateBrowserFavorites(state.ids, before => before) === "unchanged"} />
     {activePair && <ProductComparison key={`${locale}:${activePair.map(product => product.publicId).join(":")}`} products={activePair}
       locale={locale} routeLocale={routeLocale} initialPublicId={activePair[0].publicId} planContext={planContext} />}
-    {state.invalid && <button type="button" onClick={() => resetBrowserFavorites()}
+    {state.invalid && <button type="button" onClick={() => {
+      const reset = resetBrowserFavorites();
+      const current = getFavoriteSnapshot();
+      if (reset) {
+        setChecked({ baseline: current.ids, ids: [] }); setComparisonRequest(null); setBulkMessage(""); setCopyResult(null);
+        heading.current?.focus();
+      } else if (current.ready && current.persistent && !current.invalid) {
+        setBulkMessage(labels.bulkChanged);
+        heading.current?.focus(); // The stale Reset control has disappeared.
+      }
+    }}
       className="mt-3 min-h-11 max-w-full break-words rounded-xl border border-hanapure-border px-4 py-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text">{labels.reset}</button>}
   </section>;
 }
