@@ -231,13 +231,18 @@ test("correction: confirmed update/unchanged and input errors do not invalidate 
 test("A/B: localized existing Add/Cart props and native separate Set form remain accessible and detail-only", () => {
   const source = readFileSync(new URL("../components/cart/AddToCart.tsx", import.meta.url), "utf8");
   assert.match(source, /publicId: string; locale: EditorialLocale; routeLocale: EditorialLocale \| null/);
-  assert.match(source, /addCartLine\(lines, publicId, value\)/);
+  // Add uses validated quantities and a fresh persisted witness, not raw state.
+  assert.match(source, /const result = addConfirmed\(publicId, quantity, cart\)/);
+  assert.match(source, /const quantity = parseQuickAddQuantity\(raw\)/);
+  assert.match(source, /addCartLine\(stored.lines, publicId, quantity\)/);
+  assert.match(source, /if \(!result.persistent\) return "write-failed"/);
+  assert.match(source, /sameCartSelection\(confirmed.lines, after\) \? "added" : "write-failed"/);
   assert.match(source, /storefrontHref\("\/cart", routeLocale\)/);
   assert.match(source, /cart.ready && !cart.invalid && cart.persistent/);
   assert.match(source, /const \[selectionTrusted, setSelectionTrusted\] = useState\(true\)/);
   assert.match(source, /detailCartQuantity\(publicId, cart, selectionTrusted\)/);
   assert.match(source, /selectionTrusted && cart.ready && !cart.invalid && cart.persistent/);
-  assert.match(source, /if \(detailSelectionNeedsReload\(result\)\) setSelectionTrusted\(false\)/);
+  assert.match(source, /if \(detailSelectionNeedsReload\(result\)\) \{ trustGuard.current = false; setSelectionTrusted\(false\); \}/);
   assert.doesNotMatch(source, /setSelectionTrusted\(true\)/);
   assert.match(source, /selectedQuantity !== null && <ExistingQuantityForm key=\{publicId\}/);
   assert.match(source, /setDetailCartQuantity\(publicId, draft.value, cart\)/);

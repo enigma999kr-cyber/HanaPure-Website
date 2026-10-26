@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import ts from "typescript";
+import { runInNewContext } from "node:vm";
 import { CART_STORAGE_KEY, serializeCart, inspectStoredCart } from "../lib/cart/cart-state.ts";
 import { FAVORITES_STORAGE_KEY, MAX_FAVORITES, serializeFavorites, inspectStoredFavorites } from "../lib/favorites/favorite-state.ts";
 import { RECENT_STORAGE_KEY, serializeRecent, inspectStoredRecent, removeRecent } from "../lib/recently-viewed/recent-state.ts";
@@ -355,6 +357,51 @@ test("UI uses shared guarded helpers, native labelled checkboxes/status/focus an
     assert.match(component, /role="status"/);
     assert.match(component, /min-h-11/);
     assert.match(component, /focus-visible:outline/);
-    assert.doesNotMatch(component, /localStorage|onSubmit/);
+    // UI may read a persisted witness; mutations remain owned by shared stores.
+    assert.doesNotMatch(component, /localStorage\s*(?:\.\s*(?:setItem|removeItem|clear)\s*\(|\[)|onSubmit/);
+  }
+});
+
+test("WEB25 Recent Plan guard reads only its owned key and refuses stale, corrupt or unavailable witnesses", () => {
+  const source = readFileSync(new URL("../components/catalogue/RecentlyViewedProducts.tsx", import.meta.url), "utf8");
+  const file = ts.createSourceFile("RecentlyViewedProducts.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const guards = [], reads = [];
+  const visit = node => {
+    if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(file) === "ShoppingPlanIntake") {
+      const guard = node.attributes.properties.find(attribute => ts.isJsxAttribute(attribute) && attribute.name.getText(file) === "guard");
+      assert.ok(guard?.initializer && ts.isJsxExpression(guard.initializer) && ts.isArrowFunction(guard.initializer.expression));
+      guards.push(guard.initializer.expression.getText(file));
+    }
+    if (ts.isPropertyAccessExpression(node) && node.name.text === "localStorage") {
+      const member = node.parent, call = member.parent;
+      assert.ok(ts.isPropertyAccessExpression(member) && member.name.text === "getItem");
+      assert.ok(ts.isCallExpression(call) && call.expression === member);
+      assert.equal(call.arguments.length, 1);
+      assert.equal(call.arguments[0].getText(file), "RECENT_STORAGE_KEY");
+      reads.push(call);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  assert.equal(guards.length, 1); assert.equal(reads.length, 1);
+  const state = Object.freeze({ ids: Object.freeze([id.toUpperCase(), other]) });
+  for (const mode of ["valid", "unhealthy", "incoherent", "empty-selection", "new-snapshot", "changed", "reordered", "casing", "corrupt", "denied"]) {
+    let reads = 0, writes = 0;
+    const raw = mode === "changed" ? serializeRecent([hidden]) : mode === "reordered" ? serializeRecent([...state.ids].reverse()) :
+      mode === "casing" ? serializeRecent([id, other]) : mode === "corrupt" ? "{" : serializeRecent(state.ids);
+    const mutate = () => { writes++; throw new Error("UI must not mutate storage"); };
+    const guard = runInNewContext(`(${guards[0]})`, {
+      healthy: mode !== "unhealthy", coherent: mode !== "incoherent", checked: { ids: mode === "empty-selection" ? [] : [id] }, state,
+      getRecentSnapshot: () => mode === "new-snapshot" ? { ...state } : state,
+      inspectStoredRecent, RECENT_STORAGE_KEY,
+      window: { localStorage: { getItem: key => {
+        reads++; assert.equal(key, RECENT_STORAGE_KEY);
+        if (mode === "denied") throw new Error("synthetic denied");
+        return raw;
+      }, setItem: mutate, removeItem: mutate, clear: mutate } },
+    });
+    assert.equal(guard(), mode === "valid", mode);
+    assert.equal(reads, ["unhealthy", "incoherent", "empty-selection", "new-snapshot"].includes(mode) ? 0 : 1);
+    assert.equal(writes, 0);
   }
 });

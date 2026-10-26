@@ -204,12 +204,14 @@ test("integration: native transient selection, separate clipboard statuses and e
   assert.match(source, /previous.lines === cart.lines \? previous.ids : \[\]/);
   assert.match(source, /setUndo\(result.plan\)/);
   assert.match(source, /setChecked\(\{ lines: result.plan.after, ids: \[\] \}\)/);
-  assert.match(source, /survivor \? removeRefs.current.get\(survivor.publicId\) : browseRef.current/);
+  // Visible ordered survivor, including Browse fallback when its ref is absent.
+  assert.match(source, /view.rows.find\(item => result.plan.after.some/);
+  assert.match(source, /survivor \? removeRefs.current.get\(survivor.publicId\) \?\? browseRef.current : browseRef.current/);
   const copy = source.slice(source.indexOf("if (selectedCopyPending.current"), source.indexOf("}>{labels.copySelectedList}</button>"));
   assert.match(copy, /formatCartShoppingList\(selection.lines, products, locale\)/);
-  assert.match(copy, /await navigator.clipboard.writeText\(list.text\);\s*setSelectedCopyMessage\(list.omitted/);
-  assert.match(copy, /catch \{ setSelectedCopyMessage\(labels.shoppingListFailed\)/);
-  assert.match(copy, /finally \{ selectedCopyPending.current = false; setCopyingSelected\(false\)/);
+  assert.match(copy, /await navigator.clipboard.writeText\(list.text\);\s*if \(currentCopy\(owner\)\) setSelectedCopyMessage\(list.omitted/);
+  assert.match(copy, /catch \{ if \(currentCopy\(owner\)\) setSelectedCopyMessage\(labels.shoppingListFailed\)/);
+  assert.match(copy, /finally \{ selectedCopyPending.current = false; if \(copyLive.current\) setCopyingSelected\(false\)/);
   assert.doesNotMatch(copy, /changeBrowser|resetBrowser|setUndo|execCommand|textarea|fetch\(/);
   for (const action of ["labels.remove", "labels.update", "labels.clear", "labels.undo", "labels.saveForLater", "labels.copyShoppingList"]) assert.ok(source.includes(action));
   assert.match(source, /<p role="status"[^>]*>\{copyMessage\}<\/p>/);

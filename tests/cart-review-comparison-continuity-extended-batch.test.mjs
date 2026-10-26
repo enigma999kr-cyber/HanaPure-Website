@@ -322,6 +322,33 @@ test("F2 focus after sorted individual removal targets a visible survivor by ide
   assert.deepEqual(inspectStoredCart(values.get(CART_STORAGE_KEY)).lines, [lines[0], lines[2], lines[3]]);
 }));
 
+test("WEB25 bulk removal focuses the visible sorted survivor or Browse for missing refs and empty review", async () => {
+  for (const mode of ["sorted", "filtered", "missing-ref", "empty-review", "last-item"]) await stores(async ({ values, writes, notify }) => {
+    const properties = props(), labels = cartLabels.en;
+    if (mode === "last-item") { values.set(CART_STORAGE_KEY, serializeCart([lines[0]])); notify(CART_STORAGE_KEY); }
+    let tree = cart(properties);
+    change(select(tree, "-sort"), "name"); tree = cart(properties);
+    if (mode === "filtered" || mode === "empty-review") {
+      change(select(tree, "-brand"), "Anua"); tree = cart(properties);
+    }
+    const focused = [];
+    const browse = nodes(tree).find(node => node.props?.href && text(node) === labels.browse);
+    assert.ok(browse?.props.ref);
+    browse.props.ref.current = { focus: () => focused.push("browse") };
+    const removals = nodes(tree).filter(node => node.type === "button" && node.props["aria-label"]?.startsWith(labels.remove + ":"));
+    for (const node of removals) node.props.ref(mode === "missing-ref" ? null : { focus: () => focused.push(node.props["aria-label"]) });
+    const before = inspectStoredCart(values.get(CART_STORAGE_KEY)).lines;
+    const removed = mode === "empty-review" ? [id, third] : mode === "filtered" ? [third] : mode === "last-item" ? [id] : [other];
+    const indices = mode === "empty-review" ? [0, 1] : [0];
+    check(tree, indices); tree = cart(properties);
+    button(tree, labels.removeSelected).props.onClick();
+    assert.deepEqual(focused, [mode === "sorted" ? `${labels.remove}: Beta` : mode === "filtered" ? `${labels.remove}: Zulu` : "browse"], mode);
+    assert.deepEqual(inspectStoredCart(values.get(CART_STORAGE_KEY)).lines,
+      before.filter(line => !removed.some(id => id.toLowerCase() === line.publicId.toLowerCase())));
+    assert.deepEqual(writes, [CART_STORAGE_KEY]);
+  });
+});
+
 test("F1–F5 source boundaries, exact route parsing, locale labels and native mobile controls stay bounded", () => {
   for (const path of ["app/products/[slug]/page.tsx", "app/[locale]/products/[slug]/page.tsx"]) {
     const source = readFileSync(join(repo, path), "utf8");
