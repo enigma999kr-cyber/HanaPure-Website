@@ -244,6 +244,26 @@ test("F4 exactly two public selected Cart rows compare in canonical cart order, 
   });
 });
 
+test("WEB24 Cart comparison synchronous failure is localized, preserves selection and retries without storage writes", async () => {
+  for (const locale of ["en", "hu", "ko"]) await stores(async ({ writes, navigation }) => {
+    const properties = props(locale), labels = cartLabels[locale];
+    let tree = cart(properties); check(tree, [0, 1]); tree = cart(properties);
+    const assign = window.location.assign;
+    window.location.assign = () => { throw new Error("synthetic navigation failure"); };
+    assert.doesNotThrow(() => button(tree, labels.compareSelected).props.onClick());
+    tree = cart(properties);
+    assert.ok(nodes(tree).some(node => node.props?.role === "status" && text(node).includes(storefrontLabels[locale].comparisonNavigationFailed)));
+    assert.equal(boxes(tree).filter(node => node.props.checked).length, 2);
+    assert.deepEqual(navigation, []); assert.deepEqual(writes, []);
+    window.location.assign = assign;
+    button(tree, labels.compareSelected).props.onClick();
+    assert.equal(navigation.length, 1);
+    assert.equal(new URL(navigation[0], "https://synthetic.invalid").hash, `#${COMPARISON_DESTINATION}`);
+    assert.ok(!text(cart(properties)).includes(storefrontLabels[locale].comparisonNavigationFailed));
+    assert.deepEqual(writes, []);
+  });
+});
+
 test("F4 unknown/duplicate/stale/denied/changed selections cannot navigate or mutate either store", async () => {
   for (const mode of ["unpublished", "changed", "missing", "invalid", "denied", "notification", "disappeared", "duplicate"]) await stores(async ({ values, control, notify, navigation, writes }) => {
     const properties = props(), labels = cartLabels.en;

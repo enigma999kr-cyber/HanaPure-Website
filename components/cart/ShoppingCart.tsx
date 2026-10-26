@@ -541,7 +541,10 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
           { first: current.lines[0].publicId, second: current.lines[1].publicId }) : null;
         const href = pair && comparisonHref(storefrontHref("/products", routeLocale), pair);
         if (!href || href !== compareHref) { setBulkMessage(labels.bulkSelectionChanged); return; }
-        window.location.assign(`${href}#${COMPARISON_DESTINATION}`);
+        try {
+          window.location.assign(`${href}#${COMPARISON_DESTINATION}`);
+          setBulkMessage("");
+        } catch { setBulkMessage(storefrontLabels[locale].comparisonNavigationFailed); }
       }}>{labels.compareSelected}</button>}
     </section>
     <button type="button" className={`${cartControl} mt-4 max-w-full break-words disabled:opacity-50`}

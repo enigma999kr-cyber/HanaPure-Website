@@ -79,6 +79,80 @@ registerHooks({ resolve(specifier, context, nextResolve) {
   return nextResolve(specifier, context);
 } });
 
+async function checkUndoConfirmation() {
+  const store = await import("../lib/cart/browser-cart.ts"), access = store.useBrowserCart();
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const values = new Map(), events = new Map();
+  let mode = "normal", denied = false, writes = 0;
+  Object.defineProperty(globalThis, "window", { configurable: true, value: {
+    localStorage: {
+      getItem(key) { if (denied) throw new Error("synthetic read denial"); return values.get(key) ?? null; },
+      setItem(key, value) {
+        writes++;
+        if (mode !== "noop") values.set(key, value);
+        if (mode === "denied") denied = true;
+        if (mode === "changed") values.set(key, serializeCart([lines[1]]));
+      },
+    },
+    addEventListener(type, listener) { events.set(type, listener); },
+    removeEventListener(type) { events.delete(type); },
+  } });
+  const unsubscribe = access.subscribe(() => {});
+  try {
+    for (const failure of ["noop", "denied", "changed"]) {
+      denied = false; mode = "normal";
+      values.set(CART_STORAGE_KEY, serializeCart(lines)); events.get("storage")({ key: CART_STORAGE_KEY });
+      let plan;
+      store.changeBrowserCart(before => { plan = createCartUndoPlan(before, []); return plan.after; });
+      const after = access.getSnapshot().lines, count = writes;
+      mode = failure;
+      assert.equal(store.restoreBrowserCart(plan), "unavailable", failure);
+      assert.equal(writes, count + 1);
+      assert.equal(access.getSnapshot().persistent, false);
+      assert.strictEqual(access.getSnapshot().lines, after);
+      assert.equal(store.restoreBrowserCart(plan), "unavailable");
+      assert.equal(writes, count + 1); // No automatic retry or rollback.
+    }
+    denied = false; mode = "normal";
+    values.set(CART_STORAGE_KEY, serializeCart(lines)); events.get("storage")({ key: CART_STORAGE_KEY });
+    let plan; store.changeBrowserCart(before => { plan = createCartUndoPlan(before, []); return plan.after; });
+    assert.equal(store.restoreBrowserCart(plan), "restored");
+    assert.deepEqual(access.getSnapshot().lines, lines);
+    assert.equal(values.get(CART_STORAGE_KEY), serializeCart(lines));
+  } finally {
+    unsubscribe();
+    if (previous) Object.defineProperty(globalThis, "window", previous); else delete globalThis.window;
+  }
+}
+
+async function checkCartSaveConfirmation() {
+  const store = await import("../lib/cart/browser-cart.ts"), access = store.useBrowserCart();
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "window");
+  let raw = serializeCart([]), mode = "normal";
+  Object.defineProperty(globalThis, "window", { configurable: true, value: {
+    localStorage: {
+      getItem() { if (mode === "read-denied") throw new Error("synthetic read denial"); return raw; },
+      setItem(_, value) {
+        if (mode === "write-denied") throw new Error("synthetic write denial");
+        if (mode !== "noop") raw = value;
+      },
+    },
+    addEventListener() {}, removeEventListener() {},
+  } });
+  const unsubscribe = access.subscribe(() => {});
+  try {
+    for (mode of ["noop", "write-denied", "read-denied", "normal"]) {
+      const result = store.changeBrowserCart(() => lines);
+      assert.equal(result.persistent, mode === "normal", mode);
+      assert.deepEqual(access.getSnapshot().lines, lines); // Existing current-tab fallback.
+      assert.equal(access.getSnapshot().persistent, mode === "normal");
+    }
+  } finally {
+    unsubscribe();
+    if (previous) Object.defineProperty(globalThis, "window", previous); else delete globalThis.window;
+  }
+}
+
 test("guarded browser Undo rereads persistence, rejects stale/corrupt/blocked state, restores once and keeps existing store semantics", async () => {
   assert.equal(typeof window, "undefined");
   const store = await import("../lib/cart/browser-cart.ts");
@@ -215,3 +289,8 @@ test("guarded browser Undo rereads persistence, rejects stale/corrupt/blocked st
     else delete globalThis.window;
   }
 });
+
+// Keep the existing fresh-module/SSR assertion first; every later case installs
+// and restores its own fake storage rather than relying on initial module state.
+test("WEB24 Undo confirms full post-write payload and keeps uncertainty on no-op, denied or changed readback", checkUndoConfirmation);
+test("WEB24 ordinary Cart save keeps current-tab fallback but does not confirm unpersisted writes", checkCartSaveConfirmation);

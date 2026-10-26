@@ -46,7 +46,19 @@ export function clearBrowserRecent(): boolean {
   readStorage();
   if (!snapshot.persistent || (!snapshot.invalid && snapshot.ids.length === 0)) return false;
   // Explicit clear/reset is the only operation allowed to replace malformed history.
-  return save(clearRecent());
+  const ids = clearRecent();
+  try {
+    const cleared = serializeRecent(ids);
+    window.localStorage.setItem(RECENT_STORAGE_KEY, cleared);
+    if (window.localStorage.getItem(RECENT_STORAGE_KEY) !== cleared) throw new Error("Recent clear not confirmed");
+  } catch {
+    snapshot = { ...snapshot, persistent: false };
+    emit();
+    return false;
+  }
+  snapshot = { ids, ready: true, persistent: true, invalid: false };
+  emit();
+  return true;
 }
 export function removeBrowserRecent(publicId: string, expected: RecentIds): "removed" | "unchanged" | "conflict" | "unavailable" | "write-failed" {
   if (typeof window === "undefined" || !snapshot.ready || !snapshot.persistent || snapshot.invalid || !validRecentId(publicId)) return "unavailable";

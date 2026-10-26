@@ -65,7 +65,9 @@ export function restoreBrowserCart(plan: CartUndoPlan): "restored" | "changed" |
     const stored = inspectStoredCart(raw);
     if (stored.invalid) return "unavailable";
     if (!sameCartSelection(stored.lines, plan.after)) return "changed";
-    window.localStorage.setItem(CART_STORAGE_KEY, serializeCart(plan.before));
+    const restored = serializeCart(plan.before);
+    window.localStorage.setItem(CART_STORAGE_KEY, restored);
+    if (window.localStorage.getItem(CART_STORAGE_KEY) !== restored) throw new Error("Undo not confirmed");
   } catch {
     snapshot = { ...snapshot, persistent: false };
     emit();
@@ -78,7 +80,11 @@ export function restoreBrowserCart(plan: CartUndoPlan): "restored" | "changed" |
 function saveSelection(lines: readonly CartLine[]) {
   // Storage can be blocked; keep the current tab usable without promising persistence.
   let persistent = true;
-  try { window.localStorage.setItem(CART_STORAGE_KEY, serializeCart(lines)); }
+  try {
+    const stored = serializeCart(lines);
+    window.localStorage.setItem(CART_STORAGE_KEY, stored);
+    if (window.localStorage.getItem(CART_STORAGE_KEY) !== stored) throw new Error("Cart save not confirmed");
+  }
   catch { persistent = false; }
   snapshot = { lines, ready: true, persistent, invalid: false };
   emit();

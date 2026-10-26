@@ -188,7 +188,7 @@ test("B: postwrite read denial or overwritten persisted result cannot announce c
   });
 });
 
-test("correction: failed confirmation/conflict/unavailable suppress trusted quantity even while the memory store says persistent", () => {
+test("correction: failed confirmation marks storage uncertain; conflict/unavailable still require the UI trust latch", () => {
   for (const mode of ["confirmation-denied", "confirmation-changed", "external-conflict", "read-unavailable"]) {
     withStorage(lines, ({ control, snapshot, values, notify }) => {
       let trusted = true;
@@ -200,8 +200,9 @@ test("correction: failed confirmation/conflict/unavailable suppress trusted quan
       };
       const result = setDetailCartQuantity(id, "4", snapshot());
       assert.equal(result, mode === "external-conflict" ? "conflict" : mode === "read-unavailable" ? "unavailable" : "write-failed");
-      assert.equal(snapshot().persistent, true); // This flag alone was the reported regression.
-      assert.ok(detailCartQuantity(id, snapshot()) !== null);
+      const unconfirmedWrite = mode.startsWith("confirmation-");
+      assert.equal(snapshot().persistent, !unconfirmedWrite);
+      assert.equal(detailCartQuantity(id, snapshot()) !== null, !unconfirmedWrite);
       if (detailSelectionNeedsReload(result)) trusted = false;
       assert.equal(detailCartQuantity(id, snapshot(), trusted), null);
       // A normal storage refresh must not silently unlock the failure latch in the mounted UI.

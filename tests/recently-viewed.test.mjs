@@ -65,6 +65,48 @@ registerHooks({ resolve(specifier, context, nextResolve) {
   return nextResolve(specifier, context);
 } });
 
+test("WEB24 explicit Recent clear refuses no-op, denied or replaced readback without altering visit semantics", async () => {
+  const store = await import("../lib/recently-viewed/browser-recent.ts"), access = store.useBrowserRecent();
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "window");
+  let raw = payload([id, other]), mode = "normal", denied = false, writes = 0;
+  const events = new Map();
+  Object.defineProperty(globalThis, "window", { configurable: true, value: {
+    localStorage: {
+      getItem(key) { assert.equal(key, RECENT_STORAGE_KEY); if (denied) throw new Error("synthetic denied"); return raw; },
+      setItem(key, value) {
+        assert.equal(key, RECENT_STORAGE_KEY); writes++;
+        if (mode !== "noop") raw = value;
+        if (mode === "denied") denied = true;
+        if (mode === "changed") raw = payload([third]);
+      },
+    },
+    addEventListener(type, listener) { events.set(type, listener); }, removeEventListener(type) { events.delete(type); },
+  } });
+  const unsubscribe = access.subscribe(() => {});
+  try {
+    for (mode of ["noop", "denied", "changed"]) {
+      denied = false; raw = payload([id, other]); events.get("storage")({ key: RECENT_STORAGE_KEY });
+      const count = writes;
+      assert.equal(store.clearBrowserRecent(), false, mode);
+      assert.equal(access.getSnapshot().persistent, false);
+      assert.deepEqual(access.getSnapshot().ids, [id, other]);
+      assert.equal(writes, count + 1);
+    }
+    denied = false; mode = "normal"; raw = "synthetic-invalid";
+    assert.equal(store.clearBrowserRecent(), true);
+    assert.equal(raw, serializeRecent([]));
+    assert.equal(access.getSnapshot().invalid, false);
+    const count = writes;
+    assert.equal(store.clearBrowserRecent(), false); assert.equal(writes, count);
+    assert.equal(store.recordRecentVisit(id), true);
+    assert.equal(store.recordRecentVisit(id.toUpperCase()), false);
+    assert.deepEqual(access.getSnapshot().ids, [id]);
+  } finally {
+    unsubscribe();
+    if (previous) Object.defineProperty(globalThis, "window", previous); else delete globalThis.window;
+  }
+});
+
 test("browser history is SSR-safe, strict-repeat idempotent, cross-tab fresh, and honest on invalid or blocked storage", async () => {
   assert.equal(typeof window, "undefined");
   const store = await import("../lib/recently-viewed/browser-recent.ts");
