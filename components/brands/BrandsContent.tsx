@@ -5,16 +5,17 @@ import { marketingCopy } from "@/lib/storefront/marketing-copy";
 import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
 import { localCatalogue } from "@/lib/catalog/local-catalogue";
 import { catalogueQueryString, publishedCatalogueBrands } from "@/lib/catalog/catalogue-discovery";
-import { storefrontHref, storefrontLabels } from "@/lib/storefront/localization";
+import { storefrontHref } from "@/lib/storefront/localization";
+import { brandNames } from "@/data/brands";
 
 export default function BrandsContent({ locale = "en", routeLocale = null, catalogue = localCatalogue }: {
   locale?: EditorialLocale; routeLocale?: EditorialLocale | null;
   catalogue?: typeof localCatalogue;
 }) {
   const copy = marketingCopy[locale];
-  const catalogueLinks = Object.fromEntries(publishedCatalogueBrands(catalogue).map((brand) => [brand,
-    storefrontHref("/products", routeLocale) + catalogueQueryString({ query: "", brand }),
-  ]));
+  const publishedBrands = new Set(publishedCatalogueBrands(catalogue));
+  const brands = brandNames.map(name => ({ name, productsHref: publishedBrands.has(name)
+    ? storefrontHref("/products", routeLocale) + catalogueQueryString({ query: "", brand: name }) : null }));
   return (
     <><main lang={locale} className="min-h-screen bg-hanapure-warm-white text-hanapure-text">
       <Header />
@@ -25,8 +26,7 @@ export default function BrandsContent({ locale = "en", routeLocale = null, catal
           <p className="mt-6 max-w-2xl text-base leading-8 text-hanapure-muted sm:text-lg">{copy.brands.description}</p>
         </div>
       </div>
-      <BrandDirectory labels={copy.directory} catalogueLinks={catalogueLinks}
-        emptyState={{ heading: storefrontLabels[locale].empty, description: storefrontLabels[locale].emptyDescription }} />
+      <BrandDirectory labels={copy.directory} brands={brands} />
     </main><Footer locale={locale} routeLocale={routeLocale} /></>
   );
 }

@@ -104,8 +104,8 @@ test("actual EN/HU/KO Home and Brands routes render their selected body and dire
     }
     for (const value of [copy.brands.heading, copy.brands.description, copy.directory.browse,
       copy.directory.searchLabel, copy.directory.searchPlaceholder, copy.directory.filterLabel,
-      copy.directory.alphabet, copy.directory.all, copy.directory.resultMany.replace("{count}", "0"),
-      storefrontLabels[locale].empty, storefrontLabels[locale].emptyDescription]) {
+      copy.directory.alphabet, copy.directory.all, copy.directory.resultMany.replace("{count}", "16"),
+      copy.directory.information, copy.directory.unpublished]) {
       assert.ok(brands.includes(value), `${locale} missing directory string: ${value}`);
     }
     for (const brand of brandNames) assert.ok(!brands.includes(`>${brand}</a>`), brand);
@@ -125,7 +125,7 @@ test("legacy routes retain the same English body as EN routes and source claims"
   assert.equal(withoutLinkDestinations(render(Home())), withoutLinkDestinations(render(await LocalizedHome({ params: Promise.resolve({ locale: "en" }) }))));
   assert.equal(withoutLinkDestinations(render(Brands())), withoutLinkDestinations(render(await LocalizedBrands({ params: Promise.resolve({ locale: "en" }) }))));
   assert.ok(render(Home()).includes("Feel confident in your skin."));
-  assert.ok(render(Brands()).includes("0 brands found"));
+  assert.ok(render(Brands()).includes("16 brands found"));
   for (const route of [LocalizedHome, LocalizedBrands]) {
     await assert.rejects(route({ params: Promise.resolve({ locale: "fr" }) }), error => error.digest === "NEXT_HTTP_ERROR_FALLBACK;404");
   }
@@ -213,12 +213,12 @@ test("Directory receives serializable destinations without importing the server-
   const source = readFileSync(join(repo, "components/brands/BrandDirectory.tsx"), "utf8");
   assert.ok(source.startsWith('"use client";'));
   assert.doesNotMatch(source, /from ["'][^"']*(?:catalogue-discovery|local-catalogue|product-operational)/);
-  assert.match(source, /href=\{catalogueLinks\[brand\]\}/);
-  // Existing search/A-Z continues to render links from the same filtered brand names.
-  assert.match(source, /matchingBrands[\s\S]*?\.filter\(\(brand\) => brand\[0\]\.toUpperCase\(\) === letter\)[\s\S]*?\.map\(\(brand\)/);
+  assert.match(source, /brand\.productsHref !== null \? <Link href=\{brand\.productsHref\}/);
+  // Existing search/A-Z filters informational rows and genuine links together.
+  assert.match(source, /matchingBrands[\s\S]*?\.filter\(\(brand\) => brand\.name\[0\]\.toUpperCase\(\) === letter\)[\s\S]*?\.map\(\(brand\)/);
 });
 
-test("directory and catalogue options derive only published brands while keeping historical URL criteria", () => {
+test("directory links and catalogue options derive only published brands while names remain informational", () => {
   const catalogue = createLocalCatalogueReader([...publishedCatalogueFixtures,
     { ...publishedCatalogueFixtures[1], publicId: "42345678-abcd-1234-abcd-123456789abc", brand: "Anua", slug: "test-only-draft-brand" }]);
   for (const locale of ["en", "hu", "ko"]) {
@@ -226,7 +226,9 @@ test("directory and catalogue options derive only published brands while keeping
     const links = [...html.matchAll(/<a\b[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gs)];
     assert.deepEqual(links.map(link => link[2]), ["beplain", "Round Lab"]);
     assert.ok(!html.includes('>Anua</a>'));
-    assert.ok(html.includes(marketingCopy[locale].directory.resultMany.replace("{count}", "2")));
+    assert.ok(html.includes(marketingCopy[locale].directory.resultMany.replace("{count}", "16")));
+    assert.equal((html.match(/<li\b/g) ?? []).length, 16);
+    assert.equal(html.split(marketingCopy[locale].directory.unpublished).length - 1, 14);
     const listing = renderToStaticMarkup(ProductListing({ catalogue, locale, routeLocale: locale }));
     const brandOptions = listing.match(/<select\b[^>]*id="catalogue-brand"[^>]*>([\s\S]*?)<\/select>/)?.[1];
     assert.ok(brandOptions);
@@ -251,5 +253,102 @@ test("marketing locales expose the same complete string structure, including zer
       const labels = marketingCopy[locale].directory;
       assert.ok((count === 1 ? labels.resultOne : labels.resultMany).replace("{count}", String(count)).includes(String(count)));
     }
+  }
+});
+
+test("WEB31 empty public directory lists exactly 16 configured identities without product actions in all routes", async () => {
+  for (const routeLocale of [null, "en", "hu", "ko"]) {
+    const locale = routeLocale ?? "en", labels = marketingCopy[locale].directory;
+    const html = render(routeLocale === null ? Brands() : await LocalizedBrands({ params: Promise.resolve({ locale }) }));
+    const rows = [...html.matchAll(/<li\b[^>]*>(.*?)<\/li>/gs)].map(match => match[1]);
+    assert.equal(rows.length, 16);
+    const names = rows.map(row => row.match(/<span>(.*?)<\/span>/s)?.[1]);
+    assert.deepEqual(names, [...brandNames].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase(), "en")));
+    assert.equal(new Set(names.map(name => name.toLowerCase())).size, 16);
+    for (const row of rows) {
+      assert.ok(row.includes(labels.unpublished));
+      assert.doesNotMatch(row, /<(?:a|button)\b|href=|tabindex=|role=|cursor-pointer|hover:/);
+    }
+    assert.doesNotMatch(html, /<a\b/);
+    assert.ok(html.includes(labels.information));
+    assert.match(html, /aria-live="polite"[^>]*>16|aria-live="polite"[^>]*>브랜드 16/);
+    if (locale !== "en") assert.ok(!html.includes(marketingCopy.en.directory.unpublished));
+  }
+});
+
+test("WEB31 an unconfigured published reader value cannot create an authoritative directory row or link", () => {
+  const unknown = { ...publishedCatalogueFixtures[0], brand: '<unknown-brand>' };
+  assert.throws(() => createLocalCatalogueReader([unknown]), /invalid_brand/);
+  const base = createLocalCatalogueReader([publishedCatalogueFixtures[0]]);
+  // Adversarial reader injection is test-only; the real validated reader rejects it.
+  const catalogue = { ...base, listPublished: () => [...base.listPublished(), unknown] };
+  for (const routeLocale of [null, "en", "hu", "ko"]) {
+    const html = render({ type: BrandsContent, props: { catalogue, locale: routeLocale ?? "en", routeLocale } });
+    assert.doesNotMatch(html, /unknown-brand/);
+    assert.equal((html.match(/<li\b/g) ?? []).length, 16);
+    const links = [...html.matchAll(/<a\b[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gs)];
+    assert.deepEqual(links.map(link => link[2]), ["Round Lab"]);
+    assert.equal(links[0][1], storefrontHref("/products", routeLocale) + "?brand=Round+Lab");
+  }
+});
+
+test("WEB31 actual directory handlers preserve safe search letter reset counts and native keyboard affordances", async () => {
+  // Instrument only useState in an in-memory transpilation of the actual source.
+  // This exercises real handlers/filtering, not browser hydration or Tab/focus.
+  const stateURL = "data:text/javascript," + encodeURIComponent(`
+    let values=[], cursor=0;
+    export function reset(){values=[];cursor=0;}
+    export function begin(){cursor=0;}
+    export function useState(initial){const i=cursor++;if(!(i in values))values[i]=initial;
+      return [values[i], value=>{values[i]=value;}];}
+  `);
+  const state = await import(stateURL);
+  const source = readFileSync(join(repo, "components/brands/BrandDirectory.tsx"), "utf8");
+  assert.ok(source.includes('import { useState } from "react";'));
+  const compiled = ts.transpileModule(source.replace('import { useState } from "react";', `import { useState } from ${JSON.stringify(stateURL)};`), {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText.replace('from "next/link"', `from ${JSON.stringify(pathToFileURL(require.resolve("next/link.js")).href)}`);
+  const { default: Directory } = await import("data:text/javascript," + encodeURIComponent(compiled));
+  const nodes = node => node == null || typeof node !== "object" ? [node] : Array.isArray(node)
+    ? node.flatMap(nodes) : [node, ...nodes(node.props?.children)];
+  const label = node => nodes(node.props.children).filter(value => typeof value === "string").join("");
+  for (const locale of ["en", "hu", "ko"]) {
+    state.reset();
+    const props = { labels: marketingCopy[locale].directory,
+      brands: brandNames.map(name => ({ name, productsHref: null })) };
+    const view = () => { state.begin(); return nodes(Directory(props)); };
+    const count = tree => label(tree.find(node => node?.props?.["aria-live"] === "polite"));
+    const rows = tree => tree.filter(node => node?.type === "li");
+    const button = (tree, text) => tree.find(node => node?.type === "button" && label(node) === text);
+    let tree = view();
+    assert.equal(rows(tree).length, 16);
+    for (const node of tree.filter(node => node?.type === "button")) {
+      assert.equal(node.props.type, "button");
+      assert.equal(node.props.tabIndex, undefined);
+      assert.equal(node.props.onKeyDown, undefined); // Native Enter/Space activation retained.
+      assert.match(node.props.className, /focus-visible:/);
+    }
+    assert.equal(button(tree, "Z").props.disabled, true);
+    assert.equal(button(tree, "R").props.disabled, false);
+    tree.find(node => node?.type === "input").props.onChange({ target: { value: "  rOuNd  " } });
+    tree = view(); assert.equal(rows(tree).length, 1);
+    assert.equal(count(tree), props.labels.resultOne.replace("{count}", "1"));
+    button(tree, "A").props.onClick(); tree = view();
+    assert.equal(rows(tree).length, 0);
+    assert.equal(count(tree), props.labels.resultMany.replace("{count}", "0"));
+    assert.ok(tree.some(node => node === props.labels.empty));
+    assert.equal(button(tree, "A").props["aria-pressed"], true);
+    tree.find(node => node?.type === "input").props.onChange({ target: { value: "" } });
+    tree = view(); assert.equal(rows(tree).length, 3); // Abib, Anua, AXIS-Y.
+    button(tree, props.labels.all).props.onClick(); tree = view();
+    assert.equal(rows(tree).length, 16);
+    assert.equal(button(tree, props.labels.all).props["aria-pressed"], true);
+    tree.find(node => node?.type === "input").props.onChange({ target: { value: "<script>alert(1)</script>" } });
+    tree = view(); assert.equal(rows(tree).length, 0);
+    assert.equal(count(tree), props.labels.resultMany.replace("{count}", "0"));
+    // Duplicate input cannot duplicate a name; sorting does not mutate caller data.
+    state.reset(); props.brands = [...props.brands].reverse(); props.brands.push(props.brands[0]);
+    const before = [...props.brands]; tree = view();
+    assert.equal(rows(tree).length, 16); assert.deepEqual(props.brands, before);
   }
 });

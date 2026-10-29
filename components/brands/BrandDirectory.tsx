@@ -7,30 +7,30 @@ import type { MarketingCopy } from "@/lib/storefront/marketing-copy";
 
 const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
-export default function BrandDirectory({ labels, catalogueLinks, emptyState }: {
+export default function BrandDirectory({ labels, brands }: {
   labels: MarketingCopy["directory"];
-  catalogueLinks: Readonly<Record<string, string>>;
-  emptyState: Readonly<{ heading: string; description: string }>;
+  brands: readonly Readonly<{ name: string; productsHref: string | null }>[];
 }) {
-  const sortedBrands = Object.keys(catalogueLinks).sort((first, second) =>
-    first.toLowerCase().localeCompare(second.toLowerCase(), "en"));
-  const availableLetters = new Set(sortedBrands.map(brand => brand[0].toUpperCase()));
+  const sortedBrands = [...new Map(brands.map(brand => [brand.name.toLowerCase(), brand])).values()]
+    .sort((first, second) => first.name.toLowerCase().localeCompare(second.name.toLowerCase(), "en"));
+  const availableLetters = new Set(sortedBrands.map(brand => brand.name[0].toUpperCase()));
   const [query, setQuery] = useState("");
   const [selectedLetter, setSelectedLetter] = useState<string | null>(null);
   const normalizedQuery = query.trim().toLowerCase();
 
   const matchingBrands = sortedBrands.filter(
     (brand) =>
-      brand.toLowerCase().includes(normalizedQuery) &&
-      (!selectedLetter || brand[0].toUpperCase() === selectedLetter),
+      brand.name.toLowerCase().includes(normalizedQuery) &&
+      (!selectedLetter || brand.name[0].toUpperCase() === selectedLetter),
   );
   const visibleLetters = alphabet.filter((letter) =>
-    matchingBrands.some((brand) => brand[0].toUpperCase() === letter),
+    matchingBrands.some((brand) => brand.name[0].toUpperCase() === letter),
   );
 
   return (
     <section aria-label={labels.browse} className="pb-24 pt-4 sm:pt-8">
       <Container>
+        <p className="mb-6 max-w-3xl break-words text-sm leading-7 text-hanapure-muted">{labels.information}</p>
         <div className="rounded-3xl border border-hanapure-border bg-hanapure-white p-5 shadow-sm sm:p-8">
           <label
             htmlFor="brand-search"
@@ -83,9 +83,9 @@ export default function BrandDirectory({ labels, catalogueLinks, emptyState }: {
 
         {matchingBrands.length === 0 ? (
           <div className="mt-6 rounded-3xl border border-hanapure-border bg-hanapure-white px-6 py-12 text-center">
-            <h2 className="text-2xl font-light">{sortedBrands.length ? labels.empty : emptyState.heading}</h2>
+            <h2 className="text-2xl font-light">{labels.empty}</h2>
             <p className="mt-3 text-hanapure-muted">
-              {sortedBrands.length ? labels.emptyDescription : emptyState.description}
+              {labels.emptyDescription}
             </p>
           </div>
         ) : (
@@ -100,16 +100,19 @@ export default function BrandDirectory({ labels, catalogueLinks, emptyState }: {
                 </h2>
                 <ul className="grid sm:grid-cols-2 lg:grid-cols-3">
                   {matchingBrands
-                    .filter((brand) => brand[0].toUpperCase() === letter)
+                    .filter((brand) => brand.name[0].toUpperCase() === letter)
                     .map((brand) => (
                       <li
-                        key={brand}
-                        className="border-b border-hanapure-border text-xl font-light text-hanapure-text"
+                        key={brand.name}
+                        className="min-w-0 break-words border-b border-hanapure-border text-xl font-light text-hanapure-text"
                       >
-                        <Link href={catalogueLinks[brand]}
+                        {brand.productsHref !== null ? <Link href={brand.productsHref}
                           className="flex min-h-11 items-center rounded-sm px-1 py-6 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-hanapure-text">
-                          {brand}
-                        </Link>
+                          {brand.name}
+                        </Link> : <div className="px-1 py-6">
+                          <span>{brand.name}</span>
+                          <p className="mt-2 text-sm font-normal leading-6 text-hanapure-muted">{labels.unpublished}</p>
+                        </div>}
                       </li>
                     ))}
                 </ul>
