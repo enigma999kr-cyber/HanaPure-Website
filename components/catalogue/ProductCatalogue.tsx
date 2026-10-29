@@ -112,7 +112,7 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
   const appliedCriteria = [
     ...(criteria.query ? [{ key: "q", label: `${labels.searchProducts}: ${criteria.query}`,
       href: changedViewHref({ ...criteria, query: "" }) }] : []),
-    ...(criteria.brand ? [{ key: "brand", label: `${labels.filterBrand}: ${publishedBrands.some(brand => brand === criteria.brand) ? criteria.brand : labels.invalidBrand}`,
+    ...(criteria.brand ? [{ key: "brand", label: `${labels.filterBrand}: ${unknownBrand ? labels.invalidBrand : criteria.brand}`,
       href: changedViewHref({ ...criteria, brand: "" }) }] : []),
     ...(criteria.sort === "name-asc" || criteria.sort === "name-desc" ? [{ key: "sort",
       label: `${labels.sortBy}: ${criteria.sort === "name-asc" ? labels.nameAscending : labels.nameDescending}`,
@@ -185,7 +185,7 @@ export function ProductListing({ catalogue = localCatalogue, locale = "en", rout
         <h2 id="catalogue-active-filters" className="break-words text-sm font-medium">{labels.activeFilters}</h2>
         <ul className="mt-3 flex min-w-0 flex-wrap gap-3">
           {appliedCriteria.map(criterion => <li key={criterion.key} className="min-w-0 max-w-full">
-            <BrowseLink refusal={labels.planLimit} href={criterion.href} aria-label={`${labels.removeFilter}: ${criterion.label}`}
+            <BrowseLink refusal={labels.planLimit} href={criterion.href} scroll={false} aria-label={`${labels.removeFilter}: ${criterion.label}`}
               className={`${criterionLinkStyle} gap-2 bg-hanapure-warm-white`}>
               <span className="min-w-0 break-words">{criterion.label}</span><span aria-hidden="true">×</span>
             </BrowseLink>

@@ -264,6 +264,73 @@ test("batch A: published-brand shortcuts apply/toggle only brand, retain query/s
   }
 });
 
+test("WEB30 configured empty-catalogue brands keep selector chip and removal identity across locales", async () => {
+  const { storefrontLabels } = await import("../lib/storefront/localization.ts");
+  for (const locale of ["en", "hu", "ko"]) for (const raw of ["Round Lab", "Anua", "", "not-a-configured-brand", '<img src=x onerror="x">', "  Round Lab  ", "round lab"]) {
+    const labels = storefrontLabels[locale];
+    const criteria = readCatalogueCriteria({ q: " cleanser ", brand: raw, sort: "name-desc" });
+    const nodes = elements(ProductListing({ catalogue: reader(), locale, routeLocale: locale, criteria }));
+    const select = nodes.find(n => n.type === "select" && n.props.name === "brand");
+    assert.equal(select.props.defaultValue, criteria.brand);
+    const section = nodes.find(n => n.type === "section" && n.props["aria-labelledby"] === "catalogue-active-filters");
+    const chips = elements(section).filter(n => typeof n.props?.href === "string");
+    const brandChip = chips.find(n => new URL(n.props.href, "https://test.invalid").searchParams.get("brand") === null);
+    if (criteria.brand) {
+      const known = ["Round Lab", "Anua"].includes(criteria.brand);
+      const safe = known ? criteria.brand : labels.invalidBrand;
+      assert.equal(text(elements(brandChip)), `${labels.filterBrand}: ${safe} ×`);
+      assert.equal(brandChip.props["aria-label"], `${labels.removeFilter}: ${labels.filterBrand}: ${safe}`);
+      assert.ok(elements(select).some(n => n.type === "option" && n.props.value === criteria.brand && text(elements(n)) === safe));
+      const url = new URL(brandChip.props.href, "https://test.invalid");
+      assert.equal(url.pathname, `/${locale}/products`);
+      assert.equal(url.searchParams.get("q"), "cleanser");
+      assert.equal(url.searchParams.get("sort"), "name-desc");
+    } else {
+      assert.equal(chips.length, 2);
+    }
+    for (const chip of chips) {
+      const url = new URL(chip.props.href, "https://test.invalid");
+      const removed = ["q", "brand", "sort"].filter(k => ({q:criteria.query,brand:criteria.brand,sort:criteria.sort})[k] && !url.searchParams.has(k));
+      assert.equal(removed.length, 1);
+    }
+    assert.equal(listingCards(nodes).length, 0);
+    assert.ok(text(nodes).includes(labels.noResults));
+    assert.ok(nodes.some(n => n.props?.href === `/${locale}/products` && text(elements(n)) === labels.clear));
+    assert.ok(!nodes.some(n => n.props?.["aria-labelledby"] === "catalogue-brand-shortcuts"));
+  }
+});
+
+test("WEB30 H2 chip removal disables automatic scroll locally and preserves locale query sort and other navigation", async () => {
+  const { storefrontLabels } = await import("../lib/storefront/localization.ts");
+  const { default: Link } = await import("next/link");
+  for (const routeLocale of [null, "en", "hu", "ko"]) {
+    const locale = routeLocale ?? "en", labels = storefrontLabels[locale];
+    const root = storefrontHref("/products", routeLocale);
+    const criteria = readCatalogueCriteria({ q: "cleanser", brand: "Round Lab", sort: "name-desc" });
+    for (const catalogue of [reader(), reader(product({ brand: "Round Lab" }))]) {
+      const nodes = elements(ProductListing({ catalogue, locale, routeLocale, criteria }));
+      const section = nodes.find(node => node.type === "section" && node.props["aria-labelledby"] === "catalogue-active-filters");
+      const chips = elements(section).filter(node => node.type === Link);
+      assert.equal(chips.length, 3);
+      for (const chip of chips) assert.equal(chip.props.scroll, false);
+      const brandChip = chips.find(node => node.props["aria-label"] === `${labels.removeFilter}: ${labels.filterBrand}: Round Lab`);
+      assert.ok(brandChip);
+      assert.equal(text(elements(brandChip)), `${labels.filterBrand}: Round Lab ×`);
+      assert.equal(brandChip.props.onClick, undefined);
+      const url = new URL(brandChip.props.href, "https://test.invalid");
+      assert.equal(url.pathname, root);
+      assert.deepEqual([...url.searchParams], [["q", "cleanser"], ["sort", "name-desc"]]);
+      // elements() expands BrowseLink anew on each traversal; its forwarded
+      // children retain identity even though the Link element object does not.
+      const unrelated = nodes.filter(node => node.type === Link && !chips.some(chip => chip.props.children === node.props.children));
+      assert.ok(unrelated.some(node => node.props.href === root && text(elements(node)) === labels.clear));
+      assert.ok(unrelated.some(node => node.props.href === storefrontHref("/brands", routeLocale)));
+      for (const link of unrelated) assert.equal(link.props.scroll, undefined);
+      assert.ok(text(nodes).includes(labels.noResults));
+    }
+  }
+});
+
 test("batch B: applied normalized chips remove exactly one criterion, escape text and preserve existing continuation/reset", async () => {
   const { storefrontLabels } = await import("../lib/storefront/localization.ts");
   const { renderToStaticMarkup } = require(join(dirname(require.resolve("react-dom/package.json")), "server.node.js"));
@@ -295,7 +362,7 @@ test("batch B: applied normalized chips remove exactly one criterion, escape tex
           assert.match(link.props.className, /min-h-11/);
           assert.match(link.props.className, /focus-visible:outline-2/);
           assert.equal(link.props.onClick, undefined);
-          if (key === "brand" && criteria.brand !== record.brand) {
+          if (key === "brand" && !(await import("../data/brands.ts")).brandNames.includes(criteria.brand)) {
             assert.ok(text(elements(link)).includes(labels.invalidBrand));
             assert.ok(!text(elements(link)).includes(criteria.brand));
           }
