@@ -11,6 +11,7 @@ import { FAVORITES_STORAGE_KEY, serializeFavorites } from "../../lib/favorites/f
 import { RECENT_STORAGE_KEY, serializeRecent } from "../../lib/recently-viewed/recent-state";
 import { searchSuggestionLabels } from "../../lib/catalog/search-suggestion-labels";
 import { favoriteLabels } from "../../lib/favorites/labels";
+import { brandNames } from "../../data/brands";
 
 // Expected browser URLs, not a replacement for the server-only parser/serializer.
 const expectedQuery = (q: string, brand: string) =>
@@ -239,8 +240,12 @@ for (const routeLocale of [null, ...storefrontLocales]) for (const javaScriptEna
       const labels = storefrontLabels[locale];
       const query = expectedQuery("TEST ONLY", "Round Lab");
       await page.goto(`${root}/products${query}`);
-      const imageLink = page.getByRole("link", { name: `${labels.details}: TEST ONLY ${locale} published item`, exact: true });
-      const titleLink = page.getByRole("link", { name: `TEST ONLY ${locale} published item`, exact: true });
+      const result = page.locator(`#catalogue-result-${publishedCatalogueFixtures[0].publicId}`);
+      await expect(result).toHaveCount(1);
+      const imageLink = result.getByRole("link", { name: `${labels.details}: TEST ONLY ${locale} published item`, exact: true });
+      await expect(imageLink).toHaveCount(1);
+      const titleLink = result.locator("h2").getByRole("link", { name: `TEST ONLY ${locale} published item`, exact: true });
+      await expect(titleLink).toHaveCount(1);
       const detail = `${root}/products/${publishedSlug}${query}`;
       await expect(imageLink).toHaveAttribute("href", detail);
       await expect(titleLink).toHaveAttribute("href", detail);
@@ -262,7 +267,13 @@ for (const routeLocale of [null, ...storefrontLocales]) for (const javaScriptEna
         await expect(page.getByRole("searchbox", { name: labels.searchProducts, exact: true })).toBeFocused();
       }
       await page.goto(`${root}/products?brand=beplain`);
-      const textOnly = page.getByRole("link", { name: `TEST ONLY ${locale} text-only item`, exact: true });
+      const textOnlyFixture = publishedCatalogueFixtures.find(product => product.slug === textOnlySlug);
+      expect(textOnlyFixture).toBeDefined();
+      const textOnlyResult = page.locator(`#catalogue-result-${textOnlyFixture!.publicId}`);
+      await expect(textOnlyResult).toHaveCount(1);
+      const textOnly = textOnlyResult.locator("h2").getByRole("link", { name: `TEST ONLY ${locale} text-only item`, exact: true });
+      await expect(textOnly).toHaveCount(1);
+      await expect(textOnly).toHaveAttribute("href", `${root}/products/${textOnlySlug}?brand=beplain`);
       await expect(textOnly).toBeVisible();
       await expect(page.getByRole("link", { name: `${labels.details}: TEST ONLY ${locale} text-only item`, exact: true })).toHaveCount(0);
       if (locale !== "en") await expect(page.getByRole("link", { name: `${labels.details}: TEST ONLY en missing-locale fixture published item`, exact: true })).toHaveCount(0);
@@ -516,7 +527,11 @@ for (const locale of storefrontLocales) {
       const criteria = expectedQuery("TEST ONLY", "Round Lab");
       for (const path of [`/${locale}/products${criteria}`, `/${locale}/products/${publishedSlug}${criteria}`]) {
         expect((await page.goto(path))?.status()).toBe(200);
-        const image = page.getByRole("img", { name: `TEST ONLY ${locale} image`, exact: true });
+        const media = path === `/${locale}/products${criteria}`
+          ? page.locator(`#catalogue-result-${publishedCatalogueFixtures[0].publicId}`)
+          : page.getByRole("group", { name: labels.gallery, exact: true });
+        await expect(media).toHaveCount(1);
+        const image = media.getByRole("img", { name: `TEST ONLY ${locale} image`, exact: true });
         await expect(image).toHaveCount(1);
         await image.scrollIntoViewIfNeeded();
         await expect(image).toBeVisible();
@@ -545,10 +560,13 @@ for (const locale of storefrontLocales) {
         body: "TEST ONLY invalid image bytes",
       }));
       await visit(page, `/${locale}/products${criteria}`);
-      const fallback = page.getByRole("img", { name: `TEST ONLY ${locale} image`, exact: true });
+      const result = page.locator(`#catalogue-result-${publishedCatalogueFixtures[0].publicId}`);
+      await expect(result).toHaveCount(1);
+      const fallback = result.getByRole("img", { name: `TEST ONLY ${locale} image`, exact: true });
+      await expect(fallback).toHaveCount(1);
       await expect(fallback).toHaveJSProperty("tagName", "DIV");
       await expect(fallback).toBeVisible();
-      await expect(page.locator('img[src*="file.svg"]')).toHaveCount(0);
+      await expect(result.locator('img[src*="file.svg"]')).toHaveCount(0);
       const frame = await fallback.locator("..").boundingBox();
       expect(frame).not.toBeNull();
       expect(Math.abs(frame!.width - frame!.height)).toBeLessThanOrEqual(1);
@@ -559,7 +577,8 @@ for (const locale of storefrontLocales) {
         const name = nextLocale === "hu" ? "Magyar" : nextLocale === "ko" ? "한국어" : "English";
         await page.getByRole("link", { name, exact: true }).filter({ visible: true }).press("Enter");
         await expect(page).toHaveURL(`/${nextLocale}/products${criteria}`);
-        const image = page.getByRole("img", { name: `TEST ONLY ${nextLocale} image`, exact: true });
+        const image = result.getByRole("img", { name: `TEST ONLY ${nextLocale} image`, exact: true });
+        await expect(image).toHaveCount(1);
         await expect(image).toHaveJSProperty("tagName", nextLocale === locale ? "DIV" : "IMG");
         if (nextLocale !== locale) {
           expect(await image.evaluate(async node => {
@@ -569,9 +588,16 @@ for (const locale of storefrontLocales) {
           await expect(image).toHaveCSS("opacity", "1");
         }
       }
-      await page.getByRole("link", { name: `TEST ONLY ${locale} published item`, exact: true }).press("Enter");
+      const productTitleLink = result.locator("h2").getByRole("link", { name: `TEST ONLY ${locale} published item`, exact: true });
+      await expect(productTitleLink).toHaveCount(1);
+      await expect(productTitleLink).toHaveAttribute("href", `/${locale}/products/${publishedSlug}${criteria}`);
+      await productTitleLink.press("Enter");
       await expect(page).toHaveURL(`/${locale}/products/${publishedSlug}${criteria}`);
-      await expect(fallback).toHaveJSProperty("tagName", "DIV");
+      const detailMedia = page.getByRole("group", { name: labels.gallery, exact: true });
+      await expect(detailMedia).toHaveCount(1);
+      const detailFallback = detailMedia.getByRole("img", { name: `TEST ONLY ${locale} image`, exact: true });
+      await expect(detailFallback).toHaveCount(1);
+      await expect(detailFallback).toHaveJSProperty("tagName", "DIV");
       await expect(page.getByRole("heading", { level: 1 })).toHaveText(`TEST ONLY ${locale} published item`);
       await page.evaluate(() => document.fonts.ready);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width + 1);
@@ -579,7 +605,10 @@ for (const locale of storefrontLocales) {
       if (page.viewportSize()!.width < 1024) await page.locator('[aria-controls="mobile-navigation"]').click();
       await page.getByRole("link", { name: other === "hu" ? "Magyar" : "English", exact: true }).filter({ visible: true }).press("Enter");
       await expect(page).toHaveURL(`/${other}/products/${publishedSlug}${criteria}`);
-      const replacement = page.getByRole("img", { name: `TEST ONLY ${other} image`, exact: true });
+      const replacementMedia = page.getByRole("group", { name: storefrontLabels[other].gallery, exact: true });
+      await expect(replacementMedia).toHaveCount(1);
+      const replacement = replacementMedia.getByRole("img", { name: `TEST ONLY ${other} image`, exact: true });
+      await expect(replacement).toHaveCount(1);
       await expect(replacement).toHaveJSProperty("tagName", "IMG");
       await expect(replacement).toHaveCSS("opacity", "1");
       expect(await replacement.evaluate(async image => {
@@ -603,12 +632,34 @@ for (const locale of storefrontLocales) {
     }
     await discover.press("Enter");
     await expect(page).toHaveURL(`/${locale}/products?brand=Round+Lab`);
-    await expect(page.getByRole("link", { name: `TEST ONLY ${locale} published item`, exact: true })).toBeVisible();
+    const result = page.locator(`#catalogue-result-${publishedCatalogueFixtures[0].publicId}`);
+    await expect(result).toHaveCount(1);
+    const productTitleLink = result.locator("h2").getByRole("link", { name: `TEST ONLY ${locale} published item`, exact: true });
+    await expect(productTitleLink).toHaveCount(1);
+    await expect(productTitleLink).toHaveAttribute("href", `/${locale}/products/${publishedSlug}?brand=Round+Lab`);
+    await expect(productTitleLink).toBeVisible();
     await visit(page, `/${locale}/brands`);
     const directory = marketingCopy[locale].directory;
     const region = page.getByRole("region", { name: directory.browse, exact: true });
+    const rows = region.getByRole("listitem");
+    const unpublished = rows.filter({ hasNot: page.getByRole("link") });
+    await expect(rows).toHaveCount(16);
+    await expect(rows.locator(":scope > a, :scope > div > span")).toHaveText([...brandNames].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase(), "en")));
     await expect(region.getByRole("link")).toHaveText(["beplain", "Round Lab"]);
-    await expect(region.getByRole("button", { name: "A", exact: true })).toBeDisabled();
+    await expect(region.getByRole("link", { name: "beplain", exact: true })).toHaveAttribute("href", `/${locale}/products?brand=beplain`);
+    await expect(region.getByRole("link", { name: "Round Lab", exact: true })).toHaveAttribute("href", `/${locale}/products?brand=Round+Lab`);
+    await expect(unpublished).toHaveCount(14);
+    await expect(unpublished.locator("p")).toHaveText(Array(14).fill(directory.unpublished));
+    await expect(unpublished.locator('a, button, [role="link"], [role="button"], [tabindex]')).toHaveCount(0);
+    const anua = rows.filter({ has: page.getByText("Anua", { exact: true }) });
+    await expect(anua).toHaveCount(1);
+    await expect(anua.locator("span")).toHaveText("Anua");
+    await expect(anua.locator("p")).toHaveText(directory.unpublished);
+    await expect(anua.getByRole("link")).toHaveCount(0);
+    await expect(region.getByText(directory.information, { exact: true })).toBeVisible();
+    await expect(region.locator('[aria-live="polite"]')).toHaveText(directory.resultMany.replace("{count}", "16"));
+    await expect(region.getByRole("button", { name: "A", exact: true })).toBeEnabled();
+    await expect(region.getByRole("button", { name: "Z", exact: true })).toBeDisabled();
     const search = page.getByRole("searchbox", { name: directory.searchLabel });
     await search.fill("zzzz-no-such-brand");
     await expect(region.getByRole("heading", { name: directory.empty, exact: true })).toBeVisible();
@@ -617,10 +668,18 @@ for (const locale of storefrontLocales) {
     await letter.focus(); await page.keyboard.press("Space");
     await expect(letter).toHaveAttribute("aria-pressed", "true");
     await expect(region.getByRole("link")).toHaveText(["Round Lab"]);
+    await expect(rows).toHaveCount(1);
+    await expect(region.locator('[aria-live="polite"]')).toHaveText(directory.resultOne.replace("{count}", "1"));
     await region.getByRole("button", { name: directory.all, exact: true }).press("Enter");
     await expect(region.getByRole("link")).toHaveText(["beplain", "Round Lab"]);
+    await expect(rows).toHaveCount(16);
+    await expect(unpublished).toHaveCount(14);
+    await expect(region.locator('[aria-live="polite"]')).toHaveText(directory.resultMany.replace("{count}", "16"));
     await search.fill("round");
-    const brandLink = page.getByRole("link", { name: "Round Lab", exact: true });
+    await expect(rows).toHaveCount(1);
+    const brandLink = region.getByRole("link", { name: "Round Lab", exact: true });
+    await expect(brandLink).toHaveCount(1);
+    await expect(brandLink).toHaveAttribute("href", `/${locale}/products?brand=Round+Lab`);
     await brandLink.focus();
     await page.keyboard.press("Enter");
     const brandQuery = expectedQuery("", "Round Lab");
@@ -635,14 +694,19 @@ for (const locale of storefrontLocales) {
     await page.getByRole("searchbox", { name: labels.searchProducts, exact: true }).fill(query);
     await page.getByRole("button", { name: labels.apply, exact: true }).press("Enter");
     await expect(page).toHaveURL(`/${locale}/products${criteria}&sort=`);
-    const card = page.getByRole("link", { name: `TEST ONLY ${locale} published item`, exact: true });
+    const card = productTitleLink;
+    await expect(card).toHaveCount(1);
     await expect(card).toHaveAttribute("href", `/${locale}/products/${publishedSlug}${criteria}`);
     await card.focus();
     await page.keyboard.press("Enter");
     await expect(page).toHaveURL(`/${locale}/products/${publishedSlug}${criteria}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(`TEST ONLY ${locale} published item`);
-    await expect(page.getByRole("img", { name: `TEST ONLY ${locale} image` })).toBeVisible();
-    expect(await page.getByRole("img", { name: `TEST ONLY ${locale} image` }).evaluate(async image => {
+    const primaryMedia = page.getByRole("group", { name: labels.gallery, exact: true });
+    await expect(primaryMedia).toHaveCount(1);
+    const primaryImage = primaryMedia.getByRole("img", { name: `TEST ONLY ${locale} image`, exact: true });
+    await expect(primaryImage).toHaveCount(1);
+    await expect(primaryImage).toBeVisible();
+    expect(await primaryImage.evaluate(async image => {
       await (image as HTMLImageElement).decode();
       return (image as HTMLImageElement).naturalWidth;
     })).toBeGreaterThan(0);

@@ -1,7 +1,8 @@
-import { test as base, expect, type Page } from "@playwright/test";
+import { test as base, expect, type Page, type Locator } from "@playwright/test";
 import { storefrontLabels, storefrontLocales } from "../../lib/storefront/localization";
 import { marketingCopy } from "../../lib/storefront/marketing-copy";
 import { cartLabels } from "../../lib/cart/labels";
+import { brandNames } from "../../data/brands";
 
 // Collect actual browser errors, not 404 resource console noise. Never mock the app.
 const test = base.extend({
@@ -39,7 +40,19 @@ async function noOverflow(page: Page) {
     .toBeLessThanOrEqual(page.viewportSize()!.width + 1);
 }
 
-// SOURCE ONLY under A-stage. CSS viewport geometry is not physical touch/zoom proof.
+async function expectInformationalBrands(region: Locator, locale: typeof storefrontLocales[number]) {
+  const labels = marketingCopy[locale].directory;
+  const rows = region.getByRole("listitem");
+  await expect(rows).toHaveCount(16);
+  await expect(rows.locator("span")).toHaveText([...brandNames].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase(), "en")));
+  await expect(rows.locator("p")).toHaveText(Array(16).fill(labels.unpublished));
+  await expect(region.getByRole("link")).toHaveCount(0);
+  await expect(rows.locator('a, button, [role="link"], [role="button"], [tabindex]')).toHaveCount(0);
+  await expect(region.getByText(labels.information, { exact: true })).toBeVisible();
+  await expect(region.locator('[aria-live="polite"]')).toHaveText(labels.resultMany.replace("{count}", "16"));
+}
+
+// CSS viewport geometry is not physical touch/zoom proof.
 for (const scenario of [
   { locale: "en", width: 320 }, { locale: "hu", width: 390 },
   { locale: "ko", width: 430 }, { locale: "en", width: 1280 },
@@ -58,7 +71,7 @@ for (const scenario of [
       expect(box!.x + box!.width).toBeLessThanOrEqual(width + 1);
     }
     const directory = page.getByRole("region", { name: marketingCopy[locale].directory.browse, exact: true });
-    await expect(directory.getByRole("link")).toHaveCount(0);
+    await expectInformationalBrands(directory, locale);
     const letters = directory.getByRole("button");
     await expect(letters).toHaveCount(27);
     for (const letter of await letters.all()) {
@@ -79,7 +92,9 @@ for (const scenario of [
     await expect(all).toHaveCSS("outline-style", "solid");
     expect(parseFloat(await all.evaluate(node => getComputedStyle(node).outlineWidth))).toBeGreaterThan(0);
     for (const letter of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
-      await expect(directory.getByRole("button", { name: letter, exact: true })).toBeDisabled();
+      const control = directory.getByRole("button", { name: letter, exact: true });
+      if (brandNames.some(brand => brand[0].toUpperCase() === letter)) await expect(control).toBeEnabled();
+      else await expect(control).toBeDisabled();
     }
     await noOverflow(page);
   });
@@ -296,19 +311,29 @@ for (const locale of storefrontLocales) {
     await visit(page, `/${locale}/brands`);
     const section = page.getByRole("region", { name: directory.browse, exact: true });
     const search = page.getByRole("searchbox", { name: directory.searchLabel });
-    await expect(section.getByRole("listitem")).toHaveCount(0);
-    await expect(section.getByRole("link")).toHaveCount(0);
-    await expect(section.getByRole("heading", { name: labels.empty, exact: true })).toBeVisible();
-    await expect(section.getByRole("button", { name: "R", exact: true })).toBeDisabled();
+    await expectInformationalBrands(section, locale);
+    await expect(section.getByRole("button", { name: "A", exact: true })).toBeEnabled();
+    const letter = section.getByRole("button", { name: "R", exact: true });
+    await expect(letter).toBeEnabled();
+    await expect(section.getByRole("button", { name: "Z", exact: true })).toBeDisabled();
+    await letter.press("Space");
+    await expect(letter).toHaveAttribute("aria-pressed", "true");
+    await expect(section.getByRole("listitem")).toHaveCount(1);
     await noOverflow(page);
     await search.fill("round");
-    await expect(section.getByRole("listitem")).toHaveCount(0);
+    await expect(section.getByRole("listitem")).toHaveCount(1);
+    await expect(section.getByRole("listitem").locator("span")).toHaveText("Round Lab");
+    await expect(section.getByRole("listitem").locator("p")).toHaveText(directory.unpublished);
+    await expect(section.getByRole("link")).toHaveCount(0);
+    await expect(section.locator('[aria-live="polite"]')).toHaveText(directory.resultOne.replace("{count}", "1"));
     await search.fill("zzzz-no-such-brand");
-    await expect(section.getByRole("heading", { name: labels.empty, exact: true })).toBeVisible();
+    await expect(section.getByRole("heading", { name: directory.empty, exact: true })).toBeVisible();
     await expect(section.getByRole("listitem")).toHaveCount(0);
+    await expect(section.locator('[aria-live="polite"]')).toHaveText(directory.resultMany.replace("{count}", "0"));
     await search.fill("");
     await section.getByRole("button", { name: directory.all, exact: true }).press("Enter");
-    await expect(section.getByRole("listitem")).toHaveCount(0);
+    await expect(section.getByRole("button", { name: directory.all, exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expectInformationalBrands(section, locale);
     await noOverflow(page);
   });
 
