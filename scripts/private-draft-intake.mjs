@@ -385,7 +385,68 @@ function exportChangeCsv(values) {
   } finally { for (const proof of attestations) fs.closeSync(proof.fd); }
 }
 
+// WEB45: isolated guarded diagnostic; the four historical modes stay unchanged.
+function identityResult(code, pairCodes = [], subCode = null) {
+  return { operation: "reconcile-id", ok: ["DECLARED_IDENTITY_MATCH_ONLY", "DECLARED_IDENTITY_MISMATCH"].includes(code), code, pairCodes, subCode,
+    identityReconciliation: "NOT_ERP_ATTESTED", trustLayers: { L1: "NOT_VERIFIED", L2: "NOT_VERIFIED", L3: "NOT_VERIFIED", L4: "NOT_VERIFIED" },
+    releaseDecision: "BLOCKED", readyForLivePublication: false, readyForCheckout: false, trustedForLiveUse: false };
+}
+function reconcileLocalIdentity(args, environment) {
+  try {
+    if (types.isProxy(args) || !Array.isArray(args) || args.length > 7 || Reflect.ownKeys(args).length !== args.length + 1) return identityResult("INVALID_OR_UNTRUSTED_INPUT");
+    const input = [];
+    for (let i = 0; i < args.length; i++) {
+      const d = Object.getOwnPropertyDescriptor(args, String(i));
+      if (!d || !("value" in d) || typeof d.value !== "string" || !d.value || d.value.length > 1024 || /[\u0000-\u001f\u007f]/.test(d.value)) return identityResult("INVALID_OR_UNTRUSTED_INPUT");
+      input.push(d.value);
+    }
+    if (!environment || typeof environment !== "object" || types.isProxy(environment) || Array.isArray(environment)) return identityResult("INVALID_OR_UNTRUSTED_INPUT");
+    const safeEnvironment = Object.create(null);
+    const environmentKeys = ["NODE_ENV", "HANAPURE_DRAFT_PREVIEW_LOCAL", "APP_ENV", "VERCEL", "VERCEL_ENV", "NETLIFY", "CF_PAGES", "DEPLOYMENT_ENV"];
+    let ancestor = Object.getPrototypeOf(environment), depth = 0;
+    while (ancestor !== null) {
+      if (types.isProxy(ancestor) || ++depth > 4 || environmentKeys.some(key => Object.getOwnPropertyDescriptor(ancestor, key))) return identityResult("INVALID_OR_UNTRUSTED_INPUT");
+      ancestor = Object.getPrototypeOf(ancestor);
+    }
+    for (const key of environmentKeys) {
+      const d = Object.getOwnPropertyDescriptor(environment, key);
+      if (d && !("value" in d)) return identityResult("INVALID_OR_UNTRUSTED_INPUT");
+      safeEnvironment[key] = d?.value;
+    }
+    localOnly(safeEnvironment);
+    const values = new Map();
+    if ((input.length - 1) % 2) return identityResult("INVALID_OR_UNTRUSTED_INPUT");
+    for (let i = 1; i < input.length; i += 2) {
+      const key = input[i], value = input[i + 1];
+      if (!["--file", "--candidate-id", "--erp-public-id"].includes(key) || values.has(key) || value.startsWith("--")) return identityResult("INVALID_OR_UNTRUSTED_INPUT");
+      values.set(key, value);
+    }
+    if (!values.has("--candidate-id")) return identityResult("NO_CANDIDATE");
+    const candidate = values.get("--candidate-id"), erp = values.get("--erp-public-id");
+    // Local declarations must be lower-case; draft identity remains case-insensitive.
+    if (!isPublicId(candidate) || candidate !== candidate.toLowerCase()) return identityResult("INVALID_OR_UNTRUSTED_INPUT");
+    if (!values.has("--file")) return identityResult("PRIVATE_INPUT_BLOCKED", [], "invalid_arguments");
+    if (!isPublicId(erp) || erp !== erp.toLowerCase()) return identityResult("ERP_LOGICAL_ID_NOT_ATTESTED");
+    const checked = diagnoseDraft(readPrivate(values.get("--file")));
+    if (!checked.ok) return identityResult("DRAFT_STRUCTURE_INVALID");
+    if (checked.count !== 1 || checked.records.length !== 1) return identityResult("MULTIPLE_DRAFTS_AMBIGUOUS");
+    const draft = checked.records[0].publicId.toLowerCase(), pairs = [];
+    if (draft !== candidate) pairs.push("DRAFT_CANDIDATE_MISMATCH");
+    if (draft !== erp) pairs.push("DRAFT_ERP_MISMATCH");
+    if (candidate !== erp) pairs.push("CANDIDATE_ERP_MISMATCH");
+    return identityResult(pairs.length ? "DECLARED_IDENTITY_MISMATCH" : "DECLARED_IDENTITY_MATCH_ONLY", pairs);
+  } catch (error) {
+    const code = error instanceof IntakeFailure && ["local_development_required", "private_path_required", "input_too_large", "input_unavailable", "invalid_encoding", "invalid_json"].includes(error.message) ? error.message : "input_unavailable";
+    return identityResult(["invalid_encoding", "invalid_json"].includes(code) ? "DRAFT_STRUCTURE_INVALID" : "PRIVATE_INPUT_BLOCKED", [], code);
+  }
+}
 export function runIntake(args, environment = process.env) {
+  if (types.isProxy(args)) return identityResult("INVALID_OR_UNTRUSTED_INPUT");
+  if (Array.isArray(args)) {
+    const first = Object.getOwnPropertyDescriptor(args, "0");
+    if (first && !("value" in first)) return identityResult("INVALID_OR_UNTRUSTED_INPUT");
+    if (first?.value === "reconcile-id") return reconcileLocalIdentity(args, environment);
+  }
   try {
     localOnly(environment);
     const [command, ...rest] = args;
