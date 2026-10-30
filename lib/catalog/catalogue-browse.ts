@@ -2,7 +2,7 @@ import type { EditorialLocale, EditorialProduct } from "./editorial-catalogue";
 import { comparisonOptions } from "../comparison/compare-selection";
 
 export const CATALOGUE_PAGE_SIZE = 12;
-export type CatalogueBrowse = Readonly<{ page: number; pageSpecified: boolean; withLocaleInfo: boolean; withLocaleImage: boolean; pickFirst?: string }>;
+export type CatalogueBrowse = Readonly<{ page: number; pageSpecified: boolean; withLocaleInfo: boolean; withLocaleImage: boolean; pickFirst?: string; view?: "list" }>;
 const publicIdentity = (value: unknown): value is string => typeof value === "string" &&
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value);
 
@@ -11,6 +11,7 @@ export function readCatalogueBrowse(params: Readonly<Record<string, unknown>> = 
   const raw = params.page;
   const pageSpecified = typeof raw === "string" && /^[1-9][0-9]{0,5}$/.test(raw);
   return { page: pageSpecified ? Number(raw) : 1, pageSpecified,
+    ...(params.view === "list" ? { view: "list" as const } : {}),
     withLocaleInfo: params.withLocaleInfo === "1", withLocaleImage: params.withLocaleImage === "1",
     ...(publicIdentity(params.pickFirst) ? { pickFirst: params.pickFirst } : {}) };
 }
@@ -37,6 +38,7 @@ export function catalogueBrowseQuery(query: string, browse: CatalogueBrowse, for
     if (values.length === 1 && values[0] && (key !== "sort" || values[0] === "name-asc" || values[0] === "name-desc")) params.set(key, values[0]);
   }
   if (browse.withLocaleInfo) params.set("withLocaleInfo", "1");
+  if (browse.view === "list") params.set("view", "list");
   if (browse.withLocaleImage) params.set("withLocaleImage", "1");
   const page = Number.isSafeInteger(browse.page) && browse.page > 0 && browse.page <= 999999 ? browse.page : 1;
   if (page > 1 || forcePage) params.set("page", String(page));

@@ -9,7 +9,7 @@ import { storefrontHref, storefrontLabels } from "@/lib/storefront/localization"
 import { carryShoppingPlan, type ShoppingPlan } from "@/lib/catalog/catalogue-shopping-plan";
 
 /** Live input wins over submitted q; unsafe/oversized context keeps a clean detail link. */
-export function suggestionDetailHref(slug: string, routeLocale: EditorialLocale | null, query: string, brand = "", sort?: string): string {
+export function suggestionDetailHref(slug: string, routeLocale: EditorialLocale | null, query: string, brand = "", sort?: string, view?: "list"): string {
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) return storefrontHref("/products", routeLocale);
   const base = storefrontHref(`/products/${slug}`, routeLocale);
   try {
@@ -18,17 +18,19 @@ export function suggestionDetailHref(slug: string, routeLocale: EditorialLocale 
     if (query.trim()) params.set("q", query.trim());
     if (brand.trim()) params.set("brand", brand.trim());
     if (sort === "name-asc" || sort === "name-desc") params.set("sort", sort);
+    if (view === "list") params.set("view", "list");
     const value = params.toString();
     const href = base + (value ? `?${value}` : "");
     return href.length <= 8192 ? href : base;
   } catch { return base; }
 }
 
-export default function SearchSuggestions({ products, initialQuery, locale, routeLocale, appliedCriteria, plan, children }: {
+export default function SearchSuggestions({ products, initialQuery, locale, routeLocale, appliedCriteria, plan, view, children }: {
   products: readonly SearchSuggestionProduct[]; initialQuery: string;
   locale: EditorialLocale; routeLocale: EditorialLocale | null; children: ReactNode;
   appliedCriteria: Readonly<{ brand: string; sort?: "name-asc" | "name-desc" }>;
   plan?: ShoppingPlan;
+  view?: "list";
 }) {
   const [query, setQuery] = useState(initialQuery);
   const [dismissed, setDismissed] = useState(false);
@@ -62,7 +64,7 @@ export default function SearchSuggestions({ products, initialQuery, locale, rout
     if (!visible || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.nativeEvent.isComposing) return;
     const input = field.current?.querySelector<HTMLInputElement>("#catalogue-search");
     const allowed = new Set(matches.map(product => {
-      const detail = suggestionDetailHref(product.slug, routeLocale, query, appliedCriteria.brand, appliedCriteria.sort);
+      const detail = suggestionDetailHref(product.slug, routeLocale, query, appliedCriteria.brand, appliedCriteria.sort, view);
       return plan ? carryShoppingPlan(detail, plan) : detail;
     }).filter(href => href !== null));
     const links = Array.from(field.current?.querySelectorAll<HTMLAnchorElement>("a[data-search-suggestion]") ?? [])
@@ -89,7 +91,7 @@ export default function SearchSuggestions({ products, initialQuery, locale, rout
       </p>
       {visible && matches.length > 0 && <ul aria-label={labels.heading} className="mt-2 max-h-64 space-y-1 overflow-y-auto">
         {matches.map(product => {
-          const detail = suggestionDetailHref(product.slug, routeLocale, query, appliedCriteria.brand, appliedCriteria.sort);
+          const detail = suggestionDetailHref(product.slug, routeLocale, query, appliedCriteria.brand, appliedCriteria.sort, view);
           const href = plan ? carryShoppingPlan(detail, plan) : detail;
           return <li key={product.publicId} className="min-w-0">
           {href === null ? <span role="status" className="block break-words text-sm">{existing.planLimit}</span> : <Link href={href} data-search-suggestion=""

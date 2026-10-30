@@ -45,7 +45,8 @@ export function shoppingPlanHref(path: string, query: string, lines: readonly Ca
   if (!/^\/(?:(?:en|hu|ko)\/)?products(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)?$/.test(path) || query.length > MAX_PORTABLE_LINK ||
     (fragment && !/^#catalogue-result-[0-9a-f-]{36}$/.test(fragment))) return null;
   const params = new URLSearchParams(query);
-  if ([...params.keys()].some(key => !["q", "brand", "sort", "withLocaleInfo", "withLocaleImage", "page", "pickFirst"].includes(key))) return null;
+  if ([...params.keys()].some(key => !["q", "brand", "sort", "withLocaleInfo", "withLocaleImage", "page", "pickFirst", "view"].includes(key))) return null;
+  if (params.has("view") && (params.getAll("view").length !== 1 || params.get("view") !== "list")) return null;
   if (lines.length) {
     const payload = portablePayload(lines);
     if (!payload) return null;

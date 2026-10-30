@@ -511,6 +511,21 @@ async function runJourney() {
       mkdirSync(dirname(target), { recursive: true });
       copyFileSync(source, target);
     }
+    // Exact tracked script leaves required by copied lib/catalog diagnostics.
+    // Fixture-only copy: no execution of private-intake/preflight CLI and no real intake files.
+    for (const file of [
+      "scripts/first-real-sku-evidence-preflight.mjs",
+      "scripts/private-draft-intake.mjs",
+    ]) {
+      workspace.verify();
+      const source = join(repo, file);
+      if (lstatSync(source).isSymbolicLink() || !lstatSync(source).isFile()) {
+        throw new Error("Refusing non-regular fixture diagnostic dependency");
+      }
+      const target = join(fixtureRoot, file);
+      mkdirSync(dirname(target), { recursive: true });
+      copyFileSync(source, target);
+    }
     workspace.verify();
     // Only the disposable copy receives test content; real source stays empty.
     writeFileSync(join(fixtureRoot, "data", "catalogue.ts"),

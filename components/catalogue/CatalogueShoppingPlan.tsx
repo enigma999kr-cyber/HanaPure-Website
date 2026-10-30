@@ -1,6 +1,7 @@
 "use client";
 
-import { createContext, useContext, useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useId, useRef, useState, useSyncExternalStore, useTransition, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
 import { storefrontHref, storefrontLabels } from "@/lib/storefront/localization";
 import { addPlanProducts, setPlanQuantity, shoppingPlanHref, shoppingPlanCartHref, planIntakeHref, shoppingPlanShareLink, type PlanIntakeContext, type ShoppingPlan, type PlanChange } from "@/lib/catalog/catalogue-shopping-plan";
@@ -44,6 +45,9 @@ export default function CatalogueShoppingPlan({ plan, products, publishedIds, vi
   const ids = selection.witness === witness ? selection.ids : [];
   const [message, setMessage] = useState("");
   const pending = useRef(false);
+  const router = useRouter(), [transitionPending, startTransition] = useTransition();
+  const region = useRef<HTMLElement>(null);
+  const navigation = useRef<{ target: string; lines: string; witness: string; from: string; focus: Element | null; observed: boolean; failed: boolean } | null>(null);
   const currentHref = valid ? shoppingPlanHref(path, query, plan.lines) : null;
   const ready = useSyncExternalStore(subscribeReady, clientReady, serverReady);
   const cart = useBrowserCart();
@@ -58,7 +62,26 @@ export default function CatalogueShoppingPlan({ plan, products, publishedIds, vi
   const fullOrder = !view.query && !view.brand && view.sort === "order";
   const attempt = { reviewWitness, cart };
   const active = useRef<{ attempt: typeof attempt; location: string } | null>(null);
-  useEffect(() => { active.current = { attempt, location: typeof window === "undefined" ? "" : window.location.href }; return () => { active.current = null; }; });
+  useEffect(() => {
+    const location = typeof window === "undefined" ? "" : window.location.href;
+    active.current = { attempt, location };
+    const next = navigation.current;
+    if (next && !next.failed) {
+      if (transitionPending) next.observed = true;
+      // Neither router.push returning nor an unrelated render proves RSC state committed.
+      if (location === next.target && valid && witness !== next.witness && JSON.stringify(plan.lines) === next.lines) {
+        navigation.current = null;
+        pending.current = false;
+        setMessage(`${labels.planLines}: ${plan.lines.length} · ${labels.planUnits}: ${plan.lines.reduce((sum, line) => sum + BigInt(line.quantity), BigInt(0))}`);
+        if (next.focus && !next.focus.isConnected && document.activeElement === document.body) region.current?.focus({ preventScroll: true });
+      } else if ((location !== next.from && location !== next.target) || (next.observed && !transitionPending)) {
+        // Failed/aborted navigation stays locked until this workspace is remounted.
+        next.failed = true;
+        setMessage(labels.planChanged);
+      }
+    }
+    return () => { active.current = null; };
+  });
   function currentWorkspace() {
     return ready && valid && currentHref && active.current?.attempt === attempt && active.current.location === window.location.href;
   }
@@ -76,8 +99,17 @@ export default function CatalogueShoppingPlan({ plan, products, publishedIds, vi
     const href = shoppingPlanHref(path, query, next);
     if (!href || !currentHref) { setMessage(labels.planLimit); return; }
     if (pending.current) return;
-    try { pending.current = true; window.location.assign(href); }
-    catch { pending.current = false; setMessage(labels.planChanged); }
+    try {
+      const target = new URL(href, window.location.href), current = new URL(window.location.href);
+      if (target.origin !== current.origin || target.pathname !== current.pathname || target.hash) { setMessage(labels.planChanged); return; }
+      pending.current = true;
+      navigation.current = { target: target.href, lines: JSON.stringify(next), witness, from: current.href,
+        focus: document.activeElement, observed: false, failed: false };
+      startTransition(() => router.push(href, { scroll: false }));
+    } catch {
+      if (navigation.current) navigation.current.failed = true;
+      setMessage(labels.planChanged);
+    }
   }
   function change(result: PlanChange) {
     if (!allowAction()) return;
@@ -98,7 +130,7 @@ export default function CatalogueShoppingPlan({ plan, products, publishedIds, vi
       });
     }, add: chosen => change(addPlanProducts(plan, chosen, visibleIds, publicProducts)) }}>
     {children}
-    <section aria-labelledby={heading} className="mt-8 min-w-0 rounded-2xl border border-hanapure-border bg-hanapure-white p-5">
+    <section ref={region} tabIndex={-1} aria-labelledby={heading} className="mt-8 min-w-0 rounded-2xl border border-hanapure-border bg-hanapure-white p-5">
       <h2 id={heading} className="break-words text-2xl">{labels.planHeading}</h2>
       <p className="mt-3 break-words text-sm">{labels.planNotice}</p>
       {!valid ? <><p role="status" className="mt-3 break-words">{labels.planInvalid}</p><a href={clear} className={`${control} mt-3 inline-flex`}>{labels.planDiscard}</a></> : <>
@@ -262,11 +294,30 @@ export function ShoppingPlanCardActions({ publicId }: { publicId: string }) {
 
 /** Preserve the native GET form; refuse an oversized generated plan URL before submission. */
 export function ShoppingPlanSearchGuard({ path, locale, children }: { path: string; locale: EditorialLocale; children: ReactNode }) {
-  const [refused, setRefused] = useState(false);
+  const router = useRouter(), [message, setMessage] = useState("");
   return <div className="contents" onSubmit={event => {
-    if (!(event.target instanceof HTMLFormElement)) return;
-    const values = new URLSearchParams();
-    for (const [key, value] of new FormData(event.target)) if (typeof value === "string") values.append(key, value);
-    if ((path + `?${values}`).length > 8192) { event.preventDefault(); setRefused(true); }
-  }}>{children}{refused && <p role="status" className="mt-3 break-words">{storefrontLabels[locale].planLimit}</p>}</div>;
+    if (event.defaultPrevented || !(event.target instanceof HTMLFormElement) || !event.target.hasAttribute("data-catalogue-search")) return;
+    const refuse = () => { event.preventDefault(); setMessage(storefrontLabels[locale].planLimit); };
+    try {
+      const form = event.target, submitter = (event.nativeEvent as SubmitEvent).submitter;
+      if (!/^\/(?:(?:en|hu|ko)\/)?products$/.test(path) || new URL(window.location.href).pathname !== path ||
+        !event.currentTarget.contains(form) || form.getAttribute("action") !== path || form.method.toLowerCase() !== "get" ||
+        (form.target && form.target !== "_self")) { refuse(); return; }
+      if (submitter && (!(submitter instanceof HTMLElement) ||
+        (submitter.hasAttribute("formaction") && submitter.getAttribute("formaction") !== path) ||
+        (submitter.hasAttribute("formmethod") && submitter.getAttribute("formmethod")?.toLowerCase() !== "get") ||
+        (submitter.hasAttribute("formtarget") && submitter.getAttribute("formtarget") !== "_self") ||
+        (submitter instanceof HTMLInputElement && submitter.type === "image"))) { refuse(); return; }
+      const values = new URLSearchParams();
+      for (const [key, value] of new FormData(form, submitter)) {
+        if (typeof value !== "string") { refuse(); return; }
+        values.append(key, value);
+      }
+      const href = path + `?${values}`;
+      if (href.length > 8192) { refuse(); return; }
+      event.preventDefault();
+      setMessage("");
+      router.push(href, { scroll: false });
+    } catch { event.preventDefault(); setMessage(storefrontLabels[locale].planChanged); }
+  }}>{children}{message && <p role="status" className="mt-3 break-words">{message}</p>}</div>;
 }

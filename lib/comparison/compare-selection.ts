@@ -66,11 +66,15 @@ export function comparisonHref(path: string, pair: readonly [{ publicId: string 
   const first = identity(pair[0].publicId), second = identity(pair[1].publicId);
   if (!first || !second || first === second) return null;
   const source = new URLSearchParams(catalogueQuery);
+  // A refused parent context must not become a shorter, apparently valid pair URL.
+  if ([...source.keys()].some(key => !["q", "brand", "sort", "view", "compareFirst", "compareSecond"].includes(key)) ||
+    (source.has("view") && (source.getAll("view").length !== 1 || source.get("view") !== "list"))) return null;
   const params = new URLSearchParams();
   for (const key of ["q", "brand", "sort"]) {
     const values = source.getAll(key);
     if (values.length === 1 && values[0] && (key !== "sort" || values[0] === "name-asc" || values[0] === "name-desc")) params.set(key, values[0]);
   }
+  if (source.getAll("view").length === 1 && source.get("view") === "list") params.set("view", "list");
   params.set("compareFirst", first); params.set("compareSecond", second);
   const href = `${path}?${params}`;
   return href.length <= 8192 ? href : null;

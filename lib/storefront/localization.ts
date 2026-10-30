@@ -34,6 +34,7 @@ export function switchLocalePath(path: string, locale: EditorialLocale): string 
 
 export const storefrontLabels = {
   en: {
+    layoutSelector: "Catalogue view", gridView: "Grid", listView: "List", currentView: "Current view",
     comparisonSelectionChanged: "The results or selection changed. Review the pair and try again.",
     comparisonNavigationFailed: "Could not open the comparison. Please try again.",
     planSearch: "Search planned products", planBrand: "Planned product brand", planSort: "Plan display order", planOriginal: "Original plan order", planResetView: "Clear plan view",
@@ -82,6 +83,7 @@ export const storefrontLabels = {
     sortBy: "Sort by", defaultOrder: "Default order", nameAscending: "Name A–Z", nameDescending: "Name Z–A",
   },
   hu: {
+    layoutSelector: "Katalógusnézet", gridView: "Rács", listView: "Lista", currentView: "Aktuális nézet",
     comparisonSelectionChanged: "A találatok vagy a kiválasztás megváltozott. Ellenőrizze a termékpárt, és próbálja újra.",
     comparisonNavigationFailed: "Az összehasonlítás nem nyitható meg. Próbálja újra.",
     planSearch: "Tervezett termékek keresése", planBrand: "Tervezett termék márkája", planSort: "Terv megjelenítési sorrendje", planOriginal: "A terv eredeti sorrendje", planResetView: "Tervnézet szűrőinek törlése",
@@ -130,6 +132,7 @@ export const storefrontLabels = {
     sortBy: "Rendezés", defaultOrder: "Alapértelmezett sorrend", nameAscending: "Név A–Z", nameDescending: "Név Z–A",
   },
   ko: {
+    layoutSelector: "상품 목록 보기", gridView: "격자", listView: "목록", currentView: "현재 보기",
     comparisonSelectionChanged: "검색 결과나 선택 항목이 바뀌었습니다. 비교할 두 상품을 확인하고 다시 시도해 주세요.",
     comparisonNavigationFailed: "상품 비교를 열 수 없습니다. 다시 시도해 주세요.",
     planSearch: "계획한 상품 검색", planBrand: "계획한 상품 브랜드", planSort: "계획 표시 순서", planOriginal: "계획 원래 순서", planResetView: "계획 보기 초기화",
