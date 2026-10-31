@@ -16,7 +16,7 @@ import { plannedReview, changePlannedLines, readFreshPlanCart, EMPTY_PLAN_VIEW, 
 
 /** An explicit restore intent lives only in this client module, never in storage/URL.
  * It is consumed once after the target URL AND published plan props have committed. */
-let restoreIntent: { target: string; from: string; lines: string; expires: number } | null = null;
+let restoreIntent: { target: string; from: string; lines: string; expires: number; anchorTop: number | null } | null = null;
 
 /** Manual last-saved copy only. A refreshed summary is not user acknowledgement. */
 export function ShoppingPlanRecovery({ plan, path, query, publishedIds, locale, disabled }: {
@@ -26,6 +26,7 @@ export function ShoppingPlanRecovery({ plan, path, query, publishedIds, locale, 
   const [saved, setSaved] = useState<Recovery | null>(null), [location, setLocation] = useState("");
   const [message, setMessage] = useState(""), [needsReview, setNeedsReview] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const restoringCopy = useRef<{ target: string; from: string; lines: string; expires: number } | null>(null);
   const [activation, setActivation] = useState<"check" | "save" | null>(null);
   const activationTimer = useRef<ReturnType<typeof setTimeout> | null>(null), activationSequence = useRef(0);
   const confirmedSave = useRef<{ raw: string; href: string } | null>(null);
@@ -35,7 +36,7 @@ export function ShoppingPlanRecovery({ plan, path, query, publishedIds, locale, 
   const active = useRef<{ witness: string; location: string } | null>(null);
   const witness = JSON.stringify([plan, path, query, publishedIds, locale, disabled]);
   const products = publishedIds.map(publicId => ({ publicId }));
-  const lock = () => { locked.current = true; revision.current++; setNeedsReview(true); setMessage(labels.planRecoveryConflict); };
+  const lock = (unavailable = false) => { locked.current = true; revision.current++; setNeedsReview(true); setMessage(unavailable ? labels.planRecoveryUnavailable : labels.planRecoveryConflict); };
   const load = () => {
     let next: Recovery;
     try { next = readPlanRecovery(window.localStorage, products); }
@@ -49,7 +50,15 @@ export function ShoppingPlanRecovery({ plan, path, query, publishedIds, locale, 
     const before = observed.current, next = load();
     if (before !== undefined && before !== next.raw) lock();
     // A committed target remount/render ends only the intentional Restore's busy state.
-    if (plan.status === "ready" && new URL(window.location.href).searchParams.has("cartPlan")) setRestoring(false);
+    const completed = restoringCopy.current;
+    if (completed) {
+      if (Date.now() > completed.expires || (window.location.href !== completed.from && window.location.href !== completed.target)) {
+        setRestoring(false); setMessage(labels.planChanged); restoringCopy.current = null;
+      } else if (completed.target === window.location.href && plan.status === "ready" &&
+        completed.lines === JSON.stringify(plan.lines) && resolvePortableLines(plan.lines, products)) {
+        setRestoring(false); setMessage(labels.planRestored); restoringCopy.current = null;
+      } // URL alone or mismatched server props is still unconfirmed, not success.
+    } else if (plan.status === "ready" && new URL(window.location.href).searchParams.has("cartPlan")) setRestoring(false);
     const changed = (event: StorageEvent) => {
       if (event.key !== PLAN_RECOVERY_KEY && event.key !== null) return;
       load(); lock(); // Read-only summary refresh must NEVER re-arm destructive actions.
@@ -70,7 +79,8 @@ export function ShoppingPlanRecovery({ plan, path, query, publishedIds, locale, 
   function reviewed() {
     if (!guard() || locked.current || !saved) return false;
     let fresh: Recovery;
-    try { fresh = readPlanRecovery(window.localStorage, products); } catch { lock(); load(); return false; }
+    try { fresh = readPlanRecovery(window.localStorage, products); } catch { lock(true); load(); return false; }
+    if (fresh.status === "unavailable") { lock(true); load(); return false; }
     if (fresh.raw !== saved.raw || fresh.status !== saved.status) { lock(); load(); return false; }
     return true;
   }
@@ -92,7 +102,7 @@ export function ShoppingPlanRecovery({ plan, path, query, publishedIds, locale, 
   const idleActivationStyle = { transitionProperty: "none" };
   const activationStyle = { ...idleActivationStyle, backgroundColor: "var(--hanapure-beige)", color: "var(--hanapure-text)", boxShadow: "inset 0 -3px 0 var(--hanapure-text)" };
   const control = "min-h-11 max-w-full rounded-xl border border-hanapure-border px-4 py-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50";
-  return <section ref={recoveryRegion} tabIndex={-1} aria-label={labels.planRecoveryHeading} aria-busy={restoring}
+  return <section ref={recoveryRegion} data-plan-recovery tabIndex={-1} aria-label={labels.planRecoveryHeading} aria-busy={restoring}
     className={`mt-5 min-w-0 border-t border-hanapure-border pt-5 focus-visible:outline-2 focus-visible:outline-offset-2 ${shoppingReadingClass(locale)}`}>
     <h3 className="break-words text-lg">{labels.planRecoveryHeading}</h3>
     <p className="mt-2 break-words text-sm">{labels.planRecoveryNotice}</p>
@@ -125,7 +135,9 @@ export function ShoppingPlanRecovery({ plan, path, query, publishedIds, locale, 
           if (!reviewed() || new URL(window.location.href).searchParams.has("cartPlan")) { event.preventDefault(); return; }
           revision.current++;
           restoreIntent = { target: new URL(saved.href, window.location.href).href, from: window.location.href,
-            lines: JSON.stringify(saved.lines), expires: Date.now() + 30_000 };
+            lines: JSON.stringify(saved.lines), expires: Date.now() + 30_000,
+            anchorTop: recoveryRegion.current?.getBoundingClientRect().top ?? null };
+          restoringCopy.current = restoreIntent;
           setRestoring(true); setMessage(labels.planPending);
         }}>{labels.planRecoveryRestore}</Link>}
       <button type="button" className={control} disabled={disabled || restoring || needsReview || !saved || saved.raw === null} onClick={() => {
@@ -144,7 +156,7 @@ export function ShoppingPlanRecovery({ plan, path, query, publishedIds, locale, 
         acknowledge("check");
         if (!guard(true)) return;
         revision.current++;
-        if (restoring) { restoreIntent = null; setRestoring(false); }
+        if (restoring) { restoreIntent = null; restoringCopy.current = null; setRestoring(false); }
         const next = load();
         // Only an explicit successful read is acknowledgement. Denied reads stay locked.
         locked.current = next.status === "unavailable"; setNeedsReview(locked.current);
@@ -224,8 +236,14 @@ export default function CatalogueShoppingPlan({ plan, products, publishedIds, vi
       else if (location === restore.target && valid && plan.status === "ready" && JSON.stringify(plan.lines) === restore.lines &&
         currentHref && new URL(currentHref, location).href === restore.target && region.current) {
         restoreIntent = null; // Consume before DOM effects: never replay on Back/Forward/render.
-        region.current.scrollIntoView({ block: "start", behavior: "instant" });
-        region.current.focus({ preventScroll: true });
+        const recoveryRegion = region.current.querySelector<HTMLElement>("[data-plan-recovery]");
+        // Retain the Recovery viewport context when restored Plan rows change layout.
+        // Read the newly committed node, never a detached pre-navigation element.
+        if (recoveryRegion && restore.anchorTop !== null && Number.isFinite(restore.anchorTop)) {
+          const offset = recoveryRegion.getBoundingClientRect().top - restore.anchorTop;
+          if (Number.isFinite(offset) && Math.abs(offset) > 1) window.scrollBy({ top: offset, behavior: "instant" });
+        }
+        (recoveryRegion ?? region.current).focus({ preventScroll: true });
         setMessage(labels.planRestored);
       }
     }

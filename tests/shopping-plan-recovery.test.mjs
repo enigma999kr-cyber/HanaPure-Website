@@ -171,13 +171,23 @@ test('H6 review gate survives URL props changes and damaged copy; Check plus For
 },saved()));
 
 function planUI(props,element){driver.index=0;driver.effects=[];const t=PlanUI(props);const region=nodes(t).find(n=>n.type==='section'&&n.props['aria-labelledby']);region.props.ref.current=element;driver.effects.forEach(fn=>fn());return t;}
-test('UX02 deliberate Restore scrolls/focuses Plan TOP once only after target and props commit; Back does not replay',()=>browser(({location})=>{
- const p=baseProps();ui(p);const restore=link(ui(p));restore.props.onNavigate({preventDefault(){assert.fail('valid restore refused');}});reset();location.href='https://synthetic.invalid'+restore.props.href;
+test('UX02 deliberate Restore preserves viewport and focuses Recovery once only after exact target/props commit; Back does not replay',()=>browser(({location})=>{
+ // WEB50 Owner-approved contract migration: WEB49 TOP-scroll history remains unchanged.
+ const p=baseProps();ui(p);const restore=link(ui(p));assert.equal(restore.props.scroll,false);restore.props.onNavigate({preventDefault(){assert.fail('valid restore refused');}});reset();
  const previous=Object.getOwnPropertyDescriptor(globalThis,'document'),body={};Object.defineProperty(globalThis,'document',{configurable:true,value:{body,activeElement:body}});
- try{const scrolls=[],focuses=[],element={scrollIntoView:x=>scrolls.push(x),focus:x=>focuses.push(x)};
+ try{const scrolls=[],focuses=[],rootFocus=[],recovery={focus:x=>focuses.push(x)},element={scrollIntoView:x=>scrolls.push(x),focus:x=>rootFocus.push(x),querySelector:s=>{assert.equal(s,'[data-plan-recovery]');return recovery;}};
  const props={plan:{status:'empty',lines:[]},path:'/products',query:'?view=list',products:products.map(x=>({...x,slug:'synthetic-'+x.publicId,name:'SYNTHETIC',brand:'beplain'})),publishedIds:products.map(x=>x.publicId),visibleIds:[],locale:'en',routeLocale:'en'};
- planUI(props,element);assert.equal(scrolls.length,0);props.plan=readShoppingPlan(new URL(location.href).searchParams.get('cartPlan'),products);const browse=new URLSearchParams(new URL(location.href).search);browse.delete('cartPlan');props.query='?'+browse;let t=planUI(props,element);assert.deepEqual(scrolls,[{block:'start',behavior:'instant'}]);assert.deepEqual(focuses,[{preventScroll:true}]);t=planUI(props,element);assert.ok(text(t).includes(storefrontLabels.en.planRestored));
- location.href='https://synthetic.invalid/products?view=list';props.plan={status:'empty',lines:[]};planUI(props,element);location.href='https://synthetic.invalid'+restore.props.href;props.plan=readShoppingPlan(new URL(location.href).searchParams.get('cartPlan'),products);planUI(props,element);assert.equal(scrolls.length,1);
+ planUI(props,element);assert.equal(focuses.length,0);location.href='https://synthetic.invalid'+restore.props.href;
+ planUI(props,element);assert.equal(focuses.length,0);assert.ok(!text(planUI(props,element)).includes(storefrontLabels.en.planRestored));
+ props.plan=readShoppingPlan(new URL(location.href).searchParams.get('cartPlan'),products);const browse=new URLSearchParams(new URL(location.href).search);browse.delete('cartPlan');props.query='?'+browse;
+ planUI(props,element);assert.deepEqual(scrolls,[]);assert.deepEqual(focuses,[{preventScroll:true}]);assert.deepEqual(rootFocus,[]);
+ let t=planUI(props,element);assert.ok(text(t).includes(storefrontLabels.en.planRestored));planUI(props,element);assert.equal(focuses.length,1);
+ location.href='https://synthetic.invalid/products?view=list';props.plan={status:'empty',lines:[]};planUI(props,element);
+ location.href='https://synthetic.invalid'+restore.props.href;props.plan=readShoppingPlan(new URL(location.href).searchParams.get('cartPlan'),products);planUI(props,element);assert.equal(focuses.length,1);
+ reset();planUI(props,element);assert.equal(focuses.length,1);assert.deepEqual(scrolls,[]);
+ // A separately armed but expired intent cannot announce/focus. No real timer or browser claim.
+ location.href='https://synthetic.invalid/products?view=list';reset();ui(p);const expired=link(ui(p));expired.props.onNavigate({preventDefault(){assert.fail('fresh restore refused');}});reset();
+ const now=Date.now;try{Date.now=()=>now()+60001;location.href='https://synthetic.invalid'+expired.props.href;props.plan=readShoppingPlan(new URL(location.href).searchParams.get('cartPlan'),products);props.query='?'+new URLSearchParams([...new URL(location.href).searchParams].filter(([k])=>k!=='cartPlan'));planUI(props,element);assert.ok(!text(planUI(props,element)).includes(storefrontLabels.en.planRestored));assert.equal(focuses.length,1);assert.deepEqual(scrolls,[]);}finally{Date.now=now;}
  }finally{previous?Object.defineProperty(globalThis,'document',previous):delete globalThis.document;}
 },saved()));
 
