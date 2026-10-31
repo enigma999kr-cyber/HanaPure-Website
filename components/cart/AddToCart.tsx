@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useId, useRef, useState } from "react";
 import type { EditorialLocale } from "@/lib/catalog/editorial-catalogue";
-import { storefrontHref } from "@/lib/storefront/localization";
+import { storefrontHref, shoppingReadingClass } from "@/lib/storefront/localization";
 import { cartLabels } from "@/lib/cart/labels";
 import { addCartLine, CART_STORAGE_KEY, inspectStoredCart, serializeCart, validCartId } from "@/lib/cart/cart-state";
 import { parseQuickAddQuantity } from "@/lib/cart/quick-add-quantity";
@@ -11,7 +11,7 @@ import { sameCartSelection } from "@/lib/cart/cart-undo";
 import { changeBrowserCart, useBrowserCart } from "@/lib/cart/browser-cart";
 import { detailCartQuantity, detailSelectionNeedsReload, setDetailCartQuantity, type DetailCartSnapshot, type DetailSelectionResult } from "@/lib/cart/detail-cart-selection";
 
-export const cartControl = "min-h-11 min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] rounded-xl border border-hanapure-border px-4 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text";
+export const cartControl = "min-h-11 min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] rounded-xl border border-hanapure-border px-4 py-2 transition-colors enabled:active:bg-hanapure-beige disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hanapure-text";
 /** Detail-only additive action using the same conservative witnesses as QuickAdd.
  * Synchronous read/write/readback is not atomic cross-tab CAS. */
 function addConfirmed(publicId: string, raw: string, cart: DetailCartSnapshot): DetailSelectionResult | "added" | "overflow" {
@@ -73,7 +73,7 @@ export default function AddToCart({ publicId, locale, routeLocale }: {
   const trustGuard = useRef(true);
   const healthy = selectionTrusted && cart.ready && !cart.invalid && cart.persistent && validCartId(publicId);
   const selectedQuantity = detailCartQuantity(publicId, cart, selectionTrusted);
-  return <section className="mt-8 min-w-0 rounded-xl border border-hanapure-border p-4">
+  return <section className={`mt-8 min-w-0 rounded-xl border border-hanapure-border p-4 ${shoppingReadingClass(locale)}`}>
     <p className="text-sm leading-6 text-hanapure-muted">{labels.notice}</p>
     <form className="mt-4 flex min-w-0 flex-wrap items-end gap-3" onSubmit={event => {
       event.preventDefault();
@@ -95,11 +95,11 @@ export default function AddToCart({ publicId, locale, routeLocale }: {
         {[1, 2, 3].map(value => <button key={value} type="button" aria-label={`${labels.presetQuantity}: ${value}`}
           className={`${cartControl} bg-hanapure-white`} onClick={() => setQuantity(String(value))}>{value}</button>)}
       </fieldset>
-      <button type="submit" disabled={!healthy} className={`${cartControl} bg-hanapure-text text-hanapure-white disabled:opacity-50`}>{labels.add}</button>
+      <button type="submit" disabled={!healthy} className={`${cartControl} bg-hanapure-text text-hanapure-white enabled:active:text-hanapure-text disabled:opacity-50`}>{labels.add}</button>
       <Link href={storefrontHref("/cart", routeLocale)} className={`${cartControl} inline-flex items-center`}>{labels.cart}</Link>
     </form>
     <p role="status" className="mt-3 text-sm">{message}</p>
-    {selectionTrusted && cart.ready && !cart.invalid && cart.persistent && <p role="status" className="mt-4 break-words text-sm">
+    {selectionTrusted && cart.ready && !cart.invalid && cart.persistent && <p role="status" className="mt-4 rounded-xl border border-hanapure-border bg-hanapure-warm-white p-4 break-words text-base font-bold">
       {selectedQuantity === null ? labels.notInBrowserCart : `${labels.inBrowserCart}: ${selectedQuantity}`}
     </p>}
     {selectedQuantity !== null && <ExistingQuantityForm key={publicId} publicId={publicId}

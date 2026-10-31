@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import type { EditorialImage, EditorialLocale } from "@/lib/catalog/editorial-catalogue";
-import { storefrontHref, storefrontLabels } from "@/lib/storefront/localization";
+import { storefrontHref, storefrontLabels, shoppingReadingClass } from "@/lib/storefront/localization";
 import { cartLabels } from "@/lib/cart/labels";
-import { CART_STORAGE_KEY, inspectStoredCart, reconcileCart } from "@/lib/cart/cart-state";
+import { CART_STORAGE_KEY, inspectStoredCart, reconcileCart, cartQuantity } from "@/lib/cart/cart-state";
 import type { CartLine } from "@/lib/cart/cart-state";
 import { changeBrowserCart, resetBrowserCart, restoreBrowserCart, useBrowserCart } from "@/lib/cart/browser-cart";
 import { canUndoCart, createCartUndoPlan, sameCartSelection, type CartUndoPlan } from "@/lib/cart/cart-undo";
@@ -73,7 +73,11 @@ function mergePortableDraft(href: string, cart: DetailCartSnapshot, products: re
       attempted = true;
       return planned.after;
     });
-    if (!result) return { status: "unavailable" };
+    if (!result) {
+      // The shared store can refuse before invoking our callback on a fresh conflict.
+      const latest = readPortableSnapshot(cart);
+      return { status: latest.status === "conflict" ? "conflict" : "unavailable" };
+    }
     if (!result.persistent) return { status: "write-failed" };
     const raw = window.localStorage.getItem(CART_STORAGE_KEY), confirmed = inspectStoredCart(raw);
     if (raw === null || confirmed.invalid || !sameCartSelection(confirmed.lines, planned.after) || portableLocation() !== href ||
@@ -127,7 +131,7 @@ function PortableCartPanel({ products, cart, locale, routeLocale, href, onMerged
     return status === "empty" ? labels.portableEmpty : status === "too-large" ? labels.portableTooLarge :
       status === "conflict" ? labels.portableConflict : labels.portableCopyFailed;
   }
-  return <section aria-labelledby={headingId} className="mt-6 min-w-0 rounded-2xl border border-hanapure-border p-4">
+  return <section aria-labelledby={headingId} className={`mt-6 min-w-0 rounded-2xl border border-hanapure-border p-4 ${shoppingReadingClass(locale)}`}>
     <h2 id={headingId} className="break-words text-xl">{labels.portableTitle}</h2>
     <p className="mt-3 break-words text-sm">{labels.portableNotice}</p>
     <button type="button" disabled={!healthy || !href || copyingDraft || !hasPublicItems}
@@ -156,7 +160,7 @@ function PortableCartPanel({ products, cart, locale, routeLocale, href, onMerged
     {incoming.status !== "none" && <div className="mt-5 min-w-0 border-t border-hanapure-border pt-4">
       <h3 className="break-words text-lg">{labels.portablePreview}</h3>
       {incoming.status !== "ready" || !resolved ? <p role="status" className="mt-3 break-words">{labels.portableInvalid}</p> : <>
-        <dl className="mt-3 break-words text-sm"><div><dt>{labels.portableLines}</dt><dd>{incoming.lines.length}</dd></div>
+        <dl className="mt-3 grid min-w-0 gap-3 rounded-xl border-2 border-hanapure-text bg-hanapure-warm-white p-4 break-words text-base font-bold sm:grid-cols-2"><div><dt>{labels.portableLines}</dt><dd>{incoming.lines.length}</dd></div>
           <div><dt>{labels.portableUnits}</dt><dd>{incoming.units}</dd></div></dl>
         <ul aria-label={labels.portablePreview} className="mt-3 min-w-0 space-y-2">
           {resolved.map((product, index) => <li key={incoming.lines[index].publicId} className="min-w-0 break-words">
@@ -175,6 +179,11 @@ function PortableCartPanel({ products, cart, locale, routeLocale, href, onMerged
           </> : <p role="status">{planLabels.planImpactUnsafe}</p>}
         </section>}
         {editHref && <a href={editHref} className={`${cartControl} mt-4 inline-flex max-w-full break-words`}>{planLabels.planEditDraft}</a>}
+        <div className="mt-4 rounded-xl border border-hanapure-border bg-hanapure-warm-white p-4">
+          <p className="break-words text-base font-bold">{fresh?.status === "ready" ? `${planLabels.planStoredCart}: ${fresh.lines.length} / ${cartQuantity(fresh.lines)}` : planLabels.planCartUnconfirmed}</p>
+          <p className="mt-2 break-words text-sm">{planLabels.planNotCommitted}</p>
+          {impact?.status === "ready" && <p className="mt-2 break-words text-base font-bold">{planLabels.planNewLines}: {impact.newLines} · {planLabels.planExistingLines}: {impact.existingLines} · {planLabels.planImpactUnits}: {impact.units}</p>}
+        </div>
         <button type="button" disabled={!healthy || locked} className={`${cartControl} mt-4 max-w-full whitespace-normal break-words disabled:opacity-50`}
           onClick={() => {
             if (!healthy || confirmationUsed.current) return;
@@ -336,7 +345,9 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
     setUndo(result?.persistent ? plan : null);
     setMessage(!result ? labels.undoChanged : !result.persistent ? labels.storage : plan ? success : labels.updated);
   }
-  return <>
+  const confirmedCart = readPortableSnapshot(cart);
+  return <div className={`min-w-0 ${shoppingReadingClass(locale)}`}>
+    <p role="status" className="mt-4 min-w-0 rounded-xl border-2 border-hanapure-text bg-hanapure-warm-white p-4 break-words text-base font-bold">{confirmedCart.status === "ready" ? `${storefrontLabels[locale].planStoredCart}: ${confirmedCart.lines.length} / ${cartQuantity(confirmedCart.lines)}` : storefrontLabels[locale].planCartUnconfirmed}</p>
     <p className="mt-5 leading-7 text-hanapure-muted">{labels.notice}</p>
     {!cart.persistent && <p role="status" className="mt-4">{labels.storage}</p>}
     {cart.invalid && <div className="mt-4">
@@ -592,5 +603,5 @@ export default function ShoppingCart({ products, locale, routeLocale }: {
     }}>{labels.undo}</button>}
     <p role="status" className="mt-4">{undo && !undoAvailable ? labels.undoChanged : message}</p>
     <Link ref={browseRef} href={storefrontHref("/products", routeLocale)} className={`${cartControl} mt-6 inline-flex items-center`}>{labels.browse}</Link>
-  </>;
+  </div>;
 }

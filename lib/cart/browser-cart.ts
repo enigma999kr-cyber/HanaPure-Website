@@ -7,10 +7,14 @@ import { canUndoCart, createCartUndoPlan, sameCartSelection, type CartUndoPlan }
 type Snapshot = Readonly<{ lines: readonly CartLine[]; ready: boolean; persistent: boolean; invalid: boolean }>;
 const serverSnapshot: Snapshot = { lines: [], ready: false, persistent: true, invalid: false };
 let snapshot = serverSnapshot;
+let observedRaw: string | null | undefined;
 const listeners = new Set<() => void>();
 function emit() { listeners.forEach(listener => listener()); }
 function readStorage() {
-  try { snapshot = { ...inspectStoredCart(window.localStorage.getItem(CART_STORAGE_KEY)), ready: true, persistent: true }; }
+  try {
+    observedRaw = window.localStorage.getItem(CART_STORAGE_KEY);
+    snapshot = { ...inspectStoredCart(observedRaw), ready: true, persistent: true };
+  }
   catch { snapshot = { ...snapshot, ready: true, persistent: false }; }
   emit();
 }
@@ -34,8 +38,31 @@ export function useBrowserCart() {
 }
 export function changeBrowserCart(change: (lines: readonly CartLine[]) => readonly CartLine[]) {
   // Malformed persisted data requires an explicit reset, never a silent overwrite.
-  if (snapshot.invalid) return null;
-  return saveSelection(change(snapshot.lines));
+  if (!snapshot.ready || snapshot.invalid) return null;
+  let before: string | null;
+  try {
+    before = window.localStorage.getItem(CART_STORAGE_KEY);
+    const current = inspectStoredCart(before);
+    const ownUnsavedCopy = !snapshot.persistent && observedRaw !== undefined && before === observedRaw;
+    if (current.invalid || (!sameCartSelection(current.lines, snapshot.lines) && !ownUnsavedCopy)) {
+      // A missed storage event must not let an obsolete tab replace a newer Cart.
+      if (snapshot.persistent || observedRaw === undefined) {
+        observedRaw = before;
+        snapshot = { ...current, ready: true, persistent: true };
+      }
+      emit();
+      return null;
+    }
+  } catch { snapshot = { ...snapshot, persistent: false }; emit(); return null; }
+  const lines = change(snapshot.lines);
+  if (inspectStoredCart(serializeCart(lines)).invalid) return null;
+  try {
+    if (window.localStorage.getItem(CART_STORAGE_KEY) !== before) {
+      if (snapshot.persistent) readStorage();
+      return null;
+    }
+  } catch { snapshot = { ...snapshot, persistent: false }; emit(); return null; }
+  return saveSelection(lines);
 }
 export function resetBrowserCart() {
   // Explicit corrupt-storage recovery only; do not overwrite a newly changed cart.
@@ -84,6 +111,7 @@ function saveSelection(lines: readonly CartLine[]) {
     const stored = serializeCart(lines);
     window.localStorage.setItem(CART_STORAGE_KEY, stored);
     if (window.localStorage.getItem(CART_STORAGE_KEY) !== stored) throw new Error("Cart save not confirmed");
+    observedRaw = stored;
   }
   catch { persistent = false; }
   snapshot = { lines, ready: true, persistent, invalid: false };

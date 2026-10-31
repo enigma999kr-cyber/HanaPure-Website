@@ -2,6 +2,63 @@ import { portablePayload, readPortableLink, resolvePortableLines, MAX_PORTABLE_L
 import { validCartId, type CartLine } from "../cart/cart-state";
 import { parseQuickAddQuantity } from "../cart/quick-add-quantity";
 
+
+/** Explicit last-saved recovery copy; never a Cart, autosave or source of authority. */
+export const PLAN_RECOVERY_KEY = "hanapure.shopping-plan-recovery.v1";
+type Store = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+export type Recovery = Readonly<{ status: "absent" | "invalid" | "stale" | "unavailable"; raw: string | null }> |
+  Readonly<{ status: "ready"; raw: string; href: string; lines: readonly CartLine[] }>;
+
+export function inspectPlanRecovery(raw: string | null, products: readonly PublicIdentity[]): Recovery {
+  if (raw === null) return { status: "absent", raw };
+  const invalid = { status: "invalid", raw } as const;
+  if (!raw || raw.length > 16_384) return invalid;
+  try {
+    const value = JSON.parse(raw);
+    if (!value || Object.keys(value).sort().join(",") !== "href,version" || value.version !== 1 ||
+      typeof value.href !== "string" || value.href.length > 8192 || !value.href.startsWith("/") || value.href.startsWith("//")) return invalid;
+    const url = new URL(value.href, "http://localhost");
+    if (url.origin !== "http://localhost" || url.hash || url.searchParams.getAll("cartPlan").length !== 1) return invalid;
+    const payload = url.searchParams.get("cartPlan")!;
+    const portable = readPortableLink(`http://localhost/cart?${new URLSearchParams({ cartDraft: payload })}`);
+    if (portable.status !== "ready") return invalid;
+    const query = new URLSearchParams(url.search); query.delete("cartPlan");
+    // Canonical recomputation also rejects foreign routes/keys and malformed view.
+    if (shoppingPlanHref(url.pathname, `?${query}`, portable.lines) !== value.href) return invalid;
+    if (!resolvePortableLines(portable.lines, products)) return { status: "stale", raw };
+    const plan = readShoppingPlan(payload, products);
+    return plan.status === "ready" ? { status: "ready", raw, href: value.href, lines: plan.lines } : invalid;
+  } catch { return invalid; }
+}
+
+export function readPlanRecovery(store: Store, products: readonly PublicIdentity[]): Recovery {
+  try { return inspectPlanRecovery(store.getItem(PLAN_RECOVERY_KEY), products); }
+  catch { return { status: "unavailable", raw: null }; }
+}
+
+export function savePlanRecovery(store: Store, expected: string | null, href: string, products: readonly PublicIdentity[]): "saved" | "invalid" | "conflict" | "unavailable" {
+  const raw = JSON.stringify({ version: 1, href });
+  if (inspectPlanRecovery(raw, products).status !== "ready") return "invalid";
+  try {
+    const before = store.getItem(PLAN_RECOVERY_KEY);
+    if (before !== expected) return "conflict";
+    const old = inspectPlanRecovery(before, products);
+    if (!["ready", "absent"].includes(old.status)) return "invalid"; // damaged copies require explicit Forget first
+    if (store.getItem(PLAN_RECOVERY_KEY) !== before) return "conflict";
+    store.setItem(PLAN_RECOVERY_KEY, raw);
+    return store.getItem(PLAN_RECOVERY_KEY) === raw ? "saved" : "conflict";
+  } catch { return "unavailable"; }
+}
+
+export function forgetPlanRecovery(store: Store, expected: string | null): "forgotten" | "conflict" | "unavailable" {
+  try {
+    if (store.getItem(PLAN_RECOVERY_KEY) !== expected) return "conflict";
+    store.removeItem(PLAN_RECOVERY_KEY);
+    return store.getItem(PLAN_RECOVERY_KEY) === null ? "forgotten" : "conflict";
+  } catch { return "unavailable"; }
+}
+
+
 export const SHOPPING_PLAN_PARAM = "cartPlan";
 type PublicIdentity = Readonly<{ publicId: string }>;
 export type ShoppingPlan = Readonly<{ status: "empty" | "invalid"; lines: readonly CartLine[] }> |

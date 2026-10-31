@@ -34,6 +34,20 @@ export function switchLocalePath(path: string, locale: EditorialLocale): string 
 
 export const storefrontLabels = {
   en: {
+    planRecoveryChecked: "Saved copy checked",
+    planRecoveryCheckFailed: "The saved copy could not be verified. Actions remain locked; check again.",
+    planPending: "Updating the plan… Please wait for the confirmed result.",
+    planRestored: "Saved plan restored. Current plan counts are shown here.",
+    planCurrentSummary: "Current URL plan — not committed to Cart",
+    planStoredCart: "Confirmed browser Cart — lines / units",
+    planCartUnconfirmed: "Browser Cart storage is not confirmed. No saved count is asserted.",
+    planNotCommitted: "These Plan/Draft quantities are not in Cart until you explicitly add and confirm them.",
+    planApplyPending: "Applying filters…",
+    planApplyDone: "Filters applied.",
+    planRecoveryHeading: "Plan recovery copy", planRecoveryNotice: "Optional device-only last-saved copy, separate from Cart. No autosave: save again after changes. Restore opens the saved page and language.",
+    planRecoverySave: "Save current plan recovery copy", planRecoveryReplace: "Replace saved recovery copy", planRecoveryRestore: "Restore saved plan", planRecoveryForget: "Forget saved recovery copy", planRecoveryReload: "Check saved copy again",
+    planRecoveryAbsent: "No recovery copy saved.", planRecoveryReady: "Validated saved lines / units", planRecoveryInvalid: "Damaged or unsupported copy. Forget it explicitly before saving another.", planRecoveryStale: "Saved products cannot all be matched to the current public catalogue. Nothing restored.",
+    planRecoveryUnavailable: "Recovery storage unavailable or save not confirmed. Current URL plan is unchanged.", planRecoveryConflict: "The saved copy or page changed. Check it again; no automatic replacement.", planRecoverySaved: "Recovery copy saved and read back. Later changes need Save again.", planRecoveryForgotten: "Recovery copy removed and checked. Current plan and Cart unchanged.", planRecoveryUrlPriority: "The current URL plan takes precedence; storage never replaces it automatically.",
     layoutSelector: "Catalogue view", gridView: "Grid", listView: "List", currentView: "Current view",
     comparisonSelectionChanged: "The results or selection changed. Review the pair and try again.",
     comparisonNavigationFailed: "Could not open the comparison. Please try again.",
@@ -83,6 +97,20 @@ export const storefrontLabels = {
     sortBy: "Sort by", defaultOrder: "Default order", nameAscending: "Name A–Z", nameDescending: "Name Z–A",
   },
   hu: {
+    planRecoveryChecked: "Mentett másolat ellenőrizve",
+    planRecoveryCheckFailed: "A mentett másolat nem ellenőrizhető. A műveletek zárolva maradnak; ellenőrizze újra.",
+    planPending: "A terv frissítése… Várja meg az igazolt eredményt.",
+    planRestored: "A mentett terv visszaállítva. Az aktuális terv darabszámai itt láthatók.",
+    planCurrentSummary: "Aktuális URL-terv — még nincs a kosárban",
+    planStoredCart: "Igazolt böngészőkosár — tételek / darabszám",
+    planCartUnconfirmed: "A kosár tárolása nem igazolt. Nem állítunk mentett darabszámot.",
+    planNotCommitted: "A terv/vázlat mennyiségei csak kifejezett hozzáadás és igazolás után kerülnek a kosárba.",
+    planApplyPending: "Szűrők alkalmazása…",
+    planApplyDone: "A szűrők alkalmazva.",
+    planRecoveryHeading: "A terv helyreállítási másolata", planRecoveryNotice: "Opcionális, ezen az eszközön tárolt utolsó mentés, a kosártól külön. Nincs automatikus mentés: módosítás után mentse újra. A visszaállítás a mentett oldalt és nyelvet nyitja meg.",
+    planRecoverySave: "A jelenlegi terv másolatának mentése", planRecoveryReplace: "Mentett másolat cseréje", planRecoveryRestore: "Mentett terv visszaállítása", planRecoveryForget: "Mentett másolat törlése", planRecoveryReload: "Mentett másolat újraellenőrzése",
+    planRecoveryAbsent: "Nincs mentett helyreállítási másolat.", planRecoveryReady: "Ellenőrzött mentett tételek / darabszám", planRecoveryInvalid: "Sérült vagy nem támogatott másolat. Új mentés előtt törölje kifejezetten.", planRecoveryStale: "Nem minden mentett termék egyeztethető az aktuális nyilvános katalógussal. Nem történt visszaállítás.",
+    planRecoveryUnavailable: "A tároló nem érhető el, vagy a mentés nem igazolt. Az URL-ben lévő terv változatlan.", planRecoveryConflict: "A másolat vagy az oldal megváltozott. Ellenőrizze újra; nincs automatikus felülírás.", planRecoverySaved: "A másolat mentve és visszaolvasva. Későbbi változások után mentse újra.", planRecoveryForgotten: "A másolat törölve és ellenőrizve. A jelenlegi terv és kosár változatlan.", planRecoveryUrlPriority: "Az aktuális URL terve elsőbbséget élvez; a tároló nem írja felül automatikusan.",
     layoutSelector: "Katalógusnézet", gridView: "Rács", listView: "Lista", currentView: "Aktuális nézet",
     comparisonSelectionChanged: "A találatok vagy a kiválasztás megváltozott. Ellenőrizze a termékpárt, és próbálja újra.",
     comparisonNavigationFailed: "Az összehasonlítás nem nyitható meg. Próbálja újra.",
@@ -132,6 +160,20 @@ export const storefrontLabels = {
     sortBy: "Rendezés", defaultOrder: "Alapértelmezett sorrend", nameAscending: "Név A–Z", nameDescending: "Név Z–A",
   },
   ko: {
+    planRecoveryChecked: "저장된 사본 확인 완료",
+    planRecoveryCheckFailed: "저장된 사본을 확인하지 못했습니다. 작업 잠금을 유지합니다. 다시 확인해 주세요.",
+    planPending: "계획을 변경하고 있습니다. 확인된 결과를 기다려 주세요.",
+    planRestored: "저장된 계획을 복구했습니다. 현재 계획 수량을 여기에서 확인하세요.",
+    planCurrentSummary: "현재 URL 계획 — 장바구니에 아직 담기지 않음",
+    planStoredCart: "저장이 확인된 브라우저 장바구니 — 종류 수 / 총 수량",
+    planCartUnconfirmed: "브라우저 장바구니 저장 상태가 확인되지 않았습니다. 저장 수량으로 표시하지 않습니다.",
+    planNotCommitted: "계획·초안 수량은 직접 추가하고 저장이 확인되어야 장바구니에 반영됩니다.",
+    planApplyPending: "필터를 적용하고 있습니다.",
+    planApplyDone: "필터를 적용했습니다.",
+    planRecoveryHeading: "계획 복구 사본", planRecoveryNotice: "장바구니와 별개인 이 기기의 마지막 수동 저장본입니다. 자동 저장되지 않으므로 변경 후 다시 저장하세요. 복구하면 저장된 페이지와 언어가 열립니다.",
+    planRecoverySave: "현재 계획 복구 사본 저장", planRecoveryReplace: "저장된 복구 사본 교체", planRecoveryRestore: "저장된 계획 복구", planRecoveryForget: "저장된 복구 사본 삭제", planRecoveryReload: "저장된 사본 다시 확인",
+    planRecoveryAbsent: "저장된 복구 사본이 없습니다.", planRecoveryReady: "검증된 저장 종류 수 / 총 수량", planRecoveryInvalid: "손상되었거나 지원하지 않는 사본입니다. 새로 저장하려면 먼저 명시적으로 삭제하세요.", planRecoveryStale: "저장된 상품 전체를 현재 공개 카탈로그와 대조할 수 없습니다. 복구하지 않았습니다.",
+    planRecoveryUnavailable: "복구 저장소를 사용할 수 없거나 저장이 확인되지 않았습니다. 현재 URL 계획은 그대로입니다.", planRecoveryConflict: "저장된 사본이나 페이지가 바뀌었습니다. 다시 확인하세요. 자동 덮어쓰기는 없습니다.", planRecoverySaved: "복구 사본을 저장하고 다시 읽어 확인했습니다. 이후 변경은 다시 저장해야 합니다.", planRecoveryForgotten: "복구 사본 삭제를 확인했습니다. 현재 계획과 장바구니는 그대로입니다.", planRecoveryUrlPriority: "현재 URL의 계획이 우선하며 저장소가 자동으로 교체하지 않습니다.",
     layoutSelector: "상품 목록 보기", gridView: "격자", listView: "목록", currentView: "현재 보기",
     comparisonSelectionChanged: "검색 결과나 선택 항목이 바뀌었습니다. 비교할 두 상품을 확인하고 다시 시도해 주세요.",
     comparisonNavigationFailed: "상품 비교를 열 수 없습니다. 다시 시도해 주세요.",
@@ -181,3 +223,10 @@ export const storefrontLabels = {
     sortBy: "정렬 기준", defaultOrder: "기본 순서", nameAscending: "이름 오름차순", nameDescending: "이름 내림차순",
   },
 } as const;
+
+/** WEB49-local readable text and native pressed feedback; no root/font-family changes.
+ * KO: inherited 16→19.2px; text-sm 14→16.8px; fixed headings remain unchanged. */
+export function shoppingReadingClass(locale: EditorialLocale): string {
+  return "[&_button]:transition-colors [&_button:enabled:active]:bg-hanapure-beige [&_a:active]:bg-hanapure-beige [&_button:disabled]:cursor-not-allowed [&_button:disabled]:opacity-50 " +
+    (locale === "ko" ? "text-[1.2rem] [&_.text-sm]:text-[1.05rem] [&_.text-base]:text-[1.2rem] [&_button]:text-[1.2rem] [&_input]:text-[1.2rem] [&_select]:text-[1.2rem] [&_label]:text-[1.2rem] [&_a]:text-[1.2rem]" : "");
+}
